@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.oauth-flow@1";
 pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:a55935c93c9606330562a9d375997a9c3ee5258957cb7c6f9c44e7b852d2f5ba";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const OAUTH_FLOW_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const OAUTH_FLOW_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const OAUTH_FLOW_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const OAUTH_FLOW_CONTRACT: CapabilityReference<OauthFlowClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_oauth_flow { () => { "{\"capability_id\":\"lenso.a
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_oauth_flow_client { () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_oauth_flow_client {
+    () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_oauth_flow_client { () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_oauth_flow_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_oauth_flow_client {
+    () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const CONSUME_OPERATION: &str = "consume";
 pub const CREATE_OPERATION: &str = "create";
@@ -394,6 +409,56 @@ macro_rules! __lenso_native_lower_oauth_flow {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_oauth_flow {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportOauthFlow;
+        impl $crate::OauthFlowProvider for $object {
+        fn consume(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::ConsumeRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowConsume> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::consume(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOauthFlowConsumeResult::__lenso_into_result(result)
+            })
+        }
+        fn create(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::CreateRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowCreate> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::create(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOauthFlowCreateResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_oauth_flow {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportOauthFlow;
+        impl $crate::OauthFlowProvider for $object {
+        fn consume(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::ConsumeRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowConsume> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OauthFlowProvider>::consume(plugin.as_ref(), context, request).await
+            })
+        }
+        fn create(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::CreateRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowCreate> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OauthFlowProvider>::create(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct OauthFlowRequestEndpoint { provider: Rc<dyn OauthFlowProvider> }
 
@@ -478,7 +543,7 @@ macro_rules! __lenso_native_provide_oauth_flow {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct OauthFlowClient {
     consume: NativeRequestHandle<OauthFlowConsume>,
     create: NativeRequestHandle<OauthFlowCreate>,
@@ -486,6 +551,13 @@ pub struct OauthFlowClient {
 impl OauthFlowClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn consume(&self, request: ConsumeRequest) -> Result<ConsumeResponse, OauthFlowConsumeInvocationError> {
@@ -527,6 +599,14 @@ impl CapabilityClient for OauthFlowClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -552,6 +632,14 @@ impl CapabilityClientMany for OauthFlowClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 

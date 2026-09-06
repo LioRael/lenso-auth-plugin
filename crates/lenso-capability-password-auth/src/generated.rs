@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.password@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:2a2df78ace73073ebfc1b1a8f079c337ea3d2e47c1afba23c31f2b5279dcba7c";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const PASSWORD_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const PASSWORD_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const PASSWORD_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const PASSWORD_CONTRACT: CapabilityReference<PasswordClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_password { () => { "{\"capability_id\":\"lenso.aut
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_password_client { () => { "{\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_password_client {
+    () => { "{\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_password_client { () => { "{\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_password_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_password_client {
+    () => { "{\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.password@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const LOGIN_OPERATION: &str = "login";
 pub const REGISTER_OPERATION: &str = "register";
@@ -396,6 +411,56 @@ macro_rules! __lenso_native_lower_password {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_password {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportPassword;
+        impl $crate::PasswordProvider for $object {
+        fn login(&self, context: __LensoNativeSupportPassword::InvocationContext, request: $crate::LoginRequest) -> __LensoNativeSupportPassword::NativeRequestFuture<$crate::PasswordLogin> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::login(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoPasswordLoginResult::__lenso_into_result(result)
+            })
+        }
+        fn register(&self, context: __LensoNativeSupportPassword::InvocationContext, request: $crate::RegisterRequest) -> __LensoNativeSupportPassword::NativeRequestFuture<$crate::PasswordRegister> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::register(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoPasswordRegisterResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_password {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportPassword;
+        impl $crate::PasswordProvider for $object {
+        fn login(&self, context: __LensoNativeSupportPassword::InvocationContext, request: $crate::LoginRequest) -> __LensoNativeSupportPassword::NativeRequestFuture<$crate::PasswordLogin> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::PasswordProvider>::login(plugin.as_ref(), context, request).await
+            })
+        }
+        fn register(&self, context: __LensoNativeSupportPassword::InvocationContext, request: $crate::RegisterRequest) -> __LensoNativeSupportPassword::NativeRequestFuture<$crate::PasswordRegister> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::PasswordProvider>::register(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct PasswordRequestEndpoint { provider: Rc<dyn PasswordProvider> }
 
@@ -480,7 +545,7 @@ macro_rules! __lenso_native_provide_password {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PasswordClient {
     login: NativeRequestHandle<PasswordLogin>,
     register: NativeRequestHandle<PasswordRegister>,
@@ -488,6 +553,13 @@ pub struct PasswordClient {
 impl PasswordClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn login(&self, request: LoginRequest) -> Result<LoginResponse, PasswordLoginInvocationError> {
@@ -529,6 +601,14 @@ impl CapabilityClient for PasswordClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -554,6 +634,14 @@ impl CapabilityClientMany for PasswordClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 

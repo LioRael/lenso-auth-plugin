@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.device@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:b05174343066db1d9562db5077da80c88145a20e0823323d3f0ad838543e572d";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const DEVICE_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const DEVICE_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const DEVICE_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const DEVICE_CONTRACT: CapabilityReference<DeviceClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_device { () => { "{\"capability_id\":\"lenso.auth.
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_device_client { () => { "{\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_device_client {
+    () => { "{\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_device_client { () => { "{\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_device_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_device_client {
+    () => { "{\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.device@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const LIST_OPERATION: &str = "list";
 pub const OBSERVE_OPERATION: &str = "observe";
@@ -500,6 +515,71 @@ macro_rules! __lenso_native_lower_device {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_device {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportDevice;
+        impl $crate::DeviceProvider for $object {
+        fn list(&self, context: __LensoNativeSupportDevice::InvocationContext, request: $crate::ListRequest) -> __LensoNativeSupportDevice::NativeRequestFuture<$crate::DeviceList> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::list(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDeviceListResult::__lenso_into_result(result)
+            })
+        }
+        fn observe(&self, context: __LensoNativeSupportDevice::InvocationContext, request: $crate::ObserveRequest) -> __LensoNativeSupportDevice::NativeRequestFuture<$crate::DeviceObserve> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::observe(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDeviceObserveResult::__lenso_into_result(result)
+            })
+        }
+        fn set_trust(&self, context: __LensoNativeSupportDevice::InvocationContext, request: $crate::SetTrustRequest) -> __LensoNativeSupportDevice::NativeRequestFuture<$crate::DeviceSetTrust> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::set_trust(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDeviceSetTrustResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_device {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportDevice;
+        impl $crate::DeviceProvider for $object {
+        fn list(&self, context: __LensoNativeSupportDevice::InvocationContext, request: $crate::ListRequest) -> __LensoNativeSupportDevice::NativeRequestFuture<$crate::DeviceList> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DeviceProvider>::list(plugin.as_ref(), context, request).await
+            })
+        }
+        fn observe(&self, context: __LensoNativeSupportDevice::InvocationContext, request: $crate::ObserveRequest) -> __LensoNativeSupportDevice::NativeRequestFuture<$crate::DeviceObserve> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DeviceProvider>::observe(plugin.as_ref(), context, request).await
+            })
+        }
+        fn set_trust(&self, context: __LensoNativeSupportDevice::InvocationContext, request: $crate::SetTrustRequest) -> __LensoNativeSupportDevice::NativeRequestFuture<$crate::DeviceSetTrust> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DeviceProvider>::set_trust(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct DeviceRequestEndpoint { provider: Rc<dyn DeviceProvider> }
 
@@ -598,7 +678,7 @@ macro_rules! __lenso_native_provide_device {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DeviceClient {
     list: NativeRequestHandle<DeviceList>,
     observe: NativeRequestHandle<DeviceObserve>,
@@ -607,6 +687,13 @@ pub struct DeviceClient {
 impl DeviceClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn list(&self, request: ListRequest) -> Result<ListResponse, DeviceListInvocationError> {
@@ -661,6 +748,14 @@ impl CapabilityClient for DeviceClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -687,6 +782,14 @@ impl CapabilityClientMany for DeviceClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 

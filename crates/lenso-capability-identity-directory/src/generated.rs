@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.identity.directory@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:7e0599825f32908d17e2925118d87d4e83a43d53ac1caeeba7c195cff28fd144";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const DIRECTORY_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const DIRECTORY_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const DIRECTORY_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const DIRECTORY_CONTRACT: CapabilityReference<DirectoryClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_directory { () => { "{\"capability_id\":\"lenso.id
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_directory_client { () => { "{\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_directory_client {
+    () => { "{\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_directory_client { () => { "{\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_directory_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_directory_client {
+    () => { "{\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.identity.directory@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const ENSURE_IDENTITY_OPERATION: &str = "ensure_identity";
 pub const READ_STATUS_OPERATION: &str = "read_status";
@@ -333,6 +348,56 @@ macro_rules! __lenso_native_lower_directory {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_directory {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportDirectory;
+        impl $crate::DirectoryProvider for $object {
+        fn ensure_identity(&self, context: __LensoNativeSupportDirectory::InvocationContext, request: $crate::EnsureIdentityRequest) -> __LensoNativeSupportDirectory::NativeRequestFuture<$crate::DirectoryEnsureIdentity> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::ensure_identity(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDirectoryEnsureIdentityResult::__lenso_into_result(result)
+            })
+        }
+        fn read_status(&self, context: __LensoNativeSupportDirectory::InvocationContext, request: $crate::ReadStatusRequest) -> __LensoNativeSupportDirectory::NativeRequestFuture<$crate::DirectoryReadStatus> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::read_status(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDirectoryReadStatusResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_directory {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportDirectory;
+        impl $crate::DirectoryProvider for $object {
+        fn ensure_identity(&self, context: __LensoNativeSupportDirectory::InvocationContext, request: $crate::EnsureIdentityRequest) -> __LensoNativeSupportDirectory::NativeRequestFuture<$crate::DirectoryEnsureIdentity> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DirectoryProvider>::ensure_identity(plugin.as_ref(), context, request).await
+            })
+        }
+        fn read_status(&self, context: __LensoNativeSupportDirectory::InvocationContext, request: $crate::ReadStatusRequest) -> __LensoNativeSupportDirectory::NativeRequestFuture<$crate::DirectoryReadStatus> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DirectoryProvider>::read_status(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct DirectoryRequestEndpoint { provider: Rc<dyn DirectoryProvider> }
 
@@ -417,7 +482,7 @@ macro_rules! __lenso_native_provide_directory {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct DirectoryClient {
     ensure_identity: NativeRequestHandle<DirectoryEnsureIdentity>,
     read_status: NativeRequestHandle<DirectoryReadStatus>,
@@ -425,6 +490,13 @@ pub struct DirectoryClient {
 impl DirectoryClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn ensure_identity(&self, request: EnsureIdentityRequest) -> Result<EnsureIdentityResponse, DirectoryEnsureIdentityInvocationError> {
@@ -466,6 +538,14 @@ impl CapabilityClient for DirectoryClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -491,6 +571,14 @@ impl CapabilityClientMany for DirectoryClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 

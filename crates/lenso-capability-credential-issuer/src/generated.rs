@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.credential-issuer@1";
 pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:afb8a233add08dc378ab08d57c45b4bfafd6a226fe3fc1fc619a4745551654be";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const CREDENTIAL_ISSUER_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const CREDENTIAL_ISSUER_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const CREDENTIAL_ISSUER_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const CREDENTIAL_ISSUER_CONTRACT: CapabilityReference<CredentialIssuerClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_credential_issuer { () => { "{\"capability_id\":\"
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_credential_issuer_client { () => { "{\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_credential_issuer_client {
+    () => { "{\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_credential_issuer_client { () => { "{\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_credential_issuer_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_credential_issuer_client {
+    () => { "{\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.credential-issuer@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const ISSUE_OPERATION: &str = "issue";
 pub const REVOKE_OPERATION: &str = "revoke";
@@ -508,6 +523,71 @@ macro_rules! __lenso_native_lower_credential_issuer {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_credential_issuer {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportCredentialIssuer;
+        impl $crate::CredentialIssuerProvider for $object {
+        fn issue(&self, context: __LensoNativeSupportCredentialIssuer::InvocationContext, request: $crate::IssueRequest) -> __LensoNativeSupportCredentialIssuer::NativeRequestFuture<$crate::CredentialIssuerIssue> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::issue(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoCredentialIssuerIssueResult::__lenso_into_result(result)
+            })
+        }
+        fn revoke(&self, context: __LensoNativeSupportCredentialIssuer::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportCredentialIssuer::NativeRequestFuture<$crate::CredentialIssuerRevoke> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::revoke(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoCredentialIssuerRevokeResult::__lenso_into_result(result)
+            })
+        }
+        fn revoke_credential(&self, context: __LensoNativeSupportCredentialIssuer::InvocationContext, request: $crate::RevokeCredentialRequest) -> __LensoNativeSupportCredentialIssuer::NativeRequestFuture<$crate::CredentialIssuerRevokeCredential> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::revoke_credential(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoCredentialIssuerRevokeCredentialResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_credential_issuer {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportCredentialIssuer;
+        impl $crate::CredentialIssuerProvider for $object {
+        fn issue(&self, context: __LensoNativeSupportCredentialIssuer::InvocationContext, request: $crate::IssueRequest) -> __LensoNativeSupportCredentialIssuer::NativeRequestFuture<$crate::CredentialIssuerIssue> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::CredentialIssuerProvider>::issue(plugin.as_ref(), context, request).await
+            })
+        }
+        fn revoke(&self, context: __LensoNativeSupportCredentialIssuer::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportCredentialIssuer::NativeRequestFuture<$crate::CredentialIssuerRevoke> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::CredentialIssuerProvider>::revoke(plugin.as_ref(), context, request).await
+            })
+        }
+        fn revoke_credential(&self, context: __LensoNativeSupportCredentialIssuer::InvocationContext, request: $crate::RevokeCredentialRequest) -> __LensoNativeSupportCredentialIssuer::NativeRequestFuture<$crate::CredentialIssuerRevokeCredential> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::CredentialIssuerProvider>::revoke_credential(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct CredentialIssuerRequestEndpoint { provider: Rc<dyn CredentialIssuerProvider> }
 
@@ -606,7 +686,7 @@ macro_rules! __lenso_native_provide_credential_issuer {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct CredentialIssuerClient {
     issue: NativeRequestHandle<CredentialIssuerIssue>,
     revoke: NativeRequestHandle<CredentialIssuerRevoke>,
@@ -615,6 +695,13 @@ pub struct CredentialIssuerClient {
 impl CredentialIssuerClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn issue(&self, request: IssueRequest) -> Result<IssueResponse, CredentialIssuerIssueInvocationError> {
@@ -669,6 +756,14 @@ impl CapabilityClient for CredentialIssuerClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -695,6 +790,14 @@ impl CapabilityClientMany for CredentialIssuerClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 

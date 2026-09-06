@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.phone@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:dbff849fed1cb28dd8d1d79ba53fe9cb99875e350c086fbcf5efdc81ac0b86ae";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const PHONE_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const PHONE_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const PHONE_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const PHONE_CONTRACT: CapabilityReference<PhoneClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_phone { () => { "{\"capability_id\":\"lenso.auth.p
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_phone_client { () => { "{\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_phone_client {
+    () => { "{\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_phone_client { () => { "{\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_phone_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_phone_client {
+    () => { "{\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.phone@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const PASSWORD_LOGIN_OPERATION: &str = "password_login";
 pub const SET_PASSWORD_OPERATION: &str = "set_password";
@@ -736,6 +751,86 @@ macro_rules! __lenso_native_lower_phone {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_phone {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportPhone;
+        impl $crate::PhoneProvider for $object {
+        fn password_login(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::PasswordLoginRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhonePasswordLogin> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::password_login(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoPhonePasswordLoginResult::__lenso_into_result(result)
+            })
+        }
+        fn set_password(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::SetPasswordRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhoneSetPassword> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::set_password(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoPhoneSetPasswordResult::__lenso_into_result(result)
+            })
+        }
+        fn start_otp(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::StartOtpRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhoneStartOtp> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::start_otp(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoPhoneStartOtpResult::__lenso_into_result(result)
+            })
+        }
+        fn verify_otp(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::VerifyOtpRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhoneVerifyOtp> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::verify_otp(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoPhoneVerifyOtpResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_phone {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportPhone;
+        impl $crate::PhoneProvider for $object {
+        fn password_login(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::PasswordLoginRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhonePasswordLogin> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::PhoneProvider>::password_login(plugin.as_ref(), context, request).await
+            })
+        }
+        fn set_password(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::SetPasswordRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhoneSetPassword> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::PhoneProvider>::set_password(plugin.as_ref(), context, request).await
+            })
+        }
+        fn start_otp(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::StartOtpRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhoneStartOtp> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::PhoneProvider>::start_otp(plugin.as_ref(), context, request).await
+            })
+        }
+        fn verify_otp(&self, context: __LensoNativeSupportPhone::InvocationContext, request: $crate::VerifyOtpRequest) -> __LensoNativeSupportPhone::NativeRequestFuture<$crate::PhoneVerifyOtp> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::PhoneProvider>::verify_otp(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct PhoneRequestEndpoint { provider: Rc<dyn PhoneProvider> }
 
@@ -848,7 +943,7 @@ macro_rules! __lenso_native_provide_phone {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PhoneClient {
     password_login: NativeRequestHandle<PhonePasswordLogin>,
     set_password: NativeRequestHandle<PhoneSetPassword>,
@@ -858,6 +953,13 @@ pub struct PhoneClient {
 impl PhoneClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn password_login(&self, request: PasswordLoginRequest) -> Result<SessionResponse, PhonePasswordLoginInvocationError> {
@@ -925,6 +1027,14 @@ impl CapabilityClient for PhoneClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -952,6 +1062,14 @@ impl CapabilityClientMany for PhoneClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 
