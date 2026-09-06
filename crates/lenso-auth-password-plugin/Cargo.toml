@@ -15,9 +15,9 @@ root-slot = "auth-methods"
 lenso.workspace = true
 argon2.workspace = true
 getrandom.workspace = true
-lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.2.1" }
-lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.2.1" }
-lenso-capability-password-auth = { path = "../lenso-capability-password-auth", version = "0.2.1" }
+lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.3.0" }
+lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.3.0" }
+lenso-capability-password-auth = { path = "../lenso-capability-password-auth", version = "0.3.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
