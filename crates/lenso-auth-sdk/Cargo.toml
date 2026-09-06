@@ -1,6 +1,6 @@
 [package]
 name = "lenso-auth-sdk"
-version = "0.2.2"
+version = "0.2.3"
 edition.workspace = true
 license.workspace = true
 publish = true
@@ -10,7 +10,7 @@ description = "Protocol-neutral Auth helpers for Lenso vNext Plugins."
 [dependencies]
 base64.workspace = true
 ed25519-dalek.workspace = true
-lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.1.3" }
+lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
 lenso-kernel.workspace = true
 serde.workspace = true
 serde_json.workspace = true

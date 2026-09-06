@@ -17,8 +17,8 @@ base64.workspace = true
 futures.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
-lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.2" }
-lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.1.3" }
+lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.3" }
+lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
