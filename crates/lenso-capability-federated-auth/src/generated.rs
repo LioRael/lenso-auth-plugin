@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.federated@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:8f486bb41258183cac4452ccf8cb3e5808b18748bea8ad9e12bd18d31a9f92ad";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const FEDERATED_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const FEDERATED_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const FEDERATED_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const FEDERATED_CONTRACT: CapabilityReference<FederatedClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_federated { () => { "{\"capability_id\":\"lenso.au
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_federated_client { () => { "{\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_federated_client {
+    () => { "{\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_federated_client { () => { "{\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_federated_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_federated_client {
+    () => { "{\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.federated@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const COMPLETE_OPERATION: &str = "complete";
 pub const START_OPERATION: &str = "start";
@@ -373,6 +388,56 @@ macro_rules! __lenso_native_lower_federated {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_federated {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportFederated;
+        impl $crate::FederatedProvider for $object {
+        fn complete(&self, context: __LensoNativeSupportFederated::InvocationContext, request: $crate::CompleteRequest) -> __LensoNativeSupportFederated::NativeRequestFuture<$crate::FederatedComplete> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::complete(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoFederatedCompleteResult::__lenso_into_result(result)
+            })
+        }
+        fn start(&self, context: __LensoNativeSupportFederated::InvocationContext, request: $crate::StartRequest) -> __LensoNativeSupportFederated::NativeRequestFuture<$crate::FederatedStart> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::start(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoFederatedStartResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_federated {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportFederated;
+        impl $crate::FederatedProvider for $object {
+        fn complete(&self, context: __LensoNativeSupportFederated::InvocationContext, request: $crate::CompleteRequest) -> __LensoNativeSupportFederated::NativeRequestFuture<$crate::FederatedComplete> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::FederatedProvider>::complete(plugin.as_ref(), context, request).await
+            })
+        }
+        fn start(&self, context: __LensoNativeSupportFederated::InvocationContext, request: $crate::StartRequest) -> __LensoNativeSupportFederated::NativeRequestFuture<$crate::FederatedStart> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::FederatedProvider>::start(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct FederatedRequestEndpoint { provider: Rc<dyn FederatedProvider> }
 
@@ -457,7 +522,7 @@ macro_rules! __lenso_native_provide_federated {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct FederatedClient {
     complete: NativeRequestHandle<FederatedComplete>,
     start: NativeRequestHandle<FederatedStart>,
@@ -465,6 +530,13 @@ pub struct FederatedClient {
 impl FederatedClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn complete(&self, request: CompleteRequest) -> Result<CompleteResponse, FederatedCompleteInvocationError> {
@@ -506,6 +578,14 @@ impl CapabilityClient for FederatedClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -531,6 +611,14 @@ impl CapabilityClientMany for FederatedClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 

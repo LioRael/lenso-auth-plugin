@@ -3,13 +3,16 @@ use std::{fmt, rc::Rc};
 use futures::future::LocalBoxFuture;
 use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture, NativeRequestHandle, PluginDependencies, RequestCapability, RuntimeFailure};
 
-use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany};
+use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.message.sms@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:c72fe1332d9a1df2a2313077e5b13cea5e2bf8ce7fcbc82c3b7c02e62237fa6d";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const SMS_CAPABILITY_ID: &str = CAPABILITY_ID;
 pub const SMS_DESCRIPTOR_VERSION: &str = DESCRIPTOR_VERSION;
+pub const SMS_DESCRIPTOR_DIGEST: &str = DESCRIPTOR_DIGEST;
+pub const SMS_CONTRACT: CapabilityReference<SmsClient> = CapabilityReference::new(CAPABILITY_ID, DESCRIPTOR_VERSION, DESCRIPTOR_DIGEST);
 
 #[doc(hidden)]
 #[macro_export]
@@ -17,11 +20,23 @@ macro_rules! __lenso_provided_sms { () => { "{\"capability_id\":\"lenso.message.
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_sms_client { () => { "{\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" }; }
+macro_rules! __lenso_required_sms_client {
+    () => { "{\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+}
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_required_many_sms_client { () => { "{\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" }; }
+macro_rules! __lenso_required_optional_sms_client {
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_required_many_sms_client {
+    () => { "{\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.message.sms@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+}
 
 pub const SEND_OPERATION: &str = "send";
 
@@ -194,6 +209,41 @@ macro_rules! __lenso_native_lower_sms {
     };
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_object_sms {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportSms;
+        impl $crate::SmsProvider for $object {
+        fn send(&self, context: __LensoNativeSupportSms::InvocationContext, request: $crate::SendRequest) -> __LensoNativeSupportSms::NativeRequestFuture<$crate::Sms> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::send(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoSmsSendResult::__lenso_into_result(result)
+            })
+        }
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __lenso_native_lower_trait_object_sms {
+    ($object:ty, $plugin:ty, $support:path) => {
+        use $support as __LensoNativeSupportSms;
+        impl $crate::SmsProvider for $object {
+        fn send(&self, context: __LensoNativeSupportSms::InvocationContext, request: $crate::SendRequest) -> __LensoNativeSupportSms::NativeRequestFuture<$crate::Sms> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::SmsProvider>::send(plugin.as_ref(), context, request).await
+            })
+        }
+        }
+    };
+}
+
 #[derive(Debug)]
 struct SmsRequestEndpoint { provider: Rc<dyn SmsProvider> }
 
@@ -264,7 +314,7 @@ macro_rules! __lenso_native_provide_sms {
     }};
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct SmsClient {
     send: NativeRequestHandle<Sms>,
 }
@@ -275,6 +325,13 @@ impl SmsClient {
 
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
+    }
+
+    pub fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
     pub async fn send(&self, request: SendRequest) -> Result<SendResponse, SmsInvocationError> {
@@ -303,6 +360,14 @@ impl CapabilityClient for SmsClient {
         })
     }
 
+    fn from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Self, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::from_dependencies(&dependencies)
+    }
+
     fn already_connected() -> RuntimeFailure {
         RuntimeFailure::PluginFailure {
             detail: format!("Capability Port {CAPABILITY_ID} was connected more than once"),
@@ -327,6 +392,14 @@ impl CapabilityClientMany for SmsClient {
                 ))
             })
             .collect()
+    }
+
+    fn many_from_requirement(
+        dependencies: &PluginDependencies,
+        requirement_id: &str,
+    ) -> Result<Vec<BoundCapabilityClient<Self>>, RuntimeFailure> {
+        let dependencies = dependencies.requirement(requirement_id)?;
+        Self::many_from_dependencies(&dependencies)
     }
 }
 
