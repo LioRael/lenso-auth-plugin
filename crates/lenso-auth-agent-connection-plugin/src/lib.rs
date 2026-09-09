@@ -67,6 +67,8 @@ struct PollRequest {
 #[endpoint]
 impl AgentConnectionPlugin {
     #[post("auth.agent-connection.begin", "/auth/agent/connection/begin")]
+    // Endpoint handlers are async by contract; the trait lint is new after Rust 1.94.
+    #[allow(unknown_lints)]
     #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
     async fn begin(
         &self,
@@ -231,6 +233,8 @@ impl AgentConnectionPlugin {
         }
     }
     #[post("auth.agent-connection.poll", "/auth/agent/connection/poll")]
+    // Endpoint handlers are async by contract; the trait lint is new after Rust 1.94.
+    #[allow(unknown_lints)]
     #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
     async fn poll(
         &self,
