@@ -1119,6 +1119,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-auth-agent-connection-plugin"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "getrandom 0.4.3",
+ "lenso",
+ "lenso-app-plan",
+ "lenso-auth-account-plugin",
+ "lenso-auth-sdk",
+ "lenso-capability-auth",
+ "lenso-capability-auth-delegation",
+ "lenso-capability-credential-issuer",
+ "lenso-capability-http-endpoint",
+ "lenso-capability-identity-directory",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-runner",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "time",
+ "tokio",
+ "url",
+ "zeroize",
+]
+
+[[package]]
 name = "lenso-auth-anonymous-plugin"
 version = "0.1.0"
 dependencies = [

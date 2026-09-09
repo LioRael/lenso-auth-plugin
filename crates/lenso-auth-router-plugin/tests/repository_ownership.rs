@@ -15,6 +15,7 @@ fn repository_owns_the_expected_auth_crates() {
     let expected = [
         "lenso-auth-account-admin-agent-tools-plugin",
         "lenso-auth-account-plugin",
+        "lenso-auth-agent-connection-plugin",
         "lenso-auth-anonymous-plugin",
         "lenso-auth-api-token-plugin",
         "lenso-auth-device-plugin",

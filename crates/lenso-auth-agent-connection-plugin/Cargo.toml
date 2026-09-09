@@ -1,0 +1,42 @@
+[package]
+name = "lenso-auth-agent-connection-plugin"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Browser consent and restricted Agent credential handoff."
+
+[package.metadata.lenso]
+plugin-id = "lenso.auth.agent-connection"
+root-slot = "auth"
+
+[dependencies]
+lenso.workspace = true
+lenso-kernel.workspace = true
+lenso-auth-sdk = { path = "../lenso-auth-sdk" }
+lenso-capability-auth = { path = "../lenso-capability-auth" }
+lenso-capability-auth-delegation = { path = "../lenso-capability-auth-delegation" }
+lenso-capability-http-endpoint.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+time.workspace = true
+url.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+lenso-app-plan.workspace = true
+lenso-native-adapter.workspace = true
+lenso-runner.workspace = true
+lenso-auth-account-plugin = { path = "../lenso-auth-account-plugin" }
+lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer" }
+lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory" }
+lenso-capability-secrets.workspace = true
+sqlx.workspace = true
+tokio = { version = "1.52", features = ["rt", "macros"] }
+
+[lints]
+workspace = true

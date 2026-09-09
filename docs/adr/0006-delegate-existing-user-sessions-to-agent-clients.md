@@ -28,3 +28,17 @@ The initial operation proof is Projects issue lookup and revision-checked update
 Prove real parent login, narrowed grant issuance, authorized issue read/update, membership and private-Team denial, missing/expired/revoked grants, parent revocation, restart persistence, revision conflict, cancellation and downstream failure. Assert no denied call changes durable state. Verify credentials do not enter model input, history, logs or Tool outputs.
 
 A live Console/model acceptance and a clean-room npm install follow source and runtime tests. Each report must distinguish source merge, automated tests, live model acceptance and published artifacts. This ADR is not proof those gates have passed.
+
+## Browser handoff implementation
+
+A removable Auth Agent Connection Web Plugin owns generation-local attempts.
+The Agent receives a private polling secret and a separate authorization URL.
+The App browser displays the fixed configured scope and submits explicit consent
+with an unpredictable nonce tied to the selected root session. Approval requires
+the configured exact Origin and claims the attempt before awaiting Account.
+The resulting grant is retrievable only with the polling secret; retries return
+the same grant during the bounded attempt lifetime. No credential is returned in
+a redirect URL, HTML, or Tool result. Pending attempts fail closed on restart.
+
+This handoff does not yet implement Agent custody or immutable turn identity.
+These remain required gates before claiming the complete Projects chain works.
