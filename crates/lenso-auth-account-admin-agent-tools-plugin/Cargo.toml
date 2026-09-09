@@ -20,5 +20,18 @@ lenso-kernel.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+lenso-app-plan.workspace = true
+lenso-auth-account-plugin = { path = "../lenso-auth-account-plugin" }
+lenso-capability-auth = { path = "../lenso-capability-auth" }
+lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer" }
+lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory" }
+lenso-capability-secrets.workspace = true
+lenso-native-adapter.workspace = true
+lenso-runner.workspace = true
+sqlx.workspace = true
+time.workspace = true
+tokio = { version = "1.52", features = ["macros", "rt"] }
+
 [lints]
 workspace = true

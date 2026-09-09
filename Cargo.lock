@@ -1070,11 +1070,22 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "lenso",
+ "lenso-app-plan",
+ "lenso-auth-account-plugin",
  "lenso-capability-account-admin",
  "lenso-capability-agent-tool-provider",
+ "lenso-capability-auth",
+ "lenso-capability-credential-issuer",
+ "lenso-capability-identity-directory",
+ "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-runner",
  "serde",
  "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
 ]
 
 [[package]]
