@@ -34,3 +34,9 @@ custody, per-turn identity binding, Tool HTTP ingress, Console UI integration or
 a real browser/model acceptance. Its integration test runs generated Endpoint
 and Account providers through Kernel with PostgreSQL; selected test sessions are
 issued through Credential Issuer, not a live OIDC login.
+
+Apps may set `login_path` to a same-origin absolute path such as `/login`.
+Unauthenticated consent then renders a sign-in link with a URL-encoded
+`return_to` consent path. The App login route owns validating that return path
+and returning after login. No credential is passed in either URL. Omitting
+`login_path` preserves the existing `401 login_required` protocol response.

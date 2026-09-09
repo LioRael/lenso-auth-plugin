@@ -151,7 +151,7 @@ async fn start(url: &str, schema: &str) -> NativeApp {
     let consent = instance(
         "consent",
         lenso_auth_agent_connection_plugin::PLUGIN_DESCRIPTOR_JSON,
-        &json!({"origin":"https://projects.test","label":"Projects","audience":["lenso.projects@1:get_issue"],"grant_ttl_seconds":300}),
+        &json!({"origin":"https://projects.test","label":"Projects","audience":["lenso.projects@1:get_issue"],"grant_ttl_seconds":300,"login_path":"/login"}),
     );
     let secrets = PluginInstancePlan::new("secrets", SECRETS_PACKAGE_ID).with_capability(
         CapabilityEndpointPlan::new(
@@ -273,7 +273,11 @@ async fn browser_consent_hands_off_only_a_restricted_authenticated_grant() {
         let begin:Value=serde_json::from_slice(begin.body.as_ref()).unwrap();
         assert!(!begin.to_string().contains(&parent.credential));
         let id=begin["attempt_id"].as_str().unwrap();let query=Some(format!("attempt={id}"));
-        assert_eq!(request(&app,"authorize",None,String::new(),None,query.clone()).await.status,401);
+        let unauthenticated = request(&app,"authorize",None,String::new(),None,query.clone()).await;
+        assert_eq!(unauthenticated.status,401);
+        let html = String::from_utf8(unauthenticated.body.as_ref().to_vec()).unwrap();
+        assert!(html.contains("https://projects.test/login?return_to="));
+        assert!(!html.contains(&parent.credential));
         let page=request(&app,"authorize",Some(&parent.credential),String::new(),None,query).await;
         assert_eq!(page.status,200);
         assert!(page.headers.iter().any(|header|header.name=="referrer-policy" && header.value=="same-origin"));

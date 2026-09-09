@@ -24,9 +24,23 @@ pub struct AgentConnectionConfig {
     pub label: String,
     pub audience: Vec<String>,
     pub grant_ttl_seconds: u32,
+    /// App-owned sign-in route accepting a same-origin `return_to` path.
+    #[serde(default)]
+    pub login_path: Option<String>,
 }
 fn validate_config(config: &AgentConnectionConfig) -> Result<(), RuntimeFailure> {
     let url = url::Url::parse(&config.origin).map_err(|_| invalid("Invalid App origin"))?;
+    if let Some(path) = &config.login_path {
+        let target = url.join(path).map_err(|_| invalid("Invalid login path"))?;
+        if !path.starts_with('/')
+            || path.starts_with("//")
+            || path.contains(['?', '#', '\\'])
+            || target.origin() != url.origin()
+            || path.len() > 1024
+        {
+            return Err(invalid("Login path must be a same-origin absolute path"));
+        }
+    }
     let local = matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]"));
     if url.origin().ascii_serialization() != config.origin
         || !(url.scheme() == "https" || url.scheme() == "http" && local)
@@ -101,7 +115,7 @@ impl AgentConnectionPlugin {
             .credential
             .filter(|credential| credential.scheme == "session")
         else {
-            return Ok(problem(StatusCode::UNAUTHORIZED, "login_required"));
+            return Ok(self.login_required(&query.attempt));
         };
         let result = self
             .auth
@@ -120,13 +134,13 @@ impl AgentConnectionPlugin {
                 Ok(AuthOutcome::Authenticated(assertion)) if assertion.actor_kind() == "user" => {
                     assertion
                 }
-                _ => return Ok(problem(StatusCode::UNAUTHORIZED, "login_required")),
+                _ => return Ok(self.login_required(&query.attempt)),
             },
             Err(auth::AuthInvocationError::Runtime(error)) => {
                 return Err(EndpointHandleInvocationError::Runtime(error));
             }
             Err(auth::AuthInvocationError::Domain(_)) => {
-                return Ok(problem(StatusCode::UNAUTHORIZED, "login_required"));
+                return Ok(self.login_required(&query.attempt));
             }
         };
         let nonce = random()?;
@@ -261,6 +275,27 @@ impl AgentConnectionPlugin {
             }
             Err(_) => Ok(problem(StatusCode::NOT_FOUND, "attempt_unavailable")),
         }
+    }
+}
+impl AgentConnectionPlugin {
+    fn login_required(&self, attempt: &str) -> HandleResponse {
+        let Some(path) = &self.config.login_path else {
+            return problem(StatusCode::UNAUTHORIZED, "login_required");
+        };
+        let mut consent = url::Url::parse(&self.config.origin).expect("validated origin");
+        consent.set_path("/auth/agent/authorize");
+        consent.query_pairs_mut().append_pair("attempt", attempt);
+        let return_to = format!("{}?{}", consent.path(), consent.query().unwrap_or_default());
+        let mut login = url::Url::parse(&self.config.origin).expect("validated origin");
+        login.set_path(path);
+        login.query_pairs_mut().append_pair("return_to", &return_to);
+        let mut response = html_response(format!(
+            "<!doctype html><html lang=en><meta charset=utf-8><title>Sign in to connect</title><main><h1>Sign in to {}</h1><p>After signing in, return here to review and approve the Agent connection.</p><a href=\"{}\">Sign in</a></main></html>",
+            escape(&self.config.label),
+            escape(login.as_str())
+        ));
+        response.status = 401;
+        response
     }
 }
 fn now() -> i64 {
