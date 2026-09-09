@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["session_id", "subject", "credential", "audience", "expires_at"],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "credential": {
+      "type": "string",
+      "x-lenso-sensitive": true
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "title": "GrantResponse"
+}

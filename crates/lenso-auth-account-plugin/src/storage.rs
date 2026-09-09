@@ -38,7 +38,7 @@ const LOCK_SUBJECT_STATUS_QUERY: &str = concat!(
 const LOAD_SESSION_QUERY: &str = concat!(
     "SELECT s.subject_id, ",
     effective_subject_status_sql!(),
-    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, s.expires_at, s.revoked_at IS NOT NULL AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id WHERE s.token_digest = $1"
+    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.token_digest = $1"
 );
 
 #[derive(Clone, Debug)]

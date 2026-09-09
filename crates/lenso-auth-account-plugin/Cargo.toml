@@ -19,6 +19,7 @@ getrandom.workspace = true
 hmac.workspace = true
 lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.3" }
 lenso-capability-account-admin = { path = "../lenso-capability-account-admin" }
+lenso-capability-auth-delegation = { path = "../lenso-capability-auth-delegation" }
 lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
 lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.3.0" }
 lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.3.0" }

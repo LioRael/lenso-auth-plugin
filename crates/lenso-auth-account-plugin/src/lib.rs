@@ -1,5 +1,6 @@
 //! Plugin-owned identity directory and opaque session credentials.
 
+mod delegation;
 mod operator;
 mod schema;
 mod storage;
@@ -19,6 +20,7 @@ use lenso_capability_account_admin::{
 };
 use lenso_capability_auth as auth;
 use lenso_capability_auth::{Auth, AuthRequest, AuthenticateError};
+use lenso_capability_auth_delegation as auth_delegation;
 use lenso_capability_credential_issuer as credential_issuer;
 use lenso_capability_credential_issuer::{
     CredentialIssuerIssue, CredentialIssuerRevoke, CredentialIssuerRevokeCredential, IssueError,
@@ -59,6 +61,8 @@ pub struct AccountAuthConfig {
     assertion_ttl_seconds: u64,
     #[serde(default)]
     admin_callers: Vec<String>,
+    #[serde(default)]
+    delegation_callers: Vec<String>,
 }
 
 impl AccountAuthConfig {
@@ -81,6 +85,7 @@ impl AccountAuthConfig {
             token_pepper_secret: token_pepper_secret.into(),
             assertion_ttl_seconds,
             admin_callers: Vec::new(),
+            delegation_callers: Vec::new(),
         };
         value.validate()?;
         Ok(value)
@@ -88,6 +93,15 @@ impl AccountAuthConfig {
 
     pub fn with_admin_callers(mut self, callers: Vec<String>) -> Result<Self, AccountConfigError> {
         self.admin_callers = callers;
+        self.validate()?;
+        Ok(self)
+    }
+
+    pub fn with_delegation_callers(
+        mut self,
+        callers: Vec<String>,
+    ) -> Result<Self, AccountConfigError> {
+        self.delegation_callers = callers;
         self.validate()?;
         Ok(self)
     }
@@ -124,6 +138,13 @@ impl AccountAuthConfig {
         if self.admin_callers.iter().any(|value| !valid_name(value)) {
             return Err(AccountConfigError::InvalidAdminCaller);
         }
+        if self
+            .delegation_callers
+            .iter()
+            .any(|value| !valid_name(value))
+        {
+            return Err(AccountConfigError::InvalidDelegationCaller);
+        }
         Ok(())
     }
 }
@@ -144,6 +165,8 @@ pub enum AccountConfigError {
     InvalidTtl,
     #[error("invalid Account Admin caller instance")]
     InvalidAdminCaller,
+    #[error("invalid delegation caller instance")]
+    InvalidDelegationCaller,
 }
 
 pub fn assertion_public_key(signing_secret: impl AsRef<[u8]>) -> String {
@@ -200,7 +223,8 @@ impl fmt::Debug for AccountAuthPlugin {
     auth::Auth,
     directory::Directory,
     credential_issuer::CredentialIssuer,
-    account_admin::AccountAdmin
+    account_admin::AccountAdmin,
+    auth_delegation::Delegation
 )]
 impl AccountAuthPlugin {}
 
@@ -872,7 +896,7 @@ mod tests {
 
     use super::*;
 
-    async fn test_postgres(label: &str) -> (String, String, OwnedPostgres) {
+    pub(super) async fn test_postgres(label: &str) -> (String, String, OwnedPostgres) {
         let database_url =
             std::env::var("LENSO_POSTGRES_TEST_URL").expect("LENSO_POSTGRES_TEST_URL is required");
         let suffix = std::time::SystemTime::now()
@@ -889,7 +913,11 @@ mod tests {
         (database_url, schema, postgres)
     }
 
-    async fn cleanup_test_postgres(database_url: &str, schema: &str, postgres: OwnedPostgres) {
+    pub(super) async fn cleanup_test_postgres(
+        database_url: &str,
+        schema: &str,
+        postgres: OwnedPostgres,
+    ) {
         use sqlx::{AssertSqlSafe, Executor};
 
         postgres.pool().close().await;
@@ -901,7 +929,11 @@ mod tests {
         cleanup_pool.close().await;
     }
 
-    fn test_session(session_id: &str, digest: &[u8], subject: &str) -> storage::NewSession {
+    pub(super) fn test_session(
+        session_id: &str,
+        digest: &[u8],
+        subject: &str,
+    ) -> storage::NewSession {
         storage::NewSession {
             session_id: session_id.to_owned(),
             digest: digest.to_vec(),

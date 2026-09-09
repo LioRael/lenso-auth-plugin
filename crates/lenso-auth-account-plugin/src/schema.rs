@@ -11,6 +11,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "add-subject-disable-details",
         "migrations/002_add_subject_disable_details.sql",
     ),
+    (
+        3,
+        "add-session-delegations",
+        "migrations/003_add_session_delegations.sql"
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {

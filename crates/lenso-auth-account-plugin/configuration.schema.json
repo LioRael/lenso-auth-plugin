@@ -15,11 +15,17 @@
       "type": "string"
     },
     "assertion_ttl_seconds": {
-      "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "type": "integer"
     },
     "database_url_secret": {
       "type": "string"
+    },
+    "delegation_callers": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
     },
     "issuer": {
       "type": "string"
