@@ -78,7 +78,7 @@ impl PasswordAuthConfig {
         if self.database_url_secret.is_empty() || self.database_url_secret.len() > 256 {
             return Err(PasswordConfigError::InvalidSecretReference);
         }
-        if self.audience.is_empty() || self.audience.iter().any(|value| !valid_name(value)) {
+        if self.audience.is_empty() || self.audience.iter().any(|value| !valid_audience(value)) {
             return Err(PasswordConfigError::InvalidAudience);
         }
         if self.session_ttl_seconds == 0 || self.session_ttl_seconds > 2_592_000 {
@@ -544,17 +544,52 @@ fn verify_password_sync(value: &str, encoded: &str) -> bool {
             .is_ok()
     })
 }
-fn valid_name(value: &str) -> bool {
+fn valid_audience(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
         && value
             .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b':'))
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b':' | b'@'))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn password_login_configuration_accepts_capability_operation_audiences() {
+        let config = PasswordAuthConfig::new(
+            "password_test",
+            "auth/database-url",
+            vec![
+                "lenso.projects@1:get_issue".into(),
+                "lenso.projects@1:update_issue".into(),
+            ],
+            3600,
+            5,
+            60,
+        )
+        .unwrap();
+        assert_eq!(config.audience[0], "lenso.projects@1:get_issue");
+        for invalid in [
+            "",
+            "*",
+            "lenso.projects@1:get issue",
+            "lenso.projects@1:get_issue\n",
+        ] {
+            assert!(
+                PasswordAuthConfig::new(
+                    "password_test",
+                    "auth/database-url",
+                    vec![invalid.into()],
+                    3600,
+                    5,
+                    60
+                )
+                .is_err()
+            );
+        }
+    }
 
     #[test]
     fn password_hash_never_contains_plaintext_and_verifies() {
