@@ -276,6 +276,7 @@ async fn browser_consent_hands_off_only_a_restricted_authenticated_grant() {
         assert_eq!(request(&app,"authorize",None,String::new(),None,query.clone()).await.status,401);
         let page=request(&app,"authorize",Some(&parent.credential),String::new(),None,query).await;
         assert_eq!(page.status,200);
+        assert!(page.headers.iter().any(|header|header.name=="referrer-policy" && header.value=="same-origin"));
         let html=std::str::from_utf8(page.body.as_ref()).unwrap();assert!(!html.contains(&parent.credential));assert!(!html.contains(begin["polling_secret"].as_str().unwrap()));
         let body=format!("attempt={id}&consent={}",field(html,"consent"));
         assert_eq!(request(&app,"approve",Some(&parent.credential),body.clone(),Some("https://attacker.test"),None).await.status,403);

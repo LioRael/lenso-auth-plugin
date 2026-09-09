@@ -290,10 +290,19 @@ fn internal(detail: &str) -> EndpointHandleInvocationError {
     })
 }
 fn secure(mut response: HandleResponse) -> HandleResponse {
+    // Form POSTs must retain their same-origin Origin header. `no-referrer`
+    // makes some browsers send an opaque `null` Origin, which consent rejects.
+    let referrer_policy = if response.headers.iter().any(|header| {
+        header.name.eq_ignore_ascii_case("content-type") && header.value.starts_with("text/html")
+    }) {
+        "same-origin"
+    } else {
+        "no-referrer"
+    };
     response.headers.extend(
         [
             ("cache-control", "no-store"),
-            ("referrer-policy", "no-referrer"),
+            ("referrer-policy", referrer_policy),
             ("x-content-type-options", "nosniff"),
             (
                 "content-security-policy",
