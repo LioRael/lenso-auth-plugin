@@ -30,6 +30,7 @@ fn repository_owns_the_expected_auth_crates() {
         "lenso-capability-account-admin",
         "lenso-capability-anonymous-auth",
         "lenso-capability-auth",
+        "lenso-capability-auth-delegation",
         "lenso-capability-credential-issuer",
         "lenso-capability-device-auth",
         "lenso-capability-federated-auth",

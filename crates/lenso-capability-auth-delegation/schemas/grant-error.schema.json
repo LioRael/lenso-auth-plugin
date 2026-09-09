@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    { "const": "permission_denied" },
+    { "const": "invalid_credential" },
+    { "const": "expired" },
+    { "const": "revoked" },
+    { "const": "invalid_scope" },
+    { "const": "nested_delegation" }
+  ]
+}

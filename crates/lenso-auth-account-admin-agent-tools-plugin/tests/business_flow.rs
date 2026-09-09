@@ -9,6 +9,7 @@ use lenso_auth_account_plugin::{AccountAuthConfig, AccountAuthOperator, assertio
 use lenso_capability_account_admin as admin;
 use lenso_capability_agent_tool_provider as tool;
 use lenso_capability_auth as auth;
+use lenso_capability_auth_delegation as delegation;
 use lenso_capability_credential_issuer as issuer;
 use lenso_capability_identity_directory as directory;
 use lenso_capability_secrets::{
@@ -123,7 +124,7 @@ fn endpoint(id: &str, version: &str, operations: &[&str]) -> CapabilityEndpointP
     }
 }
 
-fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
+fn account_config(schema: &str, authorized: bool) -> AccountAuthConfig {
     let config = AccountAuthConfig::new(
         schema,
         "test.account",
@@ -140,8 +141,24 @@ fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
         vec![]
     })
     .unwrap();
+    config
+        .with_delegation_callers(if authorized {
+            vec!["caller".into()]
+        } else {
+            vec![]
+        })
+        .unwrap()
+}
+
+fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
+    let config = account_config(schema, authorized);
     let account = PluginInstancePlan::new("account", "lenso.auth.account")
         .with_configuration(serde_json::to_string(&config).unwrap())
+        .with_capability(endpoint(
+            delegation::CAPABILITY_ID,
+            delegation::DESCRIPTOR_VERSION,
+            &["grant"],
+        ))
         .with_requirement(CapabilityRequirementPlan::one(
             secrets::CAPABILITY_ID,
             secrets::DESCRIPTOR_VERSION,
@@ -175,6 +192,7 @@ fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
     )];
     for (id, version) in [
         (auth::CAPABILITY_ID, auth::DESCRIPTOR_VERSION),
+        (delegation::CAPABILITY_ID, delegation::DESCRIPTOR_VERSION),
         (directory::CAPABILITY_ID, directory::DESCRIPTOR_VERSION),
         (issuer::CAPABILITY_ID, issuer::DESCRIPTOR_VERSION),
     ] {
@@ -356,6 +374,50 @@ async fn real_business_tools_preserve_authority_state_and_removal() {
         pool.execute(AssertSqlSafe(format!("ALTER TABLE \"{schema}\".unavailable_subjects RENAME TO identity_subjects"))).await.unwrap();
         assert_eq!(app.shutdown(Duration::from_secs(2)).await, ShutdownOutcome::Clean);
         pool.close().await;
+    }).await;
+    let pool = PgPool::connect(&url).await.unwrap();
+    pool.execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
+        .await
+        .unwrap();
+    pool.close().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+#[ignore = "requires LENSO_POSTGRES_TEST_URL; exercised by CI"]
+async fn delegated_user_session_requires_grant_and_survives_restart() {
+    let url = std::env::var("LENSO_POSTGRES_TEST_URL").unwrap();
+    let schema = format!("agent_delegation_{}", std::process::id());
+    AccountAuthOperator::setup(&url, &schema).await.unwrap();
+    tokio::task::LocalSet::new().run_until(async {
+        let app = start(&url, &schema, false, true).await;
+        let subject = app.invoke::<directory::DirectoryEnsureIdentity>("caller", "ensure_identity",
+            directory::EnsureIdentityRequest { provider: "test".into(), external_subject: "delegated-user".into() }).await.unwrap().unwrap().subject;
+        let expiry = |minutes| (time::OffsetDateTime::now_utc() + time::Duration::minutes(minutes)).format(&time::format_description::well_known::Rfc3339).unwrap();
+        let issued = app.invoke::<issuer::CredentialIssuerIssue>("caller", "issue", serde_json::from_value(json!({
+            "subject":subject,"actor_kind":"user","assurance":"test","claims":{},
+            "audience":["lenso.projects@1:get_issue","lenso.projects@1:update_issue"],"expires_at":expiry(30)
+        })).unwrap()).await.unwrap().unwrap();
+        let request = delegation::GrantRequest { parent_credential:issued.credential.clone(), audience:vec!["lenso.projects@1:get_issue".into()], expires_at:expiry(5) };
+        assert!(!format!("{request:?}").contains(&issued.credential));
+        let grant = app.invoke::<delegation::Delegation>("caller", "grant", request.clone()).await.unwrap().unwrap();
+        assert_eq!(grant.subject, subject);
+        assert!(!format!("{grant:?}").contains(&grant.credential));
+        let authenticated = authenticate(&app, &grant.credential).await.unwrap().assertion.unwrap();
+        assert_eq!(authenticated.subject, subject);
+        assert_eq!(authenticated.audience, request.audience);
+        let mut wider = request.clone(); wider.audience = vec!["lenso.projects@1:archive_issue".into()];
+        assert!(matches!(app.invoke::<delegation::Delegation>("caller","grant",wider).await.unwrap(), Err(delegation::GrantError::InvalidScope)));
+        let mut nested = request.clone(); nested.parent_credential = grant.credential.clone(); nested.expires_at = expiry(1);
+        assert!(matches!(app.invoke::<delegation::Delegation>("caller","grant",nested).await.unwrap(), Err(delegation::GrantError::NestedDelegation)));
+        let mut expired = request.clone(); expired.expires_at = expiry(-1);
+        assert!(matches!(app.invoke::<delegation::Delegation>("caller","grant",expired).await.unwrap(), Err(delegation::GrantError::Expired)));
+        assert_eq!(app.shutdown(Duration::from_secs(2)).await, ShutdownOutcome::Clean);
+        let app = start(&url, &schema, false, false).await;
+        assert!(authenticate(&app, &grant.credential).await.is_ok());
+        assert!(matches!(app.invoke::<delegation::Delegation>("caller","grant",request).await.unwrap(), Err(delegation::GrantError::PermissionDenied)));
+        app.invoke::<issuer::CredentialIssuerRevokeCredential>("caller","revoke_credential", issuer::RevokeCredentialRequest { scheme:"session".into(), credential:issued.credential }).await.unwrap().unwrap();
+        assert!(matches!(authenticate(&app,&grant.credential).await, Err(auth::AuthenticateError::Revoked)));
+        assert_eq!(app.shutdown(Duration::from_secs(2)).await, ShutdownOutcome::Clean);
     }).await;
     let pool = PgPool::connect(&url).await.unwrap();
     pool.execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))

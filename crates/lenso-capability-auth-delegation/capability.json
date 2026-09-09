@@ -1,0 +1,15 @@
+{
+  "id": "lenso.auth.delegation@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": false,
+  "operations": [
+    {
+      "name": "grant",
+      "interaction": "request",
+      "request_schema": "schemas/grant-request.schema.json",
+      "response_schema": "schemas/grant-response.schema.json",
+      "domain_error_schema": "schemas/grant-error.schema.json"
+    }
+  ]
+}

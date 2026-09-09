@@ -21,6 +21,7 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+lenso-capability-auth-delegation = { path = "../lenso-capability-auth-delegation" }
 lenso-app-plan.workspace = true
 lenso-auth-account-plugin = { path = "../lenso-auth-account-plugin" }
 lenso-capability-auth = { path = "../lenso-capability-auth" }

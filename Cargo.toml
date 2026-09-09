@@ -16,6 +16,7 @@ members = [
     "crates/lenso-auth-sdk",
     "crates/lenso-auth-web-session-plugin",
     "crates/lenso-capability-auth",
+    "crates/lenso-capability-auth-delegation",
     "crates/lenso-capability-account-admin",
     "crates/lenso-capability-anonymous-auth",
     "crates/lenso-capability-credential-issuer",

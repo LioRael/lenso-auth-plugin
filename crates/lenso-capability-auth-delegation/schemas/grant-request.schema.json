@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["parent_credential", "audience", "expires_at"],
+  "properties": {
+    "parent_credential": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "x-lenso-sensitive": true
+    },
+    "audience": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "title": "GrantRequest"
+}
