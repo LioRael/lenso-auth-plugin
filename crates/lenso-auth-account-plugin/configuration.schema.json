@@ -4,8 +4,7 @@
   "properties": {
     "admin_callers": {
       "items": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:-]+(?:/[A-Za-z0-9._:-]+)?$"
+        "type": "string"
       },
       "type": "array"
     },
@@ -24,8 +23,7 @@
     },
     "delegation_callers": {
       "items": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:-]+(?:/[A-Za-z0-9._:-]+)?$"
+        "type": "string"
       },
       "type": "array"
     },
