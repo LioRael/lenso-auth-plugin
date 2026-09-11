@@ -1,11 +1,11 @@
 use std::{collections::BTreeMap, fmt};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use lenso_postgres_kit::sqlx::types::Json;
 use lenso_postgres_kit::{
     OwnedPostgres, PostgresKitError, SchemaOperator, SetupOutcome, UpgradeOutcome,
 };
 use serde_json::Value;
-use sqlx::types::Json;
 use thiserror::Error;
 use time::OffsetDateTime;
 use zeroize::Zeroizing;
@@ -74,7 +74,7 @@ impl ApiTokenAuthOperator {
                     operation: "begin API token issuance",
                     source,
                 })?;
-        sqlx::query(
+        lenso_postgres_kit::sqlx::query(
             "INSERT INTO auth_sessions\n\
                (session_id, subject, actor_kind, assurance, audience, claims, expires_at)\n\
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -92,7 +92,7 @@ impl ApiTokenAuthOperator {
             operation: "create Auth session",
             source,
         })?;
-        sqlx::query(
+        lenso_postgres_kit::sqlx::query(
             "INSERT INTO api_tokens (token_id, token_digest, session_id, expires_at)\n\
              VALUES ($1, $2, $3, $4)",
         )
@@ -122,7 +122,7 @@ impl ApiTokenAuthOperator {
 
     /// Revokes one complete session and every credential attached to it.
     pub async fn revoke_session(&self, session_id: &str) -> Result<bool, AuthOperatorError> {
-        let result = sqlx::query(
+        let result = lenso_postgres_kit::sqlx::query(
             "UPDATE auth_sessions SET revoked_at = transaction_timestamp()\n\
              WHERE session_id = $1 AND revoked_at IS NULL",
         )
@@ -138,7 +138,7 @@ impl ApiTokenAuthOperator {
 
     /// Revokes one token while leaving its owning session intact.
     pub async fn revoke_token(&self, token_id: &str) -> Result<bool, AuthOperatorError> {
-        let result = sqlx::query(
+        let result = lenso_postgres_kit::sqlx::query(
             "UPDATE api_tokens SET revoked_at = transaction_timestamp()\n\
              WHERE token_id = $1 AND revoked_at IS NULL",
         )
@@ -243,7 +243,7 @@ pub enum AuthOperatorError {
     Database {
         operation: &'static str,
         #[source]
-        source: sqlx::Error,
+        source: lenso_postgres_kit::sqlx::Error,
     },
 }
 

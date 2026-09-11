@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lenso_auth_oauth_flow_plugin::OAuthFlowOperator;
-use sqlx::{AssertSqlSafe, Executor, PgPool};
+use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor, PgPool};
 
 static NEXT_SCHEMA: AtomicU64 = AtomicU64::new(0);
 
@@ -27,7 +27,7 @@ fn unique_schema(label: &str) -> String {
 }
 
 async fn table_exists(pool: &PgPool, schema: &str, table: &str) -> bool {
-    sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
+    lenso_postgres_kit::sqlx::query_scalar("SELECT to_regclass($1) IS NOT NULL")
         .bind(format!("{schema}.{table}"))
         .fetch_one(pool)
         .await
@@ -35,7 +35,7 @@ async fn table_exists(pool: &PgPool, schema: &str, table: &str) -> bool {
 }
 
 async fn column_exists(pool: &PgPool, schema: &str, table: &str, column: &str) -> bool {
-    sqlx::query_scalar(
+    lenso_postgres_kit::sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND column_name = $3)",
     )
     .bind(schema)

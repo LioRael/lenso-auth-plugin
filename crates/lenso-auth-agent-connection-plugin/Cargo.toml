@@ -35,7 +35,7 @@ lenso-auth-account-plugin = { path = "../lenso-auth-account-plugin" }
 lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer" }
 lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory" }
 lenso-capability-secrets.workspace = true
-sqlx.workspace = true
+lenso-postgres-kit.workspace = true
 tokio = { version = "1.52", features = ["rt", "macros"] }
 
 [lints]

@@ -30,7 +30,7 @@ lenso-capability-identity-directory = { path = "../lenso-capability-identity-dir
 lenso-capability-secrets.workspace = true
 lenso-native-adapter.workspace = true
 lenso-runner.workspace = true
-sqlx.workspace = true
+lenso-postgres-kit.workspace = true
 time.workspace = true
 tokio = { version = "1.52", features = ["macros", "rt"] }
 

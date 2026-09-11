@@ -29,11 +29,11 @@ use lenso_capability_sms_delivery as sms;
 use lenso_capability_sms_delivery::{SendRequest, SmsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 pub use operator::{PhoneOperator, PhoneOperatorError};
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use sqlx::Row;
 use std::{
     cell::RefCell, collections::BTreeMap, fmt, future::Future, rc::Rc, sync::Arc,
     time::Duration as StdDuration,
@@ -345,11 +345,13 @@ impl PhoneProvider for PhoneAuthPlugin {
                 )
                 .await;
             if !matches!(delivery,Ok(ref v)if v.accepted) {
-                sqlx::query("DELETE FROM phone_otp_challenges WHERE challenge_id=$1")
-                    .bind(&challenge_id)
-                    .execute(a.prepared.postgres.pool())
-                    .await
-                    .map_err(db)?;
+                lenso_postgres_kit::sqlx::query(
+                    "DELETE FROM phone_otp_challenges WHERE challenge_id=$1",
+                )
+                .bind(&challenge_id)
+                .execute(a.prepared.postgres.pool())
+                .await
+                .map_err(db)?;
                 return match delivery {
                     Err(SmsInvocationError::Runtime(e)) => Err(e),
                     _ => Ok(Err(StartOtpError::DeliveryRejected)),
@@ -380,7 +382,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                 return Ok(Err(VerifyOtpError::InvalidChallenge));
             }
             let mut tx = a.prepared.postgres.pool().begin().await.map_err(db)?;
-            let row=sqlx::query("SELECT phone,code_digest,attempts,expires_at,consumed_at IS NOT NULL AS consumed FROM phone_otp_challenges WHERE challenge_id=$1 FOR UPDATE").bind(&r.challenge_id).fetch_optional(&mut*tx).await.map_err(db)?;
+            let row=lenso_postgres_kit::sqlx::query("SELECT phone,code_digest,attempts,expires_at,consumed_at IS NOT NULL AS consumed FROM phone_otp_challenges WHERE challenge_id=$1 FOR UPDATE").bind(&r.challenge_id).fetch_optional(&mut*tx).await.map_err(db)?;
             let Some(row) = row else {
                 return Ok(Err(VerifyOtpError::InvalidChallenge));
             };
@@ -397,7 +399,7 @@ impl PhoneProvider for PhoneAuthPlugin {
             }
             let stored: Vec<u8> = row.try_get("code_digest").map_err(db)?;
             if !otp_matches(&a.prepared.otp_secret, &r.challenge_id, &r.code, &stored)? {
-                sqlx::query(
+                lenso_postgres_kit::sqlx::query(
                     "UPDATE phone_otp_challenges SET attempts=attempts+1 WHERE challenge_id=$1",
                 )
                 .bind(&r.challenge_id)
@@ -411,7 +413,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                     VerifyOtpError::InvalidCode
                 }));
             }
-            sqlx::query("UPDATE phone_otp_challenges SET consumed_at=transaction_timestamp() WHERE challenge_id=$1").bind(&r.challenge_id).execute(&mut*tx).await.map_err(db)?;
+            lenso_postgres_kit::sqlx::query("UPDATE phone_otp_challenges SET consumed_at=transaction_timestamp() WHERE challenge_id=$1").bind(&r.challenge_id).execute(&mut*tx).await.map_err(db)?;
             tx.commit().await.map_err(db)?;
             let phone: String = row.try_get("phone").map_err(db)?;
             let identity = directory
@@ -433,7 +435,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                 }
                 Err(DirectoryEnsureIdentityInvocationError::Runtime(e)) => return Err(e),
             };
-            sqlx::query("INSERT INTO phone_identities(phone,subject_id)VALUES($1,$2)ON CONFLICT(phone)DO UPDATE SET subject_id=EXCLUDED.subject_id").bind(&phone).bind(&identity.subject).execute(a.prepared.postgres.pool()).await.map_err(db)?;
+            lenso_postgres_kit::sqlx::query("INSERT INTO phone_identities(phone,subject_id)VALUES($1,$2)ON CONFLICT(phone)DO UPDATE SET subject_id=EXCLUDED.subject_id").bind(&phone).bind(&identity.subject).execute(a.prepared.postgres.pool()).await.map_err(db)?;
             let credential = match issue(
                 &a,
                 &issuer,
@@ -497,12 +499,13 @@ impl PhoneProvider for PhoneAuthPlugin {
                 }
                 Err(DirectoryReadStatusInvocationError::Runtime(e)) => return Err(e),
             }
-            let phone: Option<String> =
-                sqlx::query_scalar("SELECT phone FROM phone_identities WHERE subject_id=$1")
-                    .bind(&r.subject)
-                    .fetch_optional(a.prepared.postgres.pool())
-                    .await
-                    .map_err(db)?;
+            let phone: Option<String> = lenso_postgres_kit::sqlx::query_scalar(
+                "SELECT phone FROM phone_identities WHERE subject_id=$1",
+            )
+            .bind(&r.subject)
+            .fetch_optional(a.prepared.postgres.pool())
+            .await
+            .map_err(db)?;
             let Some(phone) = phone else {
                 return Ok(Err(SetPasswordError::NotFound));
             };
@@ -512,7 +515,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                 .hash(r.password)
                 .await
                 .map_err(|error| password_work_failure(&error))?;
-            sqlx::query("INSERT INTO phone_passwords(subject_id,phone,password_hash)VALUES($1,$2,$3)ON CONFLICT(subject_id)DO UPDATE SET password_hash=EXCLUDED.password_hash,updated_at=transaction_timestamp()").bind(&r.subject).bind(phone).bind(hash).execute(a.prepared.postgres.pool()).await.map_err(db)?;
+            lenso_postgres_kit::sqlx::query("INSERT INTO phone_passwords(subject_id,phone,password_hash)VALUES($1,$2,$3)ON CONFLICT(subject_id)DO UPDATE SET password_hash=EXCLUDED.password_hash,updated_at=transaction_timestamp()").bind(&r.subject).bind(phone).bind(hash).execute(a.prepared.postgres.pool()).await.map_err(db)?;
             Ok(Ok(SetPasswordResponse { updated: true }))
         })
     }
@@ -542,12 +545,13 @@ impl PhoneProvider for PhoneAuthPlugin {
             {
                 return Ok(Err(PasswordLoginError::RateLimited));
             }
-            let row =
-                sqlx::query("SELECT subject_id,password_hash FROM phone_passwords WHERE phone=$1")
-                    .bind(&phone)
-                    .fetch_optional(a.prepared.postgres.pool())
-                    .await
-                    .map_err(db)?;
+            let row = lenso_postgres_kit::sqlx::query(
+                "SELECT subject_id,password_hash FROM phone_passwords WHERE phone=$1",
+            )
+            .bind(&phone)
+            .fetch_optional(a.prepared.postgres.pool())
+            .await
+            .map_err(db)?;
             let (subject, stored_hash) = match row {
                 Some(row) => (
                     Some(row.try_get::<String, _>("subject_id").map_err(db)?),
@@ -722,7 +726,7 @@ async fn reserve_otp_challenge(
     let source_key = reservation.client_ip.unwrap_or("<missing>");
     let source_key = format!("lenso-auth-phone-otp-source:{source_key}");
     advisory_lock(&mut transaction, &source_key).await?;
-    let starts: i64 = sqlx::query_scalar(
+    let starts: i64 = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT count(*) FROM phone_otp_challenges WHERE client_ip IS NOT DISTINCT FROM $1 AND created_at >= $2",
     )
     .bind(reservation.client_ip)
@@ -734,7 +738,7 @@ async fn reserve_otp_challenge(
         transaction.commit().await.map_err(db)?;
         return Ok(OtpReservationOutcome::RateLimited);
     }
-    let resend: Option<OffsetDateTime> = sqlx::query_scalar(
+    let resend: Option<OffsetDateTime> = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT resend_after FROM phone_otp_challenges WHERE phone=$1 ORDER BY created_at DESC LIMIT 1",
     )
     .bind(reservation.phone)
@@ -745,7 +749,7 @@ async fn reserve_otp_challenge(
         transaction.commit().await.map_err(db)?;
         return Ok(OtpReservationOutcome::ResendTooSoon);
     }
-    sqlx::query("INSERT INTO phone_otp_challenges(challenge_id,phone,purpose,code_digest,client_ip,expires_at,resend_after)VALUES($1,$2,$3,$4,$5,$6,$7)")
+    lenso_postgres_kit::sqlx::query("INSERT INTO phone_otp_challenges(challenge_id,phone,purpose,code_digest,client_ip,expires_at,resend_after)VALUES($1,$2,$3,$4,$5,$6,$7)")
         .bind(reservation.challenge_id)
         .bind(reservation.phone)
         .bind(reservation.purpose)
@@ -770,7 +774,7 @@ async fn phone_failure_limit_reached(
     let mut transaction = postgres.pool().begin().await.map_err(db)?;
     lock_phone_failures(&mut transaction, phone).await?;
     prune_phone_failures(&mut transaction, phone, since).await?;
-    let count: i64 = sqlx::query_scalar(
+    let count: i64 = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT count(*) FROM phone_login_failures WHERE phone=$1 AND failed_at >= $2",
     )
     .bind(phone)
@@ -791,7 +795,7 @@ async fn record_phone_failure_if_allowed(
     let mut transaction = postgres.pool().begin().await.map_err(db)?;
     lock_phone_failures(&mut transaction, phone).await?;
     prune_phone_failures(&mut transaction, phone, since).await?;
-    let inserted = sqlx::query_scalar::<_, i32>(
+    let inserted = lenso_postgres_kit::sqlx::query_scalar::<_, i32>(
         "INSERT INTO phone_login_failures(phone) SELECT $1 WHERE (SELECT count(*) FROM phone_login_failures WHERE phone=$1 AND failed_at >= $2) < $3 RETURNING 1",
     )
     .bind(phone)
@@ -811,7 +815,7 @@ async fn record_phone_failure_if_allowed(
 async fn clear_phone_failures(postgres: &OwnedPostgres, phone: &str) -> Result<(), RuntimeFailure> {
     let mut transaction = postgres.pool().begin().await.map_err(db)?;
     lock_phone_failures(&mut transaction, phone).await?;
-    sqlx::query("DELETE FROM phone_login_failures WHERE phone=$1")
+    lenso_postgres_kit::sqlx::query("DELETE FROM phone_login_failures WHERE phone=$1")
         .bind(phone)
         .execute(&mut *transaction)
         .await
@@ -826,7 +830,7 @@ async fn current_phone_failure_count(
     phone: &str,
     since: OffsetDateTime,
 ) -> Result<i64, RuntimeFailure> {
-    sqlx::query_scalar(
+    lenso_postgres_kit::sqlx::query_scalar(
         "SELECT count(*) FROM phone_login_failures WHERE phone=$1 AND failed_at >= $2",
     )
     .bind(phone)
@@ -837,7 +841,7 @@ async fn current_phone_failure_count(
 }
 
 async fn lock_phone_failures(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     phone: &str,
 ) -> Result<(), RuntimeFailure> {
     let key = format!("lenso-auth-phone-password:{phone}");
@@ -845,16 +849,18 @@ async fn lock_phone_failures(
 }
 
 async fn prune_phone_failures(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     phone: &str,
     since: OffsetDateTime,
 ) -> Result<(), RuntimeFailure> {
-    sqlx::query("DELETE FROM phone_login_failures WHERE phone=$1 AND failed_at < $2")
-        .bind(phone)
-        .bind(since)
-        .execute(&mut **transaction)
-        .await
-        .map_err(db)?;
+    lenso_postgres_kit::sqlx::query(
+        "DELETE FROM phone_login_failures WHERE phone=$1 AND failed_at < $2",
+    )
+    .bind(phone)
+    .bind(since)
+    .execute(&mut **transaction)
+    .await
+    .map_err(db)?;
     Ok(())
 }
 
@@ -862,7 +868,7 @@ async fn prune_stale_phone_failures(
     postgres: &OwnedPostgres,
     before: OffsetDateTime,
 ) -> Result<u64, RuntimeFailure> {
-    let result = sqlx::query(
+    let result = lenso_postgres_kit::sqlx::query(
         "WITH stale AS (SELECT ctid FROM phone_login_failures WHERE failed_at < $1 ORDER BY failed_at, ctid FOR UPDATE SKIP LOCKED LIMIT $2) DELETE FROM phone_login_failures AS failures USING stale WHERE failures.ctid = stale.ctid",
     )
     .bind(before)
@@ -874,10 +880,10 @@ async fn prune_stale_phone_failures(
 }
 
 async fn advisory_lock(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     key: &str,
 ) -> Result<(), RuntimeFailure> {
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+    lenso_postgres_kit::sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(key)
         .execute(&mut **transaction)
         .await
@@ -971,7 +977,7 @@ fn failure(d: &str) -> RuntimeFailure {
     }
 }
 #[allow(clippy::needless_pass_by_value)]
-fn db(e: sqlx::Error) -> RuntimeFailure {
+fn db(e: lenso_postgres_kit::sqlx::Error) -> RuntimeFailure {
     failure(&format!("Phone Auth storage operation failed: {e}"))
 }
 
@@ -995,10 +1001,12 @@ mod tests {
     }
 
     async fn cleanup_test_postgres(database_url: &str, schema: &str, postgres: OwnedPostgres) {
-        use sqlx::{AssertSqlSafe, Executor};
+        use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
 
         postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -1114,13 +1122,13 @@ mod tests {
         let (database_url, schema, postgres) = test_postgres("password_prune").await;
         let cutoff = OffsetDateTime::now_utc() - Duration::minutes(1);
         let stale_count = STALE_FAILURE_PRUNE_BATCH + 5;
-        sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) SELECT '+1202555' || lpad(value::text, 4, '0'), $1 FROM generate_series(1,$2) AS value")
+        lenso_postgres_kit::sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) SELECT '+1202555' || lpad(value::text, 4, '0'), $1 FROM generate_series(1,$2) AS value")
             .bind(cutoff - Duration::minutes(1))
             .bind(stale_count)
             .execute(postgres.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) VALUES('+12025559998',$1),('+12025559999',$1)")
+        lenso_postgres_kit::sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) VALUES('+12025559998',$1),('+12025559999',$1)")
             .bind(cutoff + Duration::seconds(1))
             .execute(postgres.pool())
             .await
@@ -1129,36 +1137,40 @@ mod tests {
         phone_failure_limit_reached(&postgres, "+12025550000", cutoff, 10)
             .await
             .unwrap();
-        let remaining_stale: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM phone_login_failures WHERE failed_at < $1")
-                .bind(cutoff)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
-        let active: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM phone_login_failures WHERE failed_at >= $1")
-                .bind(cutoff)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
+        let remaining_stale: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM phone_login_failures WHERE failed_at < $1",
+        )
+        .bind(cutoff)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
+        let active: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM phone_login_failures WHERE failed_at >= $1",
+        )
+        .bind(cutoff)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
         assert_eq!(remaining_stale, stale_count - STALE_FAILURE_PRUNE_BATCH);
         assert_eq!(active, 2);
 
         phone_failure_limit_reached(&postgres, "+12025550000", cutoff, 10)
             .await
             .unwrap();
-        let remaining_stale: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM phone_login_failures WHERE failed_at < $1")
-                .bind(cutoff)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
-        let active: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM phone_login_failures WHERE failed_at >= $1")
-                .bind(cutoff)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
+        let remaining_stale: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM phone_login_failures WHERE failed_at < $1",
+        )
+        .bind(cutoff)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
+        let active: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM phone_login_failures WHERE failed_at >= $1",
+        )
+        .bind(cutoff)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
         assert_eq!(remaining_stale, 0);
         assert_eq!(active, 2);
 
@@ -1171,13 +1183,15 @@ mod tests {
         let (database_url, schema, postgres) = test_postgres("password_prune_race").await;
         let cutoff = OffsetDateTime::now_utc() - Duration::minutes(1);
         let phone = "+12025550000";
-        sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) VALUES($1,$2)")
-            .bind(phone)
-            .bind(cutoff - Duration::minutes(2))
-            .execute(postgres.pool())
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) SELECT '+1202666' || lpad(value::text, 4, '0'), $1 FROM generate_series(1,$2) AS value")
+        lenso_postgres_kit::sqlx::query(
+            "INSERT INTO phone_login_failures(phone,failed_at) VALUES($1,$2)",
+        )
+        .bind(phone)
+        .bind(cutoff - Duration::minutes(2))
+        .execute(postgres.pool())
+        .await
+        .unwrap();
+        lenso_postgres_kit::sqlx::query("INSERT INTO phone_login_failures(phone,failed_at) SELECT '+1202666' || lpad(value::text, 4, '0'), $1 FROM generate_series(1,$2) AS value")
             .bind(cutoff - Duration::minutes(1))
             .bind(STALE_FAILURE_PRUNE_BATCH)
             .execute(postgres.pool())

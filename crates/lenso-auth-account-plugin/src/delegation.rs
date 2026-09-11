@@ -90,7 +90,7 @@ async fn create_grant(
     expires_at: OffsetDateTime,
 ) -> Result<Result<String, GrantError>, RuntimeFailure> {
     let mut tx = postgres.pool().begin().await.map_err(db)?;
-    let parent = sqlx::query("SELECT s.session_id,s.subject_id,s.actor_kind,s.assurance,s.audience,s.claims,s.expires_at,s.revoked_at IS NOT NULL AS revoked,(i.status = 'disabled' AND (i.disabled_until IS NULL OR i.disabled_until > transaction_timestamp())) AS disabled FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id WHERE s.token_digest=$1 FOR SHARE OF s,i")
+    let parent = lenso_postgres_kit::sqlx::query("SELECT s.session_id,s.subject_id,s.actor_kind,s.assurance,s.audience,s.claims,s.expires_at,s.revoked_at IS NOT NULL AS revoked,(i.status = 'disabled' AND (i.disabled_until IS NULL OR i.disabled_until > transaction_timestamp())) AS disabled FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id WHERE s.token_digest=$1 FOR SHARE OF s,i")
         .bind(parent_digest).fetch_optional(&mut *tx).await.map_err(db)?;
     let Some(parent) = parent else {
         return Ok(Err(GrantError::InvalidCredential));
@@ -116,7 +116,7 @@ async fn create_grant(
         return Ok(Err(GrantError::InvalidScope));
     }
     let parent_id: String = parent.try_get("session_id").map_err(db)?;
-    let nested: bool = sqlx::query_scalar(
+    let nested: bool = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM auth_session_delegations WHERE session_id=$1)",
     )
     .bind(&parent_id)
@@ -127,18 +127,20 @@ async fn create_grant(
         return Ok(Err(GrantError::NestedDelegation));
     }
     let subject: String = parent.try_get("subject_id").map_err(db)?;
-    sqlx::query("INSERT INTO auth_sessions(session_id,token_digest,subject_id,actor_kind,assurance,audience,claims,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
+    lenso_postgres_kit::sqlx::query("INSERT INTO auth_sessions(session_id,token_digest,subject_id,actor_kind,assurance,audience,claims,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(session_id).bind(digest).bind(&subject)
         .bind(parent.try_get::<String,_>("actor_kind").map_err(db)?)
         .bind(parent.try_get::<String,_>("assurance").map_err(db)?)
         .bind(audience).bind(parent.try_get::<serde_json::Value,_>("claims").map_err(db)?)
         .bind(expires_at).execute(&mut *tx).await.map_err(db)?;
-    sqlx::query("INSERT INTO auth_session_delegations(session_id,parent_session_id) VALUES($1,$2)")
-        .bind(session_id)
-        .bind(parent_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(db)?;
+    lenso_postgres_kit::sqlx::query(
+        "INSERT INTO auth_session_delegations(session_id,parent_session_id) VALUES($1,$2)",
+    )
+    .bind(session_id)
+    .bind(parent_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(db)?;
     tx.commit().await.map_err(db)?;
     Ok(Ok(subject))
 }
@@ -156,7 +158,7 @@ fn valid_operation_audience(value: &str) -> bool {
             })
 }
 
-fn db(_: sqlx::Error) -> RuntimeFailure {
+fn db(_: lenso_postgres_kit::sqlx::Error) -> RuntimeFailure {
     RuntimeFailure::PluginFailure {
         detail: "Account delegation storage is unavailable".into(),
     }

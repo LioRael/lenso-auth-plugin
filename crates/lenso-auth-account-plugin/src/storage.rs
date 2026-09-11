@@ -2,9 +2,9 @@ use std::collections::BTreeMap;
 
 use hmac::{Hmac, Mac};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 use serde_json::Value;
 use sha2::Sha256;
-use sqlx::Row;
 use time::OffsetDateTime;
 
 use crate::AccountError;
@@ -83,7 +83,7 @@ pub(crate) async fn ensure_identity(
         .begin()
         .await
         .map_err(db("begin identity"))?;
-    let existing = sqlx::query(ENSURE_IDENTITY_QUERY)
+    let existing = lenso_postgres_kit::sqlx::query(ENSURE_IDENTITY_QUERY)
         .bind(provider)
         .bind(external_subject)
         .fetch_optional(&mut *transaction)
@@ -100,19 +100,19 @@ pub(crate) async fn ensure_identity(
             false,
         ));
     }
-    sqlx::query("INSERT INTO identity_subjects (subject_id) VALUES ($1)")
+    lenso_postgres_kit::sqlx::query("INSERT INTO identity_subjects (subject_id) VALUES ($1)")
         .bind(new_subject)
         .execute(&mut *transaction)
         .await
         .map_err(db("create subject"))?;
-    let inserted = sqlx::query("INSERT INTO identity_bindings (provider, external_subject, subject_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING")
+    let inserted = lenso_postgres_kit::sqlx::query("INSERT INTO identity_bindings (provider, external_subject, subject_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING")
         .bind(provider).bind(external_subject).bind(new_subject).execute(&mut *transaction).await.map_err(db("create identity binding"))?;
     if inserted.rows_affected() == 0 {
         transaction
             .rollback()
             .await
             .map_err(db("rollback identity race"))?;
-        let row = sqlx::query(READ_RACED_IDENTITY_QUERY)
+        let row = lenso_postgres_kit::sqlx::query(READ_RACED_IDENTITY_QUERY)
             .bind(provider)
             .bind(external_subject)
             .fetch_one(postgres.pool())
@@ -132,7 +132,7 @@ pub(crate) async fn subject_status(
     postgres: &OwnedPostgres,
     subject: &str,
 ) -> Result<Option<String>, AccountError> {
-    sqlx::query_scalar(SUBJECT_STATUS_QUERY)
+    lenso_postgres_kit::sqlx::query_scalar(SUBJECT_STATUS_QUERY)
         .bind(subject)
         .fetch_optional(postgres.pool())
         .await
@@ -148,7 +148,7 @@ pub(crate) async fn issue_session(
         .begin()
         .await
         .map_err(db("begin session issue"))?;
-    let status: Option<String> = sqlx::query_scalar(LOCK_SUBJECT_STATUS_QUERY)
+    let status: Option<String> = lenso_postgres_kit::sqlx::query_scalar(LOCK_SUBJECT_STATUS_QUERY)
         .bind(&session.subject)
         .fetch_optional(&mut *transaction)
         .await
@@ -165,14 +165,14 @@ pub(crate) async fn issue_session(
             .map_err(db("commit rejected session issue"))?;
         return Ok(outcome);
     }
-    sqlx::query("INSERT INTO auth_sessions (session_id, token_digest, subject_id, actor_kind, assurance, audience, claims, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+    lenso_postgres_kit::sqlx::query("INSERT INTO auth_sessions (session_id, token_digest, subject_id, actor_kind, assurance, audience, claims, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(&session.session_id)
         .bind(&session.digest)
         .bind(&session.subject)
         .bind(&session.actor_kind)
         .bind(&session.assurance)
         .bind(&session.audience)
-        .bind(sqlx::types::Json(&session.claims))
+        .bind(lenso_postgres_kit::sqlx::types::Json(&session.claims))
         .bind(session.expires_at)
         .execute(&mut *transaction)
         .await
@@ -188,7 +188,7 @@ pub(crate) async fn revoke_session(
     postgres: &OwnedPostgres,
     session_id: &str,
 ) -> Result<Option<bool>, AccountError> {
-    let exists: Option<bool> = sqlx::query_scalar(
+    let exists: Option<bool> = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT revoked_at IS NOT NULL FROM auth_sessions WHERE session_id = $1",
     )
     .bind(session_id)
@@ -199,7 +199,7 @@ pub(crate) async fn revoke_session(
         return Ok(None);
     };
     if !already_revoked {
-        sqlx::query("UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE session_id = $1 AND revoked_at IS NULL")
+        lenso_postgres_kit::sqlx::query("UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE session_id = $1 AND revoked_at IS NULL")
             .bind(session_id).execute(postgres.pool()).await.map_err(db("revoke session"))?;
     }
     Ok(Some(!already_revoked))
@@ -209,7 +209,7 @@ pub(crate) async fn revoke_credential(
     postgres: &OwnedPostgres,
     digest: &[u8],
 ) -> Result<Option<bool>, AccountError> {
-    sqlx::query_scalar(
+    lenso_postgres_kit::sqlx::query_scalar(
         "WITH updated AS (UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE token_digest = $1 AND revoked_at IS NULL RETURNING 1) SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN TRUE WHEN EXISTS (SELECT 1 FROM auth_sessions WHERE token_digest = $1) THEN FALSE ELSE NULL END",
     )
     .bind(digest)
@@ -222,7 +222,7 @@ pub(crate) async fn load_session(
     postgres: &OwnedPostgres,
     digest: &[u8],
 ) -> Result<Option<StoredSession>, AccountError> {
-    let row = sqlx::query(LOAD_SESSION_QUERY)
+    let row = lenso_postgres_kit::sqlx::query(LOAD_SESSION_QUERY)
         .bind(digest)
         .fetch_optional(postgres.pool())
         .await
@@ -230,7 +230,7 @@ pub(crate) async fn load_session(
     let Some(row) = row else {
         return Ok(None);
     };
-    let claims: sqlx::types::Json<BTreeMap<String, Value>> =
+    let claims: lenso_postgres_kit::sqlx::types::Json<BTreeMap<String, Value>> =
         row.try_get("claims").map_err(db("decode claims"))?;
     Ok(Some(StoredSession {
         subject: row.try_get("subject_id").map_err(db("decode subject"))?,
@@ -251,6 +251,6 @@ pub(crate) fn token_digest(pepper: &[u8], token: &str) -> Result<Vec<u8>, Accoun
     Ok(mac.finalize().into_bytes().to_vec())
 }
 
-fn db(operation: &'static str) -> impl FnOnce(sqlx::Error) -> AccountError {
+fn db(operation: &'static str) -> impl FnOnce(lenso_postgres_kit::sqlx::Error) -> AccountError {
     move |source| AccountError::Database { operation, source }
 }

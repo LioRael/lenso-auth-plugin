@@ -505,7 +505,7 @@ enum PasswordPluginError {
     Database {
         operation: &'static str,
         #[source]
-        source: sqlx::Error,
+        source: lenso_postgres_kit::sqlx::Error,
     },
     #[error("password hashing failed")]
     Hash,
@@ -612,7 +612,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires LENSO_POSTGRES_TEST_URL"]
     async fn concurrent_invalid_logins_admit_exact_failure_limit() {
-        use sqlx::{AssertSqlSafe, Executor};
+        use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
 
         let database_url =
             std::env::var("LENSO_POSTGRES_TEST_URL").expect("LENSO_POSTGRES_TEST_URL is required");
@@ -651,7 +651,9 @@ mod tests {
         );
 
         postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(&database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -662,7 +664,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires LENSO_POSTGRES_TEST_URL"]
     async fn stale_failure_pruning_is_bounded_and_eventually_drains() {
-        use sqlx::{AssertSqlSafe, Executor};
+        use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
 
         let database_url =
             std::env::var("LENSO_POSTGRES_TEST_URL").expect("LENSO_POSTGRES_TEST_URL is required");
@@ -679,13 +681,13 @@ mod tests {
             .unwrap();
         let cutoff = OffsetDateTime::now_utc() - Duration::minutes(1);
         let stale_count = storage::STALE_FAILURE_PRUNE_BATCH + 5;
-        sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) SELECT 'stale-' || value, $1 FROM generate_series(1,$2) AS value")
+        lenso_postgres_kit::sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) SELECT 'stale-' || value, $1 FROM generate_series(1,$2) AS value")
             .bind(cutoff - Duration::minutes(1))
             .bind(stale_count)
             .execute(postgres.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) VALUES('active-a',$1),('active-b',$1)")
+        lenso_postgres_kit::sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) VALUES('active-a',$1),('active-b',$1)")
             .bind(cutoff + Duration::seconds(1))
             .execute(postgres.pool())
             .await
@@ -694,13 +696,14 @@ mod tests {
         storage::failure_limit_reached(&postgres, "probe", cutoff, 10)
             .await
             .unwrap();
-        let remaining_stale: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM password_login_failures WHERE failed_at < $1")
-                .bind(cutoff)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
-        let active: i64 = sqlx::query_scalar(
+        let remaining_stale: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM password_login_failures WHERE failed_at < $1",
+        )
+        .bind(cutoff)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
+        let active: i64 = lenso_postgres_kit::sqlx::query_scalar(
             "SELECT count(*) FROM password_login_failures WHERE failed_at >= $1",
         )
         .bind(cutoff)
@@ -716,13 +719,14 @@ mod tests {
         storage::failure_limit_reached(&postgres, "probe", cutoff, 10)
             .await
             .unwrap();
-        let remaining_stale: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM password_login_failures WHERE failed_at < $1")
-                .bind(cutoff)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
-        let active: i64 = sqlx::query_scalar(
+        let remaining_stale: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM password_login_failures WHERE failed_at < $1",
+        )
+        .bind(cutoff)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
+        let active: i64 = lenso_postgres_kit::sqlx::query_scalar(
             "SELECT count(*) FROM password_login_failures WHERE failed_at >= $1",
         )
         .bind(cutoff)
@@ -733,7 +737,9 @@ mod tests {
         assert_eq!(active, 2);
 
         postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(&database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -744,7 +750,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires LENSO_POSTGRES_TEST_URL"]
     async fn global_prune_and_keyed_record_complete_without_deadlock() {
-        use sqlx::{AssertSqlSafe, Executor};
+        use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
 
         let database_url =
             std::env::var("LENSO_POSTGRES_TEST_URL").expect("LENSO_POSTGRES_TEST_URL is required");
@@ -761,13 +767,15 @@ mod tests {
             .unwrap();
         let cutoff = OffsetDateTime::now_utc() - Duration::minutes(1);
         let identifier = "stale-target@example.test";
-        sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) VALUES($1,$2)")
-            .bind(identifier)
-            .bind(cutoff - Duration::minutes(2))
-            .execute(postgres.pool())
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) SELECT 'stale-race-' || value, $1 FROM generate_series(1,$2) AS value")
+        lenso_postgres_kit::sqlx::query(
+            "INSERT INTO password_login_failures(identifier,failed_at) VALUES($1,$2)",
+        )
+        .bind(identifier)
+        .bind(cutoff - Duration::minutes(2))
+        .execute(postgres.pool())
+        .await
+        .unwrap();
+        lenso_postgres_kit::sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) SELECT 'stale-race-' || value, $1 FROM generate_series(1,$2) AS value")
             .bind(cutoff - Duration::minutes(1))
             .bind(storage::STALE_FAILURE_PRUNE_BATCH)
             .execute(postgres.pool())
@@ -801,7 +809,9 @@ mod tests {
         );
 
         postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(&database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(&database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await

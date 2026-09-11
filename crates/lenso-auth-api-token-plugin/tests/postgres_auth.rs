@@ -32,9 +32,9 @@ use lenso_kernel::{
 use lenso_native_adapter::{
     NativePluginFactory, NativePluginFactoryContext, NativePluginInstance, NativePluginRegistry,
 };
+use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor, PgPool, postgres::PgPoolOptions};
 use lenso_runner::TokioDriver;
 use serde_json::json;
-use sqlx::{AssertSqlSafe, Executor, PgPool, postgres::PgPoolOptions};
 use time::{Duration, OffsetDateTime};
 
 const CALLER_PACKAGE_ID: &str = "test.auth-caller";
@@ -305,12 +305,13 @@ async fn preparation_requires_explicit_setup_and_never_creates_schema() {
         })
         .await;
     assert!(matches!(error, RuntimeFailure::PluginFailure { .. }));
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)")
-            .bind(&schema)
-            .fetch_one(&admin)
-            .await
-            .unwrap();
+    let exists: bool = lenso_postgres_kit::sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)",
+    )
+    .bind(&schema)
+    .fetch_one(&admin)
+    .await
+    .unwrap();
     assert!(!exists, "Plugin preparation must not run setup");
 }
 

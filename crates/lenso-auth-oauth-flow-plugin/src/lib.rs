@@ -17,11 +17,11 @@ use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 pub use operator::{OAuthFlowOperator, OAuthFlowOperatorError};
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::Row;
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use zeroize::Zeroizing;
@@ -118,7 +118,7 @@ impl OauthFlowProvider for OAuthFlowPlugin {
             let encrypted = cipher
                 .encrypt(Nonce::from_slice(&cipher_nonce), verifier.as_bytes())
                 .map_err(|_| failure("OAuth verifier encryption failed"))?;
-            sqlx::query("INSERT INTO oauth_flows(state_digest,provider,verifier_nonce,encrypted_verifier,return_to,expires_at,oidc_nonce) VALUES($1,$2,$3,$4,$5,$6,$7)").bind(digest).bind(&request.provider).bind(cipher_nonce.as_slice()).bind(encrypted).bind(&request.return_to).bind(expiry).bind(&oidc_nonce).execute(prepared.postgres.pool()).await.map_err(db)?;
+            lenso_postgres_kit::sqlx::query("INSERT INTO oauth_flows(state_digest,provider,verifier_nonce,encrypted_verifier,return_to,expires_at,oidc_nonce) VALUES($1,$2,$3,$4,$5,$6,$7)").bind(digest).bind(&request.provider).bind(cipher_nonce.as_slice()).bind(encrypted).bind(&request.return_to).bind(expiry).bind(&oidc_nonce).execute(prepared.postgres.pool()).await.map_err(db)?;
             Ok(Ok(CreateResponse {
                 state,
                 code_verifier: verifier,
@@ -141,7 +141,7 @@ impl OauthFlowProvider for OAuthFlowPlugin {
             }
             let digest = digest(&prepared.key, &request.state)?;
             let mut transaction = prepared.postgres.pool().begin().await.map_err(db)?;
-            let row=sqlx::query("SELECT provider,verifier_nonce,encrypted_verifier,oidc_nonce,return_to,expires_at,consumed_at IS NOT NULL AS consumed FROM oauth_flows WHERE state_digest=$1 FOR UPDATE").bind(&digest).fetch_optional(&mut*transaction).await.map_err(db)?;
+            let row=lenso_postgres_kit::sqlx::query("SELECT provider,verifier_nonce,encrypted_verifier,oidc_nonce,return_to,expires_at,consumed_at IS NOT NULL AS consumed FROM oauth_flows WHERE state_digest=$1 FOR UPDATE").bind(&digest).fetch_optional(&mut*transaction).await.map_err(db)?;
             let Some(row) = row else {
                 return Ok(Err(ConsumeError::InvalidState));
             };
@@ -156,7 +156,7 @@ impl OauthFlowProvider for OAuthFlowPlugin {
             if expiry <= OffsetDateTime::now_utc() {
                 return Ok(Err(ConsumeError::Expired));
             }
-            sqlx::query(
+            lenso_postgres_kit::sqlx::query(
                 "UPDATE oauth_flows SET consumed_at=transaction_timestamp() WHERE state_digest=$1",
             )
             .bind(&digest)

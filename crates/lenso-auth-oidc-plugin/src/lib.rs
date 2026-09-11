@@ -24,11 +24,11 @@ use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 pub use operator::{OidcOperator, OidcOperatorError};
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::Row;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -338,7 +338,7 @@ impl OidcProviderProvider for OidcPlugin {
             let digest = code_digest(&a.prepared.pepper, &code)?;
             let expires = OffsetDateTime::now_utc()
                 + Duration::seconds(i64::try_from(a.config.code_ttl_seconds).expect("validated"));
-            sqlx::query("INSERT INTO oidc_authorization_codes(code_digest,subject_id,client_id,redirect_uri,scope,code_challenge,nonce,expires_at)VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(digest).bind(&r.subject).bind(&r.client_id).bind(&r.redirect_uri).bind(&r.scope).bind(&r.code_challenge).bind(&r.nonce).bind(expires).execute(a.prepared.postgres.pool()).await.map_err(db)?;
+            lenso_postgres_kit::sqlx::query("INSERT INTO oidc_authorization_codes(code_digest,subject_id,client_id,redirect_uri,scope,code_challenge,nonce,expires_at)VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(digest).bind(&r.subject).bind(&r.client_id).bind(&r.redirect_uri).bind(&r.scope).bind(&r.code_challenge).bind(&r.nonce).bind(expires).execute(a.prepared.postgres.pool()).await.map_err(db)?;
             Ok(Ok(AuthorizeResponse {
                 code,
                 redirect_uri: r.redirect_uri,
@@ -365,7 +365,7 @@ impl OidcProviderProvider for OidcPlugin {
             }
             let digest = code_digest(&a.prepared.pepper, &r.code)?;
             let mut tx = a.prepared.postgres.pool().begin().await.map_err(db)?;
-            let row=sqlx::query("SELECT subject_id,client_id,redirect_uri,scope,code_challenge,nonce,expires_at,consumed_at IS NOT NULL AS consumed FROM oidc_authorization_codes WHERE code_digest=$1 FOR UPDATE").bind(&digest).fetch_optional(&mut*tx).await.map_err(db)?;
+            let row=lenso_postgres_kit::sqlx::query("SELECT subject_id,client_id,redirect_uri,scope,code_challenge,nonce,expires_at,consumed_at IS NOT NULL AS consumed FROM oidc_authorization_codes WHERE code_digest=$1 FOR UPDATE").bind(&digest).fetch_optional(&mut*tx).await.map_err(db)?;
             let Some(row) = row else {
                 return Ok(Err(ExchangeError::InvalidGrant));
             };
@@ -379,7 +379,7 @@ impl OidcProviderProvider for OidcPlugin {
             {
                 return Ok(Err(ExchangeError::InvalidGrant));
             }
-            sqlx::query("UPDATE oidc_authorization_codes SET consumed_at=transaction_timestamp() WHERE code_digest=$1").bind(&digest).execute(&mut*tx).await.map_err(db)?;
+            lenso_postgres_kit::sqlx::query("UPDATE oidc_authorization_codes SET consumed_at=transaction_timestamp() WHERE code_digest=$1").bind(&digest).execute(&mut*tx).await.map_err(db)?;
             tx.commit().await.map_err(db)?;
             let subject: String = row.try_get("subject_id").map_err(db)?;
             let scope: String = row.try_get("scope").map_err(db)?;
@@ -573,7 +573,7 @@ fn failure(d: &str) -> RuntimeFailure {
     }
 }
 #[allow(clippy::needless_pass_by_value)]
-fn db(e: sqlx::Error) -> RuntimeFailure {
+fn db(e: lenso_postgres_kit::sqlx::Error) -> RuntimeFailure {
     failure(&format!("OIDC storage operation failed: {e}"))
 }
 

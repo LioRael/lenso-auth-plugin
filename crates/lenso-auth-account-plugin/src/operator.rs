@@ -43,8 +43,8 @@ impl AccountAuthOperator {
             .begin()
             .await
             .map_err(db("begin subject disable"))?;
-        let result = sqlx::query("UPDATE identity_subjects SET status = 'disabled' WHERE subject_id = $1 AND status <> 'disabled'").bind(subject).execute(&mut *transaction).await.map_err(db("disable subject"))?;
-        sqlx::query("UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE subject_id = $1 AND revoked_at IS NULL").bind(subject).execute(&mut *transaction).await.map_err(db("revoke subject sessions"))?;
+        let result = lenso_postgres_kit::sqlx::query("UPDATE identity_subjects SET status = 'disabled' WHERE subject_id = $1 AND status <> 'disabled'").bind(subject).execute(&mut *transaction).await.map_err(db("disable subject"))?;
+        lenso_postgres_kit::sqlx::query("UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE subject_id = $1 AND revoked_at IS NULL").bind(subject).execute(&mut *transaction).await.map_err(db("revoke subject sessions"))?;
         transaction
             .commit()
             .await
@@ -63,9 +63,11 @@ pub enum AccountOperatorError {
     Database {
         operation: &'static str,
         #[source]
-        source: sqlx::Error,
+        source: lenso_postgres_kit::sqlx::Error,
     },
 }
-fn db(operation: &'static str) -> impl FnOnce(sqlx::Error) -> AccountOperatorError {
+fn db(
+    operation: &'static str,
+) -> impl FnOnce(lenso_postgres_kit::sqlx::Error) -> AccountOperatorError {
     move |source| AccountOperatorError::Database { operation, source }
 }

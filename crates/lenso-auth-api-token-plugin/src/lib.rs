@@ -302,7 +302,7 @@ enum AuthPluginError {
     Database {
         operation: &'static str,
         #[source]
-        source: sqlx::Error,
+        source: lenso_postgres_kit::sqlx::Error,
     },
 }
 

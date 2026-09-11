@@ -1,5 +1,5 @@
 use lenso_postgres_kit::OwnedPostgres;
-use sqlx::Row;
+use lenso_postgres_kit::sqlx::Row;
 use time::OffsetDateTime;
 
 use crate::PasswordPluginError;
@@ -19,7 +19,7 @@ pub(crate) async fn insert_credential(
     subject: &str,
     hash: &str,
 ) -> Result<bool, PasswordPluginError> {
-    let result = sqlx::query("INSERT INTO password_credentials (identifier, subject_id, password_hash) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
+    let result = lenso_postgres_kit::sqlx::query("INSERT INTO password_credentials (identifier, subject_id, password_hash) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
         .bind(identifier).bind(subject).bind(hash).execute(postgres.pool()).await.map_err(db("store password credential"))?;
     Ok(result.rows_affected() == 1)
 }
@@ -28,7 +28,7 @@ pub(crate) async fn load_credential(
     postgres: &OwnedPostgres,
     identifier: &str,
 ) -> Result<Option<(String, String)>, PasswordPluginError> {
-    let row = sqlx::query(
+    let row = lenso_postgres_kit::sqlx::query(
         "SELECT subject_id, password_hash FROM password_credentials WHERE identifier = $1",
     )
     .bind(identifier)
@@ -60,7 +60,7 @@ pub(crate) async fn failure_limit_reached(
         .map_err(db("begin login failure check"))?;
     lock_login_failures(&mut transaction, identifier).await?;
     prune_login_failures(&mut transaction, identifier, since).await?;
-    let count: i64 = sqlx::query_scalar(
+    let count: i64 = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT count(*) FROM password_login_failures WHERE identifier = $1 AND failed_at >= $2",
     )
     .bind(identifier)
@@ -88,7 +88,7 @@ pub(crate) async fn record_failure_if_allowed(
         .map_err(db("begin login failure record"))?;
     lock_login_failures(&mut transaction, identifier).await?;
     prune_login_failures(&mut transaction, identifier, since).await?;
-    let inserted = sqlx::query_scalar::<_, i32>(
+    let inserted = lenso_postgres_kit::sqlx::query_scalar::<_, i32>(
         "INSERT INTO password_login_failures (identifier) SELECT $1 WHERE (SELECT count(*) FROM password_login_failures WHERE identifier = $1 AND failed_at >= $2) < $3 RETURNING 1",
     )
         .bind(identifier)
@@ -118,7 +118,7 @@ pub(crate) async fn clear_failures(
         .await
         .map_err(db("begin login failure clear"))?;
     lock_login_failures(&mut transaction, identifier).await?;
-    sqlx::query("DELETE FROM password_login_failures WHERE identifier = $1")
+    lenso_postgres_kit::sqlx::query("DELETE FROM password_login_failures WHERE identifier = $1")
         .bind(identifier)
         .execute(&mut *transaction)
         .await
@@ -136,7 +136,7 @@ pub(crate) async fn current_failure_count(
     identifier: &str,
     since: OffsetDateTime,
 ) -> Result<i64, PasswordPluginError> {
-    sqlx::query_scalar(
+    lenso_postgres_kit::sqlx::query_scalar(
         "SELECT count(*) FROM password_login_failures WHERE identifier = $1 AND failed_at >= $2",
     )
     .bind(identifier)
@@ -147,11 +147,11 @@ pub(crate) async fn current_failure_count(
 }
 
 async fn lock_login_failures(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     identifier: &str,
 ) -> Result<(), PasswordPluginError> {
     let key = format!("{LOGIN_FAILURE_LOCK_PREFIX}{identifier}");
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+    lenso_postgres_kit::sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
         .bind(key)
         .execute(&mut **transaction)
         .await
@@ -160,16 +160,18 @@ async fn lock_login_failures(
 }
 
 async fn prune_login_failures(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    transaction: &mut lenso_postgres_kit::sqlx::Transaction<'_, lenso_postgres_kit::sqlx::Postgres>,
     identifier: &str,
     since: OffsetDateTime,
 ) -> Result<(), PasswordPluginError> {
-    sqlx::query("DELETE FROM password_login_failures WHERE identifier = $1 AND failed_at < $2")
-        .bind(identifier)
-        .bind(since)
-        .execute(&mut **transaction)
-        .await
-        .map_err(db("prune login failures"))?;
+    lenso_postgres_kit::sqlx::query(
+        "DELETE FROM password_login_failures WHERE identifier = $1 AND failed_at < $2",
+    )
+    .bind(identifier)
+    .bind(since)
+    .execute(&mut **transaction)
+    .await
+    .map_err(db("prune login failures"))?;
     Ok(())
 }
 
@@ -177,7 +179,7 @@ pub(crate) async fn prune_stale_login_failures(
     postgres: &OwnedPostgres,
     before: OffsetDateTime,
 ) -> Result<u64, PasswordPluginError> {
-    let result = sqlx::query(
+    let result = lenso_postgres_kit::sqlx::query(
         "WITH stale AS (SELECT ctid FROM password_login_failures WHERE failed_at < $1 ORDER BY failed_at, ctid FOR UPDATE SKIP LOCKED LIMIT $2) DELETE FROM password_login_failures AS failures USING stale WHERE failures.ctid = stale.ctid",
     )
     .bind(before)
@@ -188,6 +190,8 @@ pub(crate) async fn prune_stale_login_failures(
     Ok(result.rows_affected())
 }
 
-fn db(operation: &'static str) -> impl FnOnce(sqlx::Error) -> PasswordPluginError {
+fn db(
+    operation: &'static str,
+) -> impl FnOnce(lenso_postgres_kit::sqlx::Error) -> PasswordPluginError {
     move |source| PasswordPluginError::Database { operation, source }
 }

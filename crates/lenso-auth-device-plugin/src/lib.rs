@@ -13,10 +13,10 @@ use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 pub use operator::{DeviceAuthOperator, DeviceOperatorError};
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use zeroize::Zeroizing;
@@ -102,7 +102,7 @@ impl DeviceProvider for DeviceAuthPlugin {
             if !valid(&request.device_id) {
                 return Ok(Err(ObserveError::InvalidDevice));
             }
-            let row=sqlx::query("INSERT INTO auth_devices(subject_id,device_id,last_seen_ip,last_seen_user_agent) VALUES($1,$2,$3,$4) ON CONFLICT(subject_id,device_id) DO UPDATE SET last_seen_ip=EXCLUDED.last_seen_ip,last_seen_user_agent=EXCLUDED.last_seen_user_agent,updated_at=transaction_timestamp() RETURNING (created_at=updated_at) AS created,trusted_at IS NOT NULL AS trusted").bind(&request.subject).bind(&request.device_id).bind(&request.client_ip).bind(&request.user_agent).fetch_one(postgres.pool()).await.map_err(db)?;
+            let row=lenso_postgres_kit::sqlx::query("INSERT INTO auth_devices(subject_id,device_id,last_seen_ip,last_seen_user_agent) VALUES($1,$2,$3,$4) ON CONFLICT(subject_id,device_id) DO UPDATE SET last_seen_ip=EXCLUDED.last_seen_ip,last_seen_user_agent=EXCLUDED.last_seen_user_agent,updated_at=transaction_timestamp() RETURNING (created_at=updated_at) AS created,trusted_at IS NOT NULL AS trusted").bind(&request.subject).bind(&request.device_id).bind(&request.client_ip).bind(&request.user_agent).fetch_one(postgres.pool()).await.map_err(db)?;
             Ok(Ok(ObserveResponse {
                 device_id: request.device_id,
                 created: row.try_get("created").map_err(db)?,
@@ -121,7 +121,7 @@ impl DeviceProvider for DeviceAuthPlugin {
             if !valid(&request.subject) {
                 return Ok(Err(ListError::InvalidSubject));
             }
-            let rows=sqlx::query("SELECT device_id,trusted_at IS NOT NULL AS trusted,primary_at IS NOT NULL AS primary,last_seen_ip,last_seen_user_agent,updated_at FROM auth_devices WHERE subject_id=$1 ORDER BY updated_at DESC LIMIT 200").bind(&request.subject).fetch_all(postgres.pool()).await.map_err(db)?;
+            let rows=lenso_postgres_kit::sqlx::query("SELECT device_id,trusted_at IS NOT NULL AS trusted,primary_at IS NOT NULL AS primary,last_seen_ip,last_seen_user_agent,updated_at FROM auth_devices WHERE subject_id=$1 ORDER BY updated_at DESC LIMIT 200").bind(&request.subject).fetch_all(postgres.pool()).await.map_err(db)?;
             let devices = rows
                 .into_iter()
                 .map(|row| -> Result<_, RuntimeFailure> {
@@ -170,7 +170,7 @@ async fn set_device_trust(
     request: &SetTrustRequest,
 ) -> Result<SetTrustOutcome, RuntimeFailure> {
     let mut transaction = postgres.pool().begin().await.map_err(db)?;
-    let locked_devices: Vec<String> = sqlx::query_scalar(
+    let locked_devices: Vec<String> = lenso_postgres_kit::sqlx::query_scalar(
         "SELECT device_id FROM auth_devices WHERE subject_id=$1 ORDER BY device_id FOR UPDATE",
     )
     .bind(&request.subject)
@@ -185,7 +185,7 @@ async fn set_device_trust(
         return Ok(SetTrustOutcome::NotFound);
     }
     if request.primary {
-        sqlx::query(
+        lenso_postgres_kit::sqlx::query(
             "UPDATE auth_devices SET primary_at=NULL WHERE subject_id=$1 AND primary_at IS NOT NULL",
         )
         .bind(&request.subject)
@@ -193,7 +193,7 @@ async fn set_device_trust(
         .await
         .map_err(db)?;
     }
-    sqlx::query("UPDATE auth_devices SET trusted_at=CASE WHEN $3 THEN transaction_timestamp() ELSE NULL END,primary_at=CASE WHEN $4 THEN transaction_timestamp() ELSE NULL END,updated_at=transaction_timestamp() WHERE subject_id=$1 AND device_id=$2")
+    lenso_postgres_kit::sqlx::query("UPDATE auth_devices SET trusted_at=CASE WHEN $3 THEN transaction_timestamp() ELSE NULL END,primary_at=CASE WHEN $4 THEN transaction_timestamp() ELSE NULL END,updated_at=transaction_timestamp() WHERE subject_id=$1 AND device_id=$2")
         .bind(&request.subject)
         .bind(&request.device_id)
         .bind(request.trusted)
@@ -286,10 +286,12 @@ mod tests {
     }
 
     async fn cleanup_test_postgres(database_url: &str, schema: &str, postgres: OwnedPostgres) {
-        use sqlx::{AssertSqlSafe, Executor};
+        use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
 
         postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -303,7 +305,7 @@ mod tests {
         device_id: &str,
         primary: bool,
     ) {
-        sqlx::query("INSERT INTO auth_devices(subject_id,device_id,primary_at) VALUES($1,$2,CASE WHEN $3 THEN transaction_timestamp() ELSE NULL END)")
+        lenso_postgres_kit::sqlx::query("INSERT INTO auth_devices(subject_id,device_id,primary_at) VALUES($1,$2,CASE WHEN $3 THEN transaction_timestamp() ELSE NULL END)")
             .bind(subject)
             .bind(device_id)
             .bind(primary)
@@ -330,7 +332,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let primary: Option<String> = sqlx::query_scalar(
+        let primary: Option<String> = lenso_postgres_kit::sqlx::query_scalar(
             "SELECT device_id FROM auth_devices WHERE subject_id=$1 AND primary_at IS NOT NULL",
         )
         .bind(subject)
@@ -367,7 +369,7 @@ mod tests {
             set_device_trust(&postgres, &first),
             set_device_trust(&postgres, &second),
         );
-        let primary_count: i64 = sqlx::query_scalar(
+        let primary_count: i64 = lenso_postgres_kit::sqlx::query_scalar(
             "SELECT count(*) FROM auth_devices WHERE subject_id=$1 AND primary_at IS NOT NULL",
         )
         .bind(subject)

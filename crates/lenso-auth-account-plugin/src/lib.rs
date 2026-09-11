@@ -37,8 +37,8 @@ use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
 use lenso_postgres_kit::OwnedPostgres;
+use lenso_postgres_kit::sqlx::Row;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
 use thiserror::Error;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use zeroize::Zeroizing;
@@ -440,7 +440,7 @@ impl AccountAuthPlugin {
             {
                 return Ok(Err(ListSubjectsError::InvalidPage));
             }
-            let rows = sqlx::query("SELECT subject_id, CASE WHEN status='disabled' AND (disabled_until IS NULL OR disabled_until > transaction_timestamp()) THEN 'disabled' ELSE 'active' END AS effective_status, disabled_reason, disabled_until, created_at FROM identity_subjects WHERE ($1::text IS NULL OR subject_id > $1) ORDER BY subject_id LIMIT $2")
+            let rows = lenso_postgres_kit::sqlx::query("SELECT subject_id, CASE WHEN status='disabled' AND (disabled_until IS NULL OR disabled_until > transaction_timestamp()) THEN 'disabled' ELSE 'active' END AS effective_status, disabled_reason, disabled_until, created_at FROM identity_subjects WHERE ($1::text IS NULL OR subject_id > $1) ORDER BY subject_id LIMIT $2")
                 .bind(&request.cursor).bind(request.limit).fetch_all(prepared.postgres.pool()).await.map_err(|error| runtime(AccountError::Database { operation: "list subjects", source: error }))?;
             let mut subjects = Vec::with_capacity(rows.len());
             for row in rows {
@@ -544,8 +544,8 @@ impl AccountAuthPlugin {
                     source,
                 })
             })?;
-            let result = sqlx::query("UPDATE identity_subjects SET status=$2,disabled_reason=$3,disabled_until=$4 WHERE subject_id=$1 AND (status,disabled_reason,disabled_until) IS DISTINCT FROM ($2,$3,$4)").bind(&request.subject).bind(status).bind(reason).bind(until).execute(&mut *transaction).await.map_err(|source| runtime(AccountError::Database { operation: "set subject status", source }))?;
-            let exists: bool = sqlx::query_scalar(
+            let result = lenso_postgres_kit::sqlx::query("UPDATE identity_subjects SET status=$2,disabled_reason=$3,disabled_until=$4 WHERE subject_id=$1 AND (status,disabled_reason,disabled_until) IS DISTINCT FROM ($2,$3,$4)").bind(&request.subject).bind(status).bind(reason).bind(until).execute(&mut *transaction).await.map_err(|source| runtime(AccountError::Database { operation: "set subject status", source }))?;
+            let exists: bool = lenso_postgres_kit::sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM identity_subjects WHERE subject_id=$1)",
             )
             .bind(&request.subject)
@@ -558,7 +558,7 @@ impl AccountAuthPlugin {
                 })
             })?;
             if status == "disabled" {
-                sqlx::query("UPDATE auth_sessions SET revoked_at=transaction_timestamp() WHERE subject_id=$1 AND revoked_at IS NULL").bind(&request.subject).execute(&mut *transaction).await.map_err(|source| runtime(AccountError::Database { operation: "revoke disabled subject sessions", source }))?;
+                lenso_postgres_kit::sqlx::query("UPDATE auth_sessions SET revoked_at=transaction_timestamp() WHERE subject_id=$1 AND revoked_at IS NULL").bind(&request.subject).execute(&mut *transaction).await.map_err(|source| runtime(AccountError::Database { operation: "revoke disabled subject sessions", source }))?;
             }
             transaction.commit().await.map_err(|source| {
                 runtime(AccountError::Database {
@@ -603,7 +603,7 @@ impl AccountAuthPlugin {
             {
                 return Ok(Err(ListSessionsError::InvalidSubject));
             }
-            let rows = sqlx::query("SELECT session_id,subject_id,actor_kind,assurance,expires_at,revoked_at IS NOT NULL AS revoked,created_at FROM auth_sessions WHERE ($1::text IS NULL OR subject_id=$1) AND ($2::text IS NULL OR session_id>$2) ORDER BY session_id LIMIT $3").bind(&request.subject).bind(&request.cursor).bind(request.limit).fetch_all(prepared.postgres.pool()).await.map_err(|source| runtime(AccountError::Database { operation: "list sessions", source }))?;
+            let rows = lenso_postgres_kit::sqlx::query("SELECT session_id,subject_id,actor_kind,assurance,expires_at,revoked_at IS NOT NULL AS revoked,created_at FROM auth_sessions WHERE ($1::text IS NULL OR subject_id=$1) AND ($2::text IS NULL OR session_id>$2) ORDER BY session_id LIMIT $3").bind(&request.subject).bind(&request.cursor).bind(request.limit).fetch_all(prepared.postgres.pool()).await.map_err(|source| runtime(AccountError::Database { operation: "list sessions", source }))?;
             let mut sessions = Vec::with_capacity(rows.len());
             for row in rows {
                 let expires_at: OffsetDateTime = row.try_get("expires_at").map_err(|source| {
@@ -799,7 +799,7 @@ enum AccountError {
     Database {
         operation: &'static str,
         #[source]
-        source: sqlx::Error,
+        source: lenso_postgres_kit::sqlx::Error,
     },
     #[error("random source unavailable")]
     Random,
@@ -918,10 +918,12 @@ mod tests {
         schema: &str,
         postgres: OwnedPostgres,
     ) {
-        use sqlx::{AssertSqlSafe, Executor};
+        use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor};
 
         postgres.pool().close().await;
-        let cleanup_pool = sqlx::PgPool::connect(database_url).await.unwrap();
+        let cleanup_pool = lenso_postgres_kit::sqlx::PgPool::connect(database_url)
+            .await
+            .unwrap();
         cleanup_pool
             .execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
             .await
@@ -1026,7 +1028,7 @@ mod tests {
         storage::ensure_identity(&postgres, "test-provider", "expired-disable", subject)
             .await
             .unwrap();
-        sqlx::query("UPDATE identity_subjects SET status='disabled', disabled_until=transaction_timestamp() - interval '1 second' WHERE subject_id=$1")
+        lenso_postgres_kit::sqlx::query("UPDATE identity_subjects SET status='disabled', disabled_until=transaction_timestamp() - interval '1 second' WHERE subject_id=$1")
             .bind(subject)
             .execute(postgres.pool())
             .await
@@ -1059,12 +1061,14 @@ mod tests {
             .await
             .unwrap();
         let mut disable = postgres.pool().begin().await.unwrap();
-        sqlx::query("UPDATE identity_subjects SET status='disabled' WHERE subject_id=$1")
-            .bind(subject)
-            .execute(&mut *disable)
-            .await
-            .unwrap();
-        sqlx::query("UPDATE auth_sessions SET revoked_at=transaction_timestamp() WHERE subject_id=$1 AND revoked_at IS NULL")
+        lenso_postgres_kit::sqlx::query(
+            "UPDATE identity_subjects SET status='disabled' WHERE subject_id=$1",
+        )
+        .bind(subject)
+        .execute(&mut *disable)
+        .await
+        .unwrap();
+        lenso_postgres_kit::sqlx::query("UPDATE auth_sessions SET revoked_at=transaction_timestamp() WHERE subject_id=$1 AND revoked_at IS NULL")
             .bind(subject)
             .execute(&mut *disable)
             .await
@@ -1078,12 +1082,13 @@ mod tests {
         );
         commit.unwrap();
         assert_eq!(issue.unwrap(), storage::IssueSessionOutcome::Disabled);
-        let session_count: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM auth_sessions WHERE subject_id=$1")
-                .bind(subject)
-                .fetch_one(postgres.pool())
-                .await
-                .unwrap();
+        let session_count: i64 = lenso_postgres_kit::sqlx::query_scalar(
+            "SELECT count(*) FROM auth_sessions WHERE subject_id=$1",
+        )
+        .bind(subject)
+        .fetch_one(postgres.pool())
+        .await
+        .unwrap();
         assert_eq!(session_count, 0);
 
         cleanup_test_postgres(&database_url, &schema, postgres).await;
@@ -1097,12 +1102,14 @@ mod tests {
         storage::ensure_identity(&postgres, "test-provider", "reactivate", subject)
             .await
             .unwrap();
-        sqlx::query("UPDATE identity_subjects SET status='disabled' WHERE subject_id=$1")
-            .bind(subject)
-            .execute(postgres.pool())
-            .await
-            .unwrap();
-        sqlx::query("UPDATE identity_subjects SET status='active', disabled_reason=NULL, disabled_until=NULL WHERE subject_id=$1")
+        lenso_postgres_kit::sqlx::query(
+            "UPDATE identity_subjects SET status='disabled' WHERE subject_id=$1",
+        )
+        .bind(subject)
+        .execute(postgres.pool())
+        .await
+        .unwrap();
+        lenso_postgres_kit::sqlx::query("UPDATE identity_subjects SET status='active', disabled_reason=NULL, disabled_until=NULL WHERE subject_id=$1")
             .bind(subject)
             .execute(postgres.pool())
             .await

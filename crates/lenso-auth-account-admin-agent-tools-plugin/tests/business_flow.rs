@@ -23,9 +23,9 @@ use lenso_kernel::{
 use lenso_native_adapter::{
     NativePluginFactory, NativePluginFactoryContext, NativePluginInstance, NativePluginRegistry,
 };
+use lenso_postgres_kit::sqlx::{AssertSqlSafe, Executor, PgPool};
 use lenso_runner::TokioDriver;
 use serde_json::{Value, json};
-use sqlx::{AssertSqlSafe, Executor, PgPool};
 use std::{collections::BTreeMap, rc::Rc, time::Duration};
 const CALLER_PACKAGE_ID: &str = "test.auth-caller";
 const SECRETS_PACKAGE_ID: &str = "test.static-secrets";
