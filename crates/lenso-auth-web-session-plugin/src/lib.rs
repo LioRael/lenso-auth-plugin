@@ -1,7 +1,7 @@
 //! Browser HTTP routes for one bound federated login and App-owned opaque session.
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use lenso::Port;
+use lenso::{ManyPort, Port};
 use lenso_capability_credential_issuer as credential_issuer;
 use lenso_capability_credential_issuer::{
     CredentialIssuerRevokeCredentialInvocationError, RevokeCredentialError, RevokeCredentialRequest,
@@ -16,6 +16,7 @@ use lenso_capability_http_endpoint::{
     QueryParams, endpoint,
     response::{self, HeaderName, HeaderValue, StatusCode, header},
 };
+use lenso_capability_password_auth as password;
 use lenso_kernel::{InvocationContext, RuntimeFailure};
 use serde::{Deserialize, Serialize};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
@@ -32,6 +33,8 @@ const MAX_CALLBACK_STATE_BYTES: usize = 256;
 pub struct WebSessionConfig {
     session_cookie_name: String,
     csrf_cookie_name: String,
+    #[serde(default)]
+    origin: Option<String>,
 }
 
 impl WebSessionConfig {
@@ -43,12 +46,29 @@ impl WebSessionConfig {
         let config = Self {
             session_cookie_name: session_cookie_name.into(),
             csrf_cookie_name: csrf_cookie_name.into(),
+            origin: None,
         };
         config.validate()?;
         Ok(config)
     }
 
+    /// Sets the exact browser origin required by password login.
+    pub fn with_origin(mut self, origin: impl Into<String>) -> Result<Self, RuntimeFailure> {
+        self.origin = Some(origin.into());
+        self.validate()?;
+        Ok(self)
+    }
+
     fn validate(&self) -> Result<(), RuntimeFailure> {
+        if self
+            .origin
+            .as_ref()
+            .is_some_and(|value| !valid_origin(value))
+        {
+            return Err(invalid_plan(
+                "Auth Web Session requires an exact HTTPS or loopback origin",
+            ));
+        }
         if !host_cookie_name(&self.session_cookie_name)
             || !host_cookie_name(&self.csrf_cookie_name)
             || self.session_cookie_name == self.csrf_cookie_name
@@ -65,13 +85,105 @@ fn validate_config(config: &WebSessionConfig) -> Result<(), RuntimeFailure> {
     config.validate()
 }
 
-#[lenso::plugin(validate = validate_config)]
+#[lenso::plugin(lifecycle, validate = validate_config)]
 #[derive(Clone, Debug)]
 struct AuthWebSessionPlugin {
     #[config]
     config: WebSessionConfig,
-    federated: Port<federated::FederatedClient>,
+    federated: ManyPort<federated::FederatedClient>,
+    password: ManyPort<password::PasswordClient>,
     issuer: Port<credential_issuer::CredentialIssuerClient>,
+}
+
+impl lenso::Lifecycle for AuthWebSessionPlugin {
+    #[allow(clippy::unused_async_trait_impl)]
+    async fn activate(&self, _context: lenso::ActivateContext) -> Result<(), RuntimeFailure> {
+        let password = self.password.iter().count();
+        let federated = self.federated.iter().count();
+        if password > 1 || federated > 1 || password + federated == 0 {
+            return Err(invalid_plan(
+                "Bind one password provider, one federated provider, or both",
+            ));
+        }
+        if password == 1 && self.config.origin.is_none() {
+            return Err(invalid_plan(
+                "Password browser login requires an exact App origin",
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl AuthWebSessionPlugin {
+    fn federated_client(
+        &self,
+    ) -> Result<federated::FederatedClient, EndpointHandleInvocationError> {
+        self.federated
+            .iter()
+            .next()
+            .map(|bound| bound.client().clone())
+            .ok_or_else(|| {
+                EndpointHandleInvocationError::Domain(http_endpoint_contract::HandleError::Rejected)
+            })
+    }
+}
+
+fn password_request(
+    config: &WebSessionConfig,
+    request: HandleRequest,
+) -> Result<password::LoginRequest, Result<HandleResponse, EndpointHandleInvocationError>> {
+    let origins: Vec<_> = request
+        .headers
+        .iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("origin"))
+        .collect();
+    if !matches!((config.origin.as_deref(), origins.as_slice()), (Some(expected), [actual]) if actual.value == expected)
+    {
+        return Err(intentional_problem(
+            StatusCode::FORBIDDEN,
+            "origin_rejected",
+            "Login requires this App's exact Origin.",
+        ));
+    }
+    let types: Vec<_> = request
+        .headers
+        .iter()
+        .filter(|h| h.name.eq_ignore_ascii_case("content-type"))
+        .collect();
+    if !matches!(types.as_slice(), [value] if value.value.split(';').next().is_some_and(|value| value.trim() == "application/json"))
+    {
+        return Err(intentional_problem(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "json_required",
+            "Login requires JSON.",
+        ));
+    }
+    let bytes = request.body.into_shared();
+    if bytes.len() > 16_384 {
+        return Err(intentional_problem(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "login_too_large",
+            "Login request exceeds the size limit.",
+        ));
+    }
+    serde_json::from_slice(&bytes).map_err(|_| {
+        intentional_problem(
+            StatusCode::BAD_REQUEST,
+            "invalid_login",
+            "Invalid login request.",
+        )
+    })
+}
+
+fn valid_origin(value: &str) -> bool {
+    Url::parse(value).is_ok_and(|url| {
+        url.origin().ascii_serialization() == value
+            && url.username().is_empty()
+            && url.password().is_none()
+            && (url.scheme() == "https"
+                || url.scheme() == "http"
+                    && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]")))
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,6 +200,93 @@ struct CallbackQuery {
 
 #[endpoint]
 impl AuthWebSessionPlugin {
+    #[get("auth.web-session.methods", "/auth/methods")]
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
+    async fn methods(&self) -> Result<HandleResponse, EndpointHandleInvocationError> {
+        let mut methods = Vec::new();
+        if self.password.iter().next().is_some() {
+            methods.push(serde_json::json!({"id":"password", "kind":"password", "label":"Email and password", "action":"/auth/password/login"}));
+        }
+        if self.federated.iter().next().is_some() {
+            methods.push(serde_json::json!({"id":"sso", "kind":"redirect", "label":"Single sign-on", "action":"/auth/oidc/start"}));
+        }
+        no_store(response::json(
+            StatusCode::OK,
+            &serde_json::json!({"methods":methods,"csrf":{"cookie_name":self.config.csrf_cookie_name,"header_name":"x-csrf-token"}}),
+        )?)
+    }
+
+    #[post("auth.web-session.password", "/auth/password/login")]
+    async fn password_login(
+        &self,
+        context: InvocationContext,
+        request: HandleRequest,
+    ) -> Result<HandleResponse, EndpointHandleInvocationError> {
+        let Some(provider) = self.password.iter().next() else {
+            return intentional_problem(
+                StatusCode::NOT_FOUND,
+                "login_method_unavailable",
+                "Password login is not configured.",
+            );
+        };
+        let login = match password_request(&self.config, request) {
+            Ok(login) => login,
+            Err(response) => return response,
+        };
+        let csrf_token = random_token()?;
+        let result = match provider
+            .client()
+            .login_with_context(context.clone(), login)
+            .await
+        {
+            Ok(result) => result,
+            Err(password::PasswordLoginInvocationError::Domain(
+                password::LoginError::RateLimited,
+            )) => {
+                return intentional_problem(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "login_rate_limited",
+                    "Try again later.",
+                );
+            }
+            Err(password::PasswordLoginInvocationError::Domain(_)) => {
+                return intentional_problem(
+                    StatusCode::UNAUTHORIZED,
+                    "invalid_credentials",
+                    "Unable to sign in with these credentials.",
+                );
+            }
+            Err(password::PasswordLoginInvocationError::Runtime(error)) => {
+                return Err(EndpointHandleInvocationError::Runtime(error));
+            }
+        };
+        let Some(max_age) =
+            cookie_max_age(&result.expires_at).filter(|_| valid_cookie_value(&result.credential))
+        else {
+            self.rollback_credential(context, result.credential).await?;
+            return intentional_problem(
+                StatusCode::BAD_GATEWAY,
+                "invalid_session",
+                "The session issuer returned an invalid session.",
+            );
+        };
+        let response = no_store(response::empty(StatusCode::NO_CONTENT))?;
+        let response = append_header(
+            response,
+            &header::SET_COOKIE,
+            &session_cookie(
+                &self.config.session_cookie_name,
+                &result.credential,
+                max_age,
+            ),
+        )?;
+        append_header(
+            response,
+            &header::SET_COOKIE,
+            &csrf_cookie(&self.config.csrf_cookie_name, &csrf_token, max_age),
+        )
+    }
+
     #[get("auth.web-session.start", "/auth/oidc/start")]
     #[openapi({
         summary: "Start browser OIDC login",
@@ -113,7 +312,7 @@ impl AuthWebSessionPlugin {
             );
         }
         let started = match self
-            .federated
+            .federated_client()?
             .start_with_context(context, StartRequest { return_to })
             .await
         {
@@ -192,7 +391,7 @@ impl AuthWebSessionPlugin {
         }
         let csrf_token = random_token()?;
         let completed = match self
-            .federated
+            .federated_client()?
             .complete_with_context(context.clone(), CompleteRequest { code, state })
             .await
         {

@@ -1402,6 +1402,7 @@ dependencies = [
  "lenso-capability-credential-issuer",
  "lenso-capability-federated-auth",
  "lenso-capability-http-endpoint",
+ "lenso-capability-password-auth",
  "lenso-kernel",
  "lenso-native-adapter",
  "lenso-runner",

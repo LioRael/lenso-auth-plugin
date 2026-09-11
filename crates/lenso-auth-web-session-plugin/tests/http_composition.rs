@@ -19,6 +19,7 @@ use lenso_capability_federated_auth::{
 };
 use lenso_capability_http_endpoint as endpoint;
 use lenso_capability_http_endpoint::{HandleRequest, HandleRequestCredential, HandleResponse};
+use lenso_capability_password_auth as password;
 use lenso_kernel::{
     InvocationContext, Kernel, NativeRequestEndpoint, NativeRequestFuture, RuntimeFailure,
     ShutdownOutcome,
@@ -73,6 +74,8 @@ impl NativePluginFactory for DependenciesFactory {
         };
         Ok(NativePluginInstance::new(vec![
             Rc::new(FederatedEndpoint::new(provider.clone())) as Rc<dyn NativeRequestEndpoint>,
+            Rc::new(password::PasswordEndpoint::new(provider.clone()))
+                as Rc<dyn NativeRequestEndpoint>,
             Rc::new(CredentialIssuerEndpoint::new(provider)) as Rc<dyn NativeRequestEndpoint>,
         ]))
     }
@@ -90,6 +93,36 @@ struct FakeDependencies {
     observed: Rc<Observed>,
     callback_return_to: &'static str,
     recognize_credential: bool,
+}
+
+impl password::PasswordProvider for FakeDependencies {
+    fn login(
+        &self,
+        _: InvocationContext,
+        request: password::LoginRequest,
+    ) -> NativeRequestFuture<password::PasswordLogin> {
+        let result =
+            if request.identifier == "alice@example.test" && request.password == "test-password" {
+                Ok(password::LoginResponse {
+                    subject: "alice".into(),
+                    session_id: "session-1".into(),
+                    credential: "opaque-password-session".into(),
+                    expires_at: future_time(300),
+                })
+            } else {
+                Err(password::LoginError::InvalidCredentials)
+            };
+        Box::pin(std::future::ready(Ok(result)))
+    }
+    fn register(
+        &self,
+        _: InvocationContext,
+        _: password::RegisterRequest,
+    ) -> NativeRequestFuture<password::PasswordRegister> {
+        Box::pin(std::future::ready(Ok(Err(
+            password::RegisterError::Disabled,
+        ))))
+    }
 }
 
 impl FederatedProvider for FakeDependencies {
@@ -356,6 +389,10 @@ fn registry(
 }
 
 fn plan() -> ResolvedAppPlan {
+    method_plan(false, true)
+}
+
+fn method_plan(password_enabled: bool, sso_enabled: bool) -> ResolvedAppPlan {
     let caller = PluginInstancePlan::new("caller", CALLER_PACKAGE).with_requirement(
         CapabilityRequirementPlan::one(endpoint::CAPABILITY_ID, endpoint::DESCRIPTOR_VERSION),
     );
@@ -363,11 +400,15 @@ fn plan() -> ResolvedAppPlan {
         .with_configuration(
             serde_json::json!({
                 "session_cookie_name": SESSION_COOKIE,
-                "csrf_cookie_name": CSRF_COOKIE
+                "csrf_cookie_name": CSRF_COOKIE, "origin": "https://console.example"
             })
             .to_string(),
         )
-        .with_requirement(CapabilityRequirementPlan::one(
+        .with_requirement(CapabilityRequirementPlan::many(
+            password::CAPABILITY_ID,
+            password::DESCRIPTOR_VERSION,
+        ))
+        .with_requirement(CapabilityRequirementPlan::many(
             federated::CAPABILITY_ID,
             federated::DESCRIPTOR_VERSION,
         ))
@@ -381,6 +422,11 @@ fn plan() -> ResolvedAppPlan {
             [endpoint::DESCRIBE_OPERATION, endpoint::HANDLE_OPERATION],
         ));
     let dependencies = PluginInstancePlan::new("dependencies", DEPENDENCIES_PACKAGE)
+        .with_capability(CapabilityEndpointPlan::new(
+            password::CAPABILITY_ID,
+            password::DESCRIPTOR_VERSION,
+            [password::LOGIN_OPERATION, password::REGISTER_OPERATION],
+        ))
         .with_capability(CapabilityEndpointPlan::new(
             federated::CAPABILITY_ID,
             federated::DESCRIPTOR_VERSION,
@@ -399,6 +445,12 @@ fn plan() -> ResolvedAppPlan {
         vec![caller, web_session, dependencies],
         vec![
             CapabilityBinding::new(
+                "web-session",
+                password::CAPABILITY_ID,
+                password::DESCRIPTOR_VERSION,
+                "dependencies",
+            ),
+            CapabilityBinding::new(
                 "caller",
                 endpoint::CAPABILITY_ID,
                 endpoint::DESCRIPTOR_VERSION,
@@ -416,7 +468,13 @@ fn plan() -> ResolvedAppPlan {
                 credential::DESCRIPTOR_VERSION,
                 "dependencies",
             ),
-        ],
+        ]
+        .into_iter()
+        .filter(|binding| {
+            (password_enabled || binding.capability_id() != password::CAPABILITY_ID)
+                && (sso_enabled || binding.capability_id() != federated::CAPABILITY_ID)
+        })
+        .collect(),
     )
     .resolve()
     .unwrap()
@@ -462,4 +520,82 @@ fn future_time(seconds: i64) -> String {
     (OffsetDateTime::now_utc() + Duration::seconds(seconds))
         .format(&Rfc3339)
         .unwrap()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn browser_methods_follow_bindings_and_password_login_keeps_credentials_in_cookies() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            for (password_enabled, sso_enabled, count) in
+                [(true, false, 1), (false, true, 1), (true, true, 2)]
+            {
+                let app = Kernel::start_native(
+                    method_plan(password_enabled, sso_enabled),
+                    TokioDriver::new(),
+                    registry(Rc::new(Observed::default()), "/", true),
+                )
+                .await
+                .unwrap();
+                let methods = handle(
+                    &app,
+                    request(
+                        "auth.web-session.methods",
+                        "GET",
+                        "/auth/methods",
+                        None,
+                        None,
+                    ),
+                )
+                .await;
+                let value: serde_json::Value =
+                    serde_json::from_slice(&methods.body.into_shared()).unwrap();
+                assert_eq!(value["methods"].as_array().unwrap().len(), count);
+                assert_eq!(
+                    value["methods"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|m| m["id"] == "password"),
+                    password_enabled
+                );
+                if password_enabled {
+                    let mut login = request(
+                        "auth.web-session.password",
+                        "POST",
+                        "/auth/password/login",
+                        None,
+                        None,
+                    );
+                    login.headers = vec![endpoint::HandleRequestHeadersItem {
+                        name: "content-type".into(),
+                        value: "application/json".into(),
+                    }];
+                    login.body =
+                        br#"{"identifier":"alice@example.test","password":"test-password"}"#
+                            .to_vec()
+                            .into();
+                    assert_eq!(handle(&app, login.clone()).await.status, 403);
+                    login.headers.push(endpoint::HandleRequestHeadersItem {
+                        name: "origin".into(),
+                        value: "https://console.example".into(),
+                    });
+                    let result = handle(&app, login.clone()).await;
+                    assert_eq!(result.status, 204);
+                    assert!(result.body.clone().into_shared().is_empty());
+                    assert!(header_values(&result, "set-cookie").iter().any(|v| {
+                        v.starts_with("__Host-lenso-session=opaque-password-session;")
+                            && v.contains("HttpOnly")
+                    }));
+                    login.body = br#"{"identifier":"alice@example.test","password":"incorrect"}"#
+                        .to_vec()
+                        .into();
+                    assert_eq!(handle(&app, login).await.status, 401);
+                }
+                assert_eq!(
+                    app.shutdown(StdDuration::from_secs(1)).await,
+                    ShutdownOutcome::Clean
+                );
+            }
+        })
+        .await;
 }

@@ -1,25 +1,26 @@
-# Lenso Auth Web Session Plugin
+# Auth Web Session
 
-`lenso-auth-web-session-plugin` is the browser HTTP Adapter for one bound
-Federated Auth provider. It exposes fixed start, callback, and logout routes,
-sets the App's opaque credential as a secure host cookie, and delegates session
-revocation to the bound Credential Issuer.
+This removable HTTP adapter exposes the login methods selected by App Plugin
+bindings. Use password, federated SSO, or both. It owns no account, password,
+OAuth or session database.
 
-Routes:
+- Provides: HTTP Endpoint.
+- Requires: one Credential Issuer; zero or one Password; zero or one Federated.
+- Lifecycle: reject zero methods or ambiguous method bindings before readiness.
+- Configuration: `session_cookie_name`, `csrf_cookie_name`, and `origin` (required
+  for password login). Cookie names must use the `__Host-` prefix and match Web
+  Ingress. The browser CSRF header is `x-csrf-token`.
+- Resources: no private persistent state or listener; Lenso Web owns ingress.
+- Authorization: the selected method verifies credentials; the bound issuer
+  owns session issuance/revocation; business Plugins authorize the resulting user.
+- Removal: deleting a method removes that login choice. Deleting this adapter
+  removes browser login/session routes without deleting account-owned records.
 
-- `GET /auth/oidc/start?return_to=/local/path`
-- `GET /auth/oidc/callback?code=...&state=...`
-- `POST /auth/logout`
+`GET /auth/methods` returns configured choices. Password forms POST JSON
+`{ "identifier": "...", "password": "..." }` to `/auth/password/login` with
+this App's exact Origin. Successful login returns 204 and secure session/CSRF
+Cookies. No credential is exposed in JSON. SSO uses `/auth/oidc/start` and
+`/auth/oidc/callback`; logout uses `POST /auth/logout`.
 
-Both Cookie names must use the `__Host-` prefix. The session Cookie is always
-`Secure`, `HttpOnly`, `SameSite=Lax`, and `Path=/`. The Plugin also issues a
-`Secure`, `SameSite=Lax` CSRF Cookie that is
-intentionally readable by the browser client. Configure Web Ingress with the
-same two Cookie names and a dedicated CSRF request header. Web Ingress enforces
-double-submit CSRF before dispatching unsafe Cookie-authenticated methods and
-strips Cookie and CSRF headers before the Endpoint runs.
-
-This Plugin has no session database. Account Auth continues to own the opaque
-session credential and its revocation state. An unrecognized logout credential
-still clears the browser Cookies, but returns `401` instead of claiming that an
-unconfirmed revocation succeeded.
+The App Host must bind all methods to its common identity/session authority.
+The adapter deliberately does not enable public registration or infer providers.
