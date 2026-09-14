@@ -1,7 +1,9 @@
 //! Plugin-owned identity directory and opaque session credentials.
 
 mod delegation;
+#[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
 mod storage;
 
@@ -36,32 +38,42 @@ use lenso_capability_identity_directory::{
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
+
 use thiserror::Error;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use zeroize::Zeroizing;
 
+#[cfg(feature = "postgres")]
 use crate::schema::schema_plan;
 
+#[cfg(feature = "postgres")]
 pub use operator::{AccountAuthOperator, AccountOperatorError};
 
 const DEPENDENCY_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, lenso::PluginConfig)]
 #[serde(deny_unknown_fields)]
 pub struct AccountAuthConfig {
     schema: String,
     issuer: String,
     assertion_public_key: String,
+    #[serde(default)]
+    #[lenso(default = "")]
     database_url_secret: String,
+    #[serde(default)]
+    #[lenso(default = "")]
+    d1_binding: String,
     assertion_signing_key_secret: String,
     token_pepper_secret: String,
     assertion_ttl_seconds: u64,
     #[serde(default)]
+    #[lenso(default = [])]
     admin_callers: Vec<String>,
     #[serde(default)]
+    #[lenso(default = [])]
     delegation_callers: Vec<String>,
 }
 
@@ -81,6 +93,7 @@ impl AccountAuthConfig {
             issuer: issuer.into(),
             assertion_public_key: assertion_public_key.into(),
             database_url_secret: database_url_secret.into(),
+            d1_binding: String::new(),
             assertion_signing_key_secret: assertion_signing_key_secret.into(),
             token_pepper_secret: token_pepper_secret.into(),
             assertion_ttl_seconds,
@@ -106,7 +119,27 @@ impl AccountAuthConfig {
         Ok(self)
     }
 
+    /// Select an explicit D1 binding for the Workers implementation.
+    pub fn with_d1_binding(
+        mut self,
+        binding: impl Into<String>,
+    ) -> Result<Self, AccountConfigError> {
+        self.database_url_secret.clear();
+        self.d1_binding = binding.into();
+        self.validate()?;
+        Ok(self)
+    }
+
     fn validate(&self) -> Result<(), AccountConfigError> {
+        if self.schema.is_empty()
+            || !self
+                .schema
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        {
+            return Err(AccountConfigError::InvalidSchema);
+        }
+        #[cfg(feature = "postgres")]
         schema_plan(self.schema.clone()).map_err(|_| AccountConfigError::InvalidSchema)?;
         if !valid_name(&self.issuer) {
             return Err(AccountConfigError::InvalidIssuer);
@@ -124,7 +157,15 @@ impl AccountAuthConfig {
             &self.assertion_signing_key_secret,
             &self.token_pepper_secret,
         ];
-        for reference in references {
+        if !self.d1_binding.is_empty()
+            && (!valid_name(&self.d1_binding) || !self.database_url_secret.is_empty())
+        {
+            return Err(AccountConfigError::InvalidSecretReference);
+        }
+        for (index, reference) in references.into_iter().enumerate() {
+            if reference.is_empty() && !self.d1_binding.is_empty() && index == 0 {
+                continue;
+            }
             if !valid_secret_reference(reference) {
                 return Err(AccountConfigError::InvalidSecretReference);
             }
@@ -135,13 +176,13 @@ impl AccountAuthConfig {
         {
             return Err(AccountConfigError::DuplicateSecretReference);
         }
-        if self.admin_callers.iter().any(|value| !valid_name(value)) {
+        if self.admin_callers.iter().any(|value| !valid_caller(value)) {
             return Err(AccountConfigError::InvalidAdminCaller);
         }
         if self
             .delegation_callers
             .iter()
-            .any(|value| !valid_name(value))
+            .any(|value| !valid_caller(value))
         {
             return Err(AccountConfigError::InvalidDelegationCaller);
         }
@@ -183,7 +224,6 @@ fn validate_config(config: &AccountAuthConfig) -> Result<(), RuntimeFailure> {
 
 #[lenso::plugin(
     lifecycle,
-    configuration_schema = "configuration.schema.json",
     validate = validate_config
 )]
 #[derive(Clone)]
@@ -192,11 +232,13 @@ struct AccountAuthPlugin {
     config: AccountAuthConfig,
     secrets: Port<secrets::SecretsClient>,
     state: Rc<RefCell<Option<PreparedAccount>>>,
+    #[cfg_attr(not(feature = "workers"), allow(dead_code))]
+    d1: EventStorageBinding,
 }
 
 #[derive(Clone)]
 struct PreparedAccount {
-    postgres: OwnedPostgres,
+    store: storage::AccountStore,
     issuer: ActorAssertionIssuer,
     pepper: Zeroizing<Vec<u8>>,
     assertion_ttl: Duration,
@@ -204,7 +246,7 @@ struct PreparedAccount {
 impl fmt::Debug for PreparedAccount {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PreparedAccount")
-            .field("schema", &self.postgres.schema())
+            .field("storage", &self.store)
             .finish_non_exhaustive()
     }
 }
@@ -265,7 +307,7 @@ impl AccountAuthPlugin {
             }
             let subject = random_id("usr_").map_err(runtime)?;
             let (subject, status, created) = storage::ensure_identity(
-                &prepared.postgres,
+                &prepared.store,
                 &request.provider,
                 &request.external_subject,
                 &subject,
@@ -290,7 +332,7 @@ impl AccountAuthPlugin {
             if !valid_name(&request.subject) {
                 return Ok(Err(ReadStatusError::InvalidSubject));
             }
-            let Some(status) = storage::subject_status(&prepared.postgres, &request.subject)
+            let Some(status) = storage::subject_status(&prepared.store, &request.subject)
                 .await
                 .map_err(runtime)?
             else {
@@ -352,7 +394,7 @@ impl AccountAuthPlugin {
                 claims: request.claims,
                 expires_at,
             };
-            match storage::issue_session(&prepared.postgres, &session)
+            match storage::issue_session(&prepared.store, &session)
                 .await
                 .map_err(runtime)?
             {
@@ -381,7 +423,7 @@ impl AccountAuthPlugin {
             if !valid_name(&request.session_id) {
                 return Ok(Err(RevokeError::InvalidSession));
             }
-            match storage::revoke_session(&prepared.postgres, &request.session_id)
+            match storage::revoke_session(&prepared.store, &request.session_id)
                 .await
                 .map_err(runtime)?
             {
@@ -407,7 +449,7 @@ impl AccountAuthPlugin {
             }
             let digest =
                 storage::token_digest(&prepared.pepper, &request.credential).map_err(runtime)?;
-            match storage::revoke_credential(&prepared.postgres, &digest)
+            match storage::revoke_credential(&prepared.store, &digest)
                 .await
                 .map_err(runtime)?
             {
@@ -440,51 +482,7 @@ impl AccountAuthPlugin {
             {
                 return Ok(Err(ListSubjectsError::InvalidPage));
             }
-            let rows = sqlx::query("SELECT subject_id, CASE WHEN status='disabled' AND (disabled_until IS NULL OR disabled_until > transaction_timestamp()) THEN 'disabled' ELSE 'active' END AS effective_status, disabled_reason, disabled_until, created_at FROM identity_subjects WHERE ($1::text IS NULL OR subject_id > $1) ORDER BY subject_id LIMIT $2")
-                .bind(&request.cursor).bind(request.limit).fetch_all(prepared.postgres.pool()).await.map_err(|error| runtime(AccountError::Database { operation: "list subjects", source: error }))?;
-            let mut subjects = Vec::with_capacity(rows.len());
-            for row in rows {
-                let created_at: OffsetDateTime = row.try_get("created_at").map_err(|error| {
-                    runtime(AccountError::Database {
-                        operation: "decode subject creation",
-                        source: error,
-                    })
-                })?;
-                let disabled_until: Option<OffsetDateTime> =
-                    row.try_get("disabled_until").map_err(|error| {
-                        runtime(AccountError::Database {
-                            operation: "decode subject disable expiry",
-                            source: error,
-                        })
-                    })?;
-                let status: String = row.try_get("effective_status").map_err(|error| {
-                    runtime(AccountError::Database {
-                        operation: "decode subject status",
-                        source: error,
-                    })
-                })?;
-                subjects.push(ListSubjectsResponseSubjectsItem {
-                    subject: row.try_get("subject_id").map_err(|error| {
-                        runtime(AccountError::Database {
-                            operation: "decode subject",
-                            source: error,
-                        })
-                    })?,
-                    status: if status == "disabled" {
-                        ListSubjectsResponseSubjectsItemStatus::Disabled
-                    } else {
-                        ListSubjectsResponseSubjectsItemStatus::Active
-                    },
-                    disabled_reason: row.try_get("disabled_reason").map_err(|error| {
-                        runtime(AccountError::Database {
-                            operation: "decode subject disable reason",
-                            source: error,
-                        })
-                    })?,
-                    disabled_until: disabled_until.map(format_time).transpose()?,
-                    created_at: format_time(created_at)?,
-                });
-            }
+            let subjects = storage::list_subjects(&prepared.store, &request).await?;
             let next_cursor = (subjects.len()
                 == usize::try_from(request.limit).expect("positive limit"))
             .then(|| {
@@ -538,40 +536,18 @@ impl AccountAuthPlugin {
                     ("disabled", request.reason, disabled_until)
                 }
             };
-            let mut transaction = prepared.postgres.pool().begin().await.map_err(|source| {
-                runtime(AccountError::Database {
-                    operation: "begin subject status",
-                    source,
-                })
-            })?;
-            let result = sqlx::query("UPDATE identity_subjects SET status=$2,disabled_reason=$3,disabled_until=$4 WHERE subject_id=$1 AND (status,disabled_reason,disabled_until) IS DISTINCT FROM ($2,$3,$4)").bind(&request.subject).bind(status).bind(reason).bind(until).execute(&mut *transaction).await.map_err(|source| runtime(AccountError::Database { operation: "set subject status", source }))?;
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM identity_subjects WHERE subject_id=$1)",
+            match storage::set_subject_status(
+                &prepared.store,
+                &request.subject,
+                status,
+                reason,
+                until,
             )
-            .bind(&request.subject)
-            .fetch_one(&mut *transaction)
-            .await
-            .map_err(|source| {
-                runtime(AccountError::Database {
-                    operation: "check subject",
-                    source,
-                })
-            })?;
-            if status == "disabled" {
-                sqlx::query("UPDATE auth_sessions SET revoked_at=transaction_timestamp() WHERE subject_id=$1 AND revoked_at IS NULL").bind(&request.subject).execute(&mut *transaction).await.map_err(|source| runtime(AccountError::Database { operation: "revoke disabled subject sessions", source }))?;
+            .await?
+            {
+                None => Ok(Err(SetSubjectStatusError::NotFound)),
+                Some(changed) => Ok(Ok(SetSubjectStatusResponse { changed })),
             }
-            transaction.commit().await.map_err(|source| {
-                runtime(AccountError::Database {
-                    operation: "commit subject status",
-                    source,
-                })
-            })?;
-            if !exists {
-                return Ok(Err(SetSubjectStatusError::NotFound));
-            }
-            Ok(Ok(SetSubjectStatusResponse {
-                changed: result.rows_affected() == 1,
-            }))
         })
     }
 
@@ -603,56 +579,7 @@ impl AccountAuthPlugin {
             {
                 return Ok(Err(ListSessionsError::InvalidSubject));
             }
-            let rows = sqlx::query("SELECT session_id,subject_id,actor_kind,assurance,expires_at,revoked_at IS NOT NULL AS revoked,created_at FROM auth_sessions WHERE ($1::text IS NULL OR subject_id=$1) AND ($2::text IS NULL OR session_id>$2) ORDER BY session_id LIMIT $3").bind(&request.subject).bind(&request.cursor).bind(request.limit).fetch_all(prepared.postgres.pool()).await.map_err(|source| runtime(AccountError::Database { operation: "list sessions", source }))?;
-            let mut sessions = Vec::with_capacity(rows.len());
-            for row in rows {
-                let expires_at: OffsetDateTime = row.try_get("expires_at").map_err(|source| {
-                    runtime(AccountError::Database {
-                        operation: "decode session expiry",
-                        source,
-                    })
-                })?;
-                let created_at: OffsetDateTime = row.try_get("created_at").map_err(|source| {
-                    runtime(AccountError::Database {
-                        operation: "decode session creation",
-                        source,
-                    })
-                })?;
-                sessions.push(ListSessionsResponseSessionsItem {
-                    session_id: row.try_get("session_id").map_err(|source| {
-                        runtime(AccountError::Database {
-                            operation: "decode session id",
-                            source,
-                        })
-                    })?,
-                    subject: row.try_get("subject_id").map_err(|source| {
-                        runtime(AccountError::Database {
-                            operation: "decode session subject",
-                            source,
-                        })
-                    })?,
-                    actor_kind: row.try_get("actor_kind").map_err(|source| {
-                        runtime(AccountError::Database {
-                            operation: "decode actor kind",
-                            source,
-                        })
-                    })?,
-                    assurance: row.try_get("assurance").map_err(|source| {
-                        runtime(AccountError::Database {
-                            operation: "decode assurance",
-                            source,
-                        })
-                    })?,
-                    expires_at: format_time(expires_at)?,
-                    revoked: row.try_get("revoked").map_err(|source| {
-                        runtime(AccountError::Database {
-                            operation: "decode revocation",
-                            source,
-                        })
-                    })?,
-                    created_at: format_time(created_at)?,
-                });
-            }
+            let sessions = storage::list_sessions(&prepared.store, &request).await?;
             let next_cursor = (sessions.len()
                 == usize::try_from(request.limit).expect("positive limit"))
             .then(|| {
@@ -690,7 +617,7 @@ impl AccountAuthPlugin {
             }
             let digest =
                 storage::token_digest(&prepared.pepper, &credential.value).map_err(runtime)?;
-            let Some(session) = storage::load_session(&prepared.postgres, &digest)
+            let Some(session) = storage::load_session(&prepared.store, &digest)
                 .await
                 .map_err(runtime)?
             else {
@@ -729,13 +656,6 @@ impl Lifecycle for AccountAuthPlugin {
         let state = self.state.clone();
         let dependencies = context.dependencies().clone();
         let cancellation = context.cancellation();
-        let database_url = resolve(
-            &self.secrets,
-            &dependencies,
-            cancellation.clone(),
-            &config.database_url_secret,
-        )
-        .await?;
         let signing = resolve(
             &self.secrets,
             &dependencies,
@@ -761,18 +681,50 @@ impl Lifecycle for AccountAuthPlugin {
                 detail: "signing key does not match public key".to_owned(),
             });
         }
-        let postgres = OwnedPostgres::prepare(
-            &database_url,
-            schema_plan(config.schema).map_err(|error| RuntimeFailure::InvalidResolvedPlan {
-                detail: error.to_string(),
-            })?,
-        )
-        .await
-        .map_err(|error| RuntimeFailure::PluginFailure {
-            detail: error.to_string(),
-        })?;
+        let store = if config.d1_binding.is_empty() {
+            #[cfg(feature = "postgres")]
+            {
+                let database_url = resolve(
+                    &self.secrets,
+                    &dependencies,
+                    context.cancellation(),
+                    &config.database_url_secret,
+                )
+                .await?;
+                let postgres = OwnedPostgres::prepare(
+                    &database_url,
+                    schema_plan(config.schema).map_err(runtime)?,
+                )
+                .await
+                .map_err(runtime)?;
+                storage::AccountStore::Postgres(postgres)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                return Err(runtime("Account PostgreSQL implementation is not enabled"));
+            }
+        } else {
+            let binding_name = &config.d1_binding;
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|b| b.name() == binding_name)
+                    .ok_or_else(|| runtime("configured Account D1 binding is unavailable"))?
+                    .clone();
+                binding.run(vec![workers::statement("SELECT version FROM auth_account_schema WHERE version=1 AND fingerprint='e2ab982504b77776e928387519fb612fcd4b0213007713ad5389d79910a1db12'", vec![])]).await.map_err(|()|runtime("Account D1 schema verification failed"))?
+                    .first().filter(|r|r.results.len()==1).ok_or_else(||runtime("Account D1 schema version mismatch"))?;
+                storage::AccountStore::D1(binding)
+            }
+            #[cfg(not(feature = "workers"))]
+            {
+                let _ = binding_name;
+                return Err(runtime("Account D1 implementation is not enabled"));
+            }
+        };
         state.replace(Some(PreparedAccount {
-            postgres,
+            store,
             issuer,
             pepper: Zeroizing::new(pepper.as_bytes().to_vec()),
             assertion_ttl: Duration::seconds(
@@ -785,7 +737,7 @@ impl Lifecycle for AccountAuthPlugin {
     async fn deactivate(&self, _context: DeactivateContext) -> Result<(), RuntimeFailure> {
         let prepared = self.state.borrow_mut().take();
         if let Some(prepared) = prepared {
-            prepared.postgres.pool().close().await;
+            prepared.store.close().await;
         }
         Ok(())
     }
@@ -795,12 +747,16 @@ impl Lifecycle for AccountAuthPlugin {
 enum AccountError {
     #[error("invalid secret material")]
     InvalidSecretMaterial,
+    #[cfg(feature = "postgres")]
     #[error("PostgreSQL operation `{operation}` failed")]
     Database {
         operation: &'static str,
         #[source]
         source: sqlx::Error,
     },
+    #[cfg(feature = "workers")]
+    #[error("Auth storage operation failed")]
+    Storage,
     #[error("random source unavailable")]
     Random,
 }
@@ -827,6 +783,13 @@ fn format_time(value: OffsetDateTime) -> Result<String, RuntimeFailure> {
             detail: error.to_string(),
         })
 }
+fn valid_caller(value: &str) -> bool {
+    value.split_once('/').map_or_else(
+        || valid_name(value),
+        |(plugin, instance)| valid_name(plugin) && valid_name(instance),
+    )
+}
+
 fn valid_name(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
@@ -890,11 +853,113 @@ async fn resolve(
         })
 }
 
-#[cfg(test)]
+#[cfg(feature = "workers")]
+#[path = "../../../workers/d1.rs"]
+pub mod workers;
+
+/// Build the selected Auth implementation with a request-owned D1 binding.
+/// The caller must create a fresh registry/factory for each Workers event.
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    WorkersFactory(workers::D1Binding::new(binding_name, batch))
+}
+#[cfg(feature = "workers")]
+#[derive(Debug)]
+struct WorkersFactory(workers::D1Binding);
+#[cfg(feature = "workers")]
+impl lenso_native_adapter::NativePluginFactory for WorkersFactory {
+    fn package_id(&self) -> &'static str {
+        PACKAGE_ID
+    }
+    fn package_version(&self) -> &'static str {
+        PACKAGE_VERSION
+    }
+    fn instantiate(
+        &self,
+        context: lenso_native_adapter::NativePluginFactoryContext<'_>,
+    ) -> Result<lenso_native_adapter::NativePluginInstance, RuntimeFailure> {
+        let mut value = AccountAuthPlugin::__lenso_construct(context)?;
+        if value.config.d1_binding != self.0.name() {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail: "Auth factory requires its exact configured D1 binding".to_owned(),
+            });
+        }
+        value.d1 = Some(self.0.clone());
+        let plugin = Rc::new(value);
+        let lifecycle = __LensoLifecycleAccountAuthPlugin {
+            plugin: plugin.clone(),
+        };
+        let mut requests = Vec::new();
+        let mut streams = Vec::new();
+        let mut events = Vec::new();
+        let (r, s, e) =
+            auth::__lenso_native_endpoints_auth!(plugin.as_ref().clone(), lenso::__private);
+        requests.extend(r);
+        streams.extend(s);
+        events.extend(e);
+        let (r, s, e) = directory::__lenso_native_endpoints_directory!(
+            plugin.as_ref().clone(),
+            lenso::__private
+        );
+        requests.extend(r);
+        streams.extend(s);
+        events.extend(e);
+        let (r, s, e) = credential_issuer::__lenso_native_endpoints_credential_issuer!(
+            plugin.as_ref().clone(),
+            lenso::__private
+        );
+        requests.extend(r);
+        streams.extend(s);
+        events.extend(e);
+        let (r, s, e) = account_admin::__lenso_native_endpoints_account_admin!(
+            plugin.as_ref().clone(),
+            lenso::__private
+        );
+        requests.extend(r);
+        streams.extend(s);
+        events.extend(e);
+        let (r, s, e) = auth_delegation::__lenso_native_endpoints_delegation!(
+            plugin.as_ref().clone(),
+            lenso::__private
+        );
+        requests.extend(r);
+        streams.extend(s);
+        events.extend(e);
+        Ok(
+            lenso_native_adapter::NativePluginInstance::with_all_endpoints(
+                requests, streams, events, lifecycle,
+            ),
+        )
+    }
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
+
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
+
+    #[test]
+    fn caller_configuration_accepts_normal_plugin_root_keys_only() {
+        assert!(valid_caller("proof.caller/caller"));
+        assert!(valid_caller("legacy-caller"));
+        for invalid in [
+            "/caller",
+            "plugin/",
+            "plugin/instance/extra",
+            "plugin/../caller",
+        ] {
+            assert!(!valid_caller(invalid));
+        }
+    }
 
     pub(super) async fn test_postgres(label: &str) -> (String, String, OwnedPostgres) {
         let database_url =
@@ -979,26 +1044,33 @@ mod tests {
     async fn credential_digest_revocation_is_atomic_and_idempotent() {
         let (database_url, schema, postgres) = test_postgres("revoke").await;
         let subject = "usr_revoke_test";
-        storage::ensure_identity(&postgres, "test-provider", "external-revoke-test", subject)
-            .await
-            .unwrap();
+        storage::postgres::ensure_identity(
+            &postgres,
+            "test-provider",
+            "external-revoke-test",
+            subject,
+        )
+        .await
+        .unwrap();
         let pepper = b"test-only-pepper";
         let token = "lenso_st_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
         let digest = storage::token_digest(pepper, token).unwrap();
         let session = test_session("ses_revoke_test", &digest, subject);
         assert_eq!(
-            storage::issue_session(&postgres, &session).await.unwrap(),
+            storage::postgres::issue_session(&postgres, &session)
+                .await
+                .unwrap(),
             storage::IssueSessionOutcome::Inserted
         );
 
         assert_eq!(
-            storage::revoke_credential(&postgres, &digest)
+            storage::postgres::revoke_credential(&postgres, &digest)
                 .await
                 .unwrap(),
             Some(true)
         );
         assert_eq!(
-            storage::revoke_credential(&postgres, &digest)
+            storage::postgres::revoke_credential(&postgres, &digest)
                 .await
                 .unwrap(),
             Some(false)
@@ -1009,7 +1081,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            storage::revoke_credential(&postgres, &unknown)
+            storage::postgres::revoke_credential(&postgres, &unknown)
                 .await
                 .unwrap(),
             None
@@ -1023,7 +1095,7 @@ mod tests {
     async fn expired_temporary_disable_allows_usable_session() {
         let (database_url, schema, postgres) = test_postgres("expired_disable").await;
         let subject = "usr_expired_disable";
-        storage::ensure_identity(&postgres, "test-provider", "expired-disable", subject)
+        storage::postgres::ensure_identity(&postgres, "test-provider", "expired-disable", subject)
             .await
             .unwrap();
         sqlx::query("UPDATE identity_subjects SET status='disabled', disabled_until=transaction_timestamp() - interval '1 second' WHERE subject_id=$1")
@@ -1035,11 +1107,13 @@ mod tests {
         let session = test_session("ses_expired_disable", &digest, subject);
 
         assert_eq!(
-            storage::issue_session(&postgres, &session).await.unwrap(),
+            storage::postgres::issue_session(&postgres, &session)
+                .await
+                .unwrap(),
             storage::IssueSessionOutcome::Inserted
         );
         assert_eq!(
-            storage::load_session(&postgres, &digest)
+            storage::postgres::load_session(&postgres, &digest)
                 .await
                 .unwrap()
                 .unwrap()
@@ -1055,7 +1129,7 @@ mod tests {
     async fn disable_serializes_with_concurrent_session_issue() {
         let (database_url, schema, postgres) = test_postgres("issue_disable").await;
         let subject = "usr_issue_disable";
-        storage::ensure_identity(&postgres, "test-provider", "issue-disable", subject)
+        storage::postgres::ensure_identity(&postgres, "test-provider", "issue-disable", subject)
             .await
             .unwrap();
         let mut disable = postgres.pool().begin().await.unwrap();
@@ -1073,7 +1147,7 @@ mod tests {
         let session = test_session("ses_concurrent", &digest, subject);
 
         let (issue, commit) = tokio::join!(
-            storage::issue_session(&postgres, &session),
+            storage::postgres::issue_session(&postgres, &session),
             disable.commit()
         );
         commit.unwrap();
@@ -1094,7 +1168,7 @@ mod tests {
     async fn reactivated_subject_can_receive_new_session() {
         let (database_url, schema, postgres) = test_postgres("reactivate").await;
         let subject = "usr_reactivate";
-        storage::ensure_identity(&postgres, "test-provider", "reactivate", subject)
+        storage::postgres::ensure_identity(&postgres, "test-provider", "reactivate", subject)
             .await
             .unwrap();
         sqlx::query("UPDATE identity_subjects SET status='disabled' WHERE subject_id=$1")
@@ -1111,7 +1185,9 @@ mod tests {
         let session = test_session("ses_reactivated", &digest, subject);
 
         assert_eq!(
-            storage::issue_session(&postgres, &session).await.unwrap(),
+            storage::postgres::issue_session(&postgres, &session)
+                .await
+                .unwrap(),
             storage::IssueSessionOutcome::Inserted
         );
 

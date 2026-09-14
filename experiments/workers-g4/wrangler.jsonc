@@ -1,0 +1,15 @@
+{
+ "$schema":"node_modules/wrangler/config-schema.json",
+ "name":"lenso-workers-g4-proof",
+ "main":"worker.mjs",
+ "compatibility_date":"2026-07-08",
+ "compatibility_flags":["global_fetch_strictly_public","enable_request_signal"],
+ "workers_dev":true,
+ "preview_urls":false,
+ "limits":{"cpu_ms":1000},
+ "observability":{"enabled":false},
+ "d1_databases":[
+  {"binding":"ACCOUNT_DB","database_name":"lenso-workers-g4-account-proof","database_id":"764b88ca-e1ee-4e0d-b707-a70b8949067f","migrations_dir":"../../crates/lenso-auth-account-plugin/migrations/d1"},
+  {"binding":"OAUTH_DB","database_name":"lenso-workers-g4-oauth-proof","database_id":"c590163d-3f05-4ddc-af52-a21b13775658","migrations_dir":"../../crates/lenso-auth-oauth-flow-plugin/migrations/d1"}
+ ]
+}

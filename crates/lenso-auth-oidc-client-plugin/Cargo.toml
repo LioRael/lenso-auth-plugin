@@ -10,7 +10,11 @@ repository.workspace = true
 plugin-id = "lenso.auth.oidc-client"
 root-slot = "auth"
 
+[features]
+workers = ["time/wasm-bindgen", "dep:getrandom02"]
+
 [dependencies]
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"], optional = true }
 hmac.workspace = true
 jsonwebtoken.workspace = true
 lenso.workspace = true

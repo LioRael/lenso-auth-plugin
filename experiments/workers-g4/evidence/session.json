@@ -1,0 +1,19 @@
+{
+  "passed": 13,
+  "checks": [
+    "WebSession start reaches actual OIDC Client",
+    "controlled IdP authorization issues PKCE-bound code",
+    "actual RSA/JWKS/token verification completes session issuance",
+    "safe callback return",
+    "separate secure cookie fields",
+    "session is HttpOnly and CSRF readable",
+    "issued cookie authenticates through Account and Router",
+    "target SDK verifies signature and audience",
+    "OIDC state cannot be replayed",
+    "Ingress blocks logout without CSRF header",
+    "CSRF rejection did not revoke credential",
+    "shared WebSession logout revokes credential",
+    "revocation visible in fresh Account event"
+  ],
+  "identity_provider": "controlled qualification fixture; external provider not qualified"
+}

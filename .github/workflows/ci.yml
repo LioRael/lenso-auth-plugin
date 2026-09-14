@@ -44,6 +44,10 @@ jobs:
         run: |
           cargo check --locked -p lenso-capability-auth -p lenso-auth-sdk --target wasm32-unknown-unknown
           cargo check --locked -p lenso-capability-auth -p lenso-auth-sdk --target wasm32-wasip2
+      - name: Check Workers Auth implementations
+        run: cargo clippy --locked --target wasm32-unknown-unknown --no-default-features --features workers -p lenso-auth-account-plugin -p lenso-auth-oauth-flow-plugin -p lenso-auth-web-session-plugin -p lenso-auth-oidc-client-plugin -p lenso-auth-router-plugin -- -D warnings
+      - name: Test Auth event storage lifetime
+        run: node --test workers/d1-binding.test.mjs
       - name: Package public crates
         run: |
           # Package this same-release edge together; live publishing keeps the dependency order.

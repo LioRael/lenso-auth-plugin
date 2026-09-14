@@ -1,6 +1,9 @@
 //! Single-use OAuth state and PKCE secret custody.
+#[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
+mod storage;
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit},
@@ -16,12 +19,15 @@ use lenso_capability_oauth_flow::{
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
+#[cfg(feature = "postgres")]
 pub use operator::{OAuthFlowOperator, OAuthFlowOperatorError};
+#[cfg(feature = "postgres")]
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::Row;
+
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use zeroize::Zeroizing;
@@ -30,15 +36,34 @@ const TIMEOUT: StdDuration = StdDuration::from_secs(10);
 #[serde(deny_unknown_fields)]
 pub struct OAuthFlowConfig {
     schema: String,
+    #[serde(default)]
+    #[lenso(default = "")]
     database_url_secret: String,
+    #[serde(default)]
+    #[lenso(default = "")]
+    d1_binding: String,
     encryption_key_secret: String,
 }
 fn validate_config(config: &OAuthFlowConfig) -> Result<(), RuntimeFailure> {
+    #[cfg(feature = "postgres")]
     schema_plan(config.schema.clone()).map_err(|error| RuntimeFailure::InvalidResolvedPlan {
         detail: error.to_string(),
     })?;
+    if config.schema.is_empty()
+        || !config
+            .schema
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
+        return Err(failure("invalid OAuth schema"));
+    }
+    if !config.d1_binding.is_empty()
+        && (!valid_name(&config.d1_binding) || !config.database_url_secret.is_empty())
+    {
+        return Err(failure("invalid OAuth D1 binding"));
+    }
     if config.database_url_secret == config.encryption_key_secret
-        || config.database_url_secret.is_empty()
+        || (config.database_url_secret.is_empty() && config.d1_binding.is_empty())
         || config.encryption_key_secret.is_empty()
     {
         return Err(RuntimeFailure::InvalidResolvedPlan {
@@ -49,13 +74,13 @@ fn validate_config(config: &OAuthFlowConfig) -> Result<(), RuntimeFailure> {
 }
 #[derive(Clone)]
 struct Prepared {
-    postgres: OwnedPostgres,
+    store: storage::FlowStore,
     key: Zeroizing<Vec<u8>>,
 }
 impl fmt::Debug for Prepared {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Prepared")
-            .field("schema", &self.postgres.schema())
+            .field("storage", &self.store)
             .finish_non_exhaustive()
     }
 }
@@ -66,6 +91,8 @@ struct OAuthFlowPlugin {
     config: OAuthFlowConfig,
     secrets: Port<secrets::SecretsClient>,
     state: Rc<RefCell<Option<Prepared>>>,
+    #[cfg_attr(not(feature = "workers"), allow(dead_code))]
+    d1: EventStorageBinding,
 }
 impl fmt::Debug for OAuthFlowPlugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -118,7 +145,19 @@ impl OauthFlowProvider for OAuthFlowPlugin {
             let encrypted = cipher
                 .encrypt(Nonce::from_slice(&cipher_nonce), verifier.as_bytes())
                 .map_err(|_| failure("OAuth verifier encryption failed"))?;
-            sqlx::query("INSERT INTO oauth_flows(state_digest,provider,verifier_nonce,encrypted_verifier,return_to,expires_at,oidc_nonce) VALUES($1,$2,$3,$4,$5,$6,$7)").bind(digest).bind(&request.provider).bind(cipher_nonce.as_slice()).bind(encrypted).bind(&request.return_to).bind(expiry).bind(&oidc_nonce).execute(prepared.postgres.pool()).await.map_err(db)?;
+            storage::create(
+                &prepared.store,
+                storage::EncryptedFlow {
+                    digest,
+                    provider: request.provider,
+                    nonce: cipher_nonce.to_vec(),
+                    encrypted,
+                    return_to: request.return_to,
+                    expiry,
+                    oidc_nonce: Some(oidc_nonce.clone()),
+                },
+            )
+            .await?;
             Ok(Ok(CreateResponse {
                 state,
                 code_verifier: verifier,
@@ -140,32 +179,13 @@ impl OauthFlowProvider for OAuthFlowPlugin {
                 return Ok(Err(ConsumeError::InvalidState));
             }
             let digest = digest(&prepared.key, &request.state)?;
-            let mut transaction = prepared.postgres.pool().begin().await.map_err(db)?;
-            let row=sqlx::query("SELECT provider,verifier_nonce,encrypted_verifier,oidc_nonce,return_to,expires_at,consumed_at IS NOT NULL AS consumed FROM oauth_flows WHERE state_digest=$1 FOR UPDATE").bind(&digest).fetch_optional(&mut*transaction).await.map_err(db)?;
-            let Some(row) = row else {
-                return Ok(Err(ConsumeError::InvalidState));
+            let row = match storage::consume(&prepared.store, &digest, &request.provider).await? {
+                Ok(row) => row,
+                Err(error) => return Ok(Err(error)),
             };
-            let provider: String = row.try_get("provider").map_err(db)?;
-            if provider != request.provider {
-                return Ok(Err(ConsumeError::ProviderMismatch));
-            }
-            if row.try_get::<bool, _>("consumed").map_err(db)? {
-                return Ok(Err(ConsumeError::AlreadyConsumed));
-            }
-            let expiry: OffsetDateTime = row.try_get("expires_at").map_err(db)?;
-            if expiry <= OffsetDateTime::now_utc() {
-                return Ok(Err(ConsumeError::Expired));
-            }
-            sqlx::query(
-                "UPDATE oauth_flows SET consumed_at=transaction_timestamp() WHERE state_digest=$1",
-            )
-            .bind(&digest)
-            .execute(&mut *transaction)
-            .await
-            .map_err(db)?;
-            transaction.commit().await.map_err(db)?;
-            let nonce: Vec<u8> = row.try_get("verifier_nonce").map_err(db)?;
-            let encrypted: Vec<u8> = row.try_get("encrypted_verifier").map_err(db)?;
+            let nonce = row.nonce;
+            let encrypted = row.encrypted;
+            let expiry = row.expiry;
             if nonce.len() != 12 {
                 return Err(failure("invalid stored OAuth nonce"));
             }
@@ -178,11 +198,8 @@ impl OauthFlowProvider for OAuthFlowPlugin {
                 .map_err(|_| failure("invalid stored OAuth verifier"))?;
             Ok(Ok(ConsumeResponse {
                 code_verifier: verifier,
-                nonce: row
-                    .try_get::<Option<String>, _>("oidc_nonce")
-                    .map_err(db)?
-                    .map(Some),
-                return_to: row.try_get("return_to").map_err(db)?,
+                nonce: row.oidc_nonce.map(Some),
+                return_to: row.return_to,
                 expires_at: expiry
                     .format(&Rfc3339)
                     .map_err(|error| failure(&error.to_string()))?,
@@ -196,13 +213,6 @@ impl Lifecycle for OAuthFlowPlugin {
         let dependencies = context.dependencies().clone();
         let cancellation = context.cancellation();
         let state = self.state.clone();
-        let db = resolve(
-            &self.secrets,
-            &dependencies,
-            cancellation.clone(),
-            &config.database_url_secret,
-        )
-        .await?;
         let key = resolve(
             &self.secrets,
             &dependencies,
@@ -215,16 +225,46 @@ impl Lifecycle for OAuthFlowPlugin {
                 "OAuth encryption key must contain exactly 32 bytes",
             ));
         }
-        let postgres = OwnedPostgres::prepare(
-            &db,
-            schema_plan(config.schema).map_err(|error| RuntimeFailure::InvalidResolvedPlan {
-                detail: error.to_string(),
-            })?,
-        )
-        .await
-        .map_err(|error| failure(&error.to_string()))?;
+        let store = if config.d1_binding.is_empty() {
+            #[cfg(feature = "postgres")]
+            {
+                let db = resolve(
+                    &self.secrets,
+                    &dependencies,
+                    context.cancellation(),
+                    &config.database_url_secret,
+                )
+                .await?;
+                let pg = OwnedPostgres::prepare(&db, schema_plan(config.schema).map_err(db_error)?)
+                    .await
+                    .map_err(db_error)?;
+                storage::FlowStore::Postgres(pg)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                return Err(failure("OAuth PostgreSQL implementation not enabled"));
+            }
+        } else {
+            let name = &config.d1_binding;
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|b| b.name() == name)
+                    .ok_or_else(|| failure("configured OAuth D1 binding unavailable"))?
+                    .clone();
+                binding.run(vec![workers::statement("SELECT version FROM auth_oauth_schema WHERE version=1 AND fingerprint='6c15b7330f8d7614265c3acc63d9eb58f21b74beb03a7a355a4c0fcb45fae2ba'",vec![])]).await.map_err(|()|failure("OAuth D1 schema verification failed"))?.first().filter(|r|r.results.len()==1).ok_or_else(||failure("OAuth D1 schema version mismatch"))?;
+                storage::FlowStore::D1(binding)
+            }
+            #[cfg(not(feature = "workers"))]
+            {
+                let _ = name;
+                return Err(failure("OAuth D1 implementation not enabled"));
+            }
+        };
         state.replace(Some(Prepared {
-            postgres,
+            store,
             key: Zeroizing::new(key.as_bytes().to_vec()),
         }));
         Ok(())
@@ -233,7 +273,7 @@ impl Lifecycle for OAuthFlowPlugin {
     async fn deactivate(&self, _: DeactivateContext) -> Result<(), RuntimeFailure> {
         let prepared = self.state.borrow_mut().take();
         if let Some(prepared) = prepared {
-            prepared.postgres.pool().close().await;
+            prepared.store.close().await;
         }
         Ok(())
     }
@@ -289,9 +329,72 @@ fn failure(detail: &str) -> RuntimeFailure {
         detail: detail.to_owned(),
     }
 }
-fn db(error: impl fmt::Display) -> RuntimeFailure {
+#[cfg(feature = "postgres")]
+fn db_error(error: impl fmt::Display) -> RuntimeFailure {
     failure(&format!("OAuth Flow storage operation failed: {error}"))
 }
+
+#[cfg(feature = "workers")]
+#[path = "../../../workers/d1.rs"]
+pub mod workers;
+
+/// Build the selected Auth implementation with a request-owned D1 binding.
+/// The caller must create a fresh registry/factory for each Workers event.
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    WorkersFactory(workers::D1Binding::new(binding_name, batch))
+}
+#[cfg(feature = "workers")]
+#[derive(Debug)]
+struct WorkersFactory(workers::D1Binding);
+#[cfg(feature = "workers")]
+impl lenso_native_adapter::NativePluginFactory for WorkersFactory {
+    fn package_id(&self) -> &'static str {
+        PACKAGE_ID
+    }
+    fn package_version(&self) -> &'static str {
+        PACKAGE_VERSION
+    }
+    fn instantiate(
+        &self,
+        context: lenso_native_adapter::NativePluginFactoryContext<'_>,
+    ) -> Result<lenso_native_adapter::NativePluginInstance, RuntimeFailure> {
+        let mut value = OAuthFlowPlugin::__lenso_construct(context)?;
+        if value.config.d1_binding != self.0.name() {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail: "Auth factory requires its exact configured D1 binding".to_owned(),
+            });
+        }
+        value.d1 = Some(self.0.clone());
+        let plugin = Rc::new(value);
+        let lifecycle = __LensoLifecycleOAuthFlowPlugin {
+            plugin: plugin.clone(),
+        };
+        let mut requests = Vec::new();
+        let mut streams = Vec::new();
+        let mut events = Vec::new();
+        let (r, s, e) = oauth_flow::__lenso_native_endpoints_oauth_flow!(
+            plugin.as_ref().clone(),
+            lenso::__private
+        );
+        requests.extend(r);
+        streams.extend(s);
+        events.extend(e);
+        Ok(
+            lenso_native_adapter::NativePluginInstance::with_all_endpoints(
+                requests, streams, events, lifecycle,
+            ),
+        )
+    }
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
 
 #[cfg(test)]
 mod tests {

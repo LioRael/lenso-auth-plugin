@@ -17,27 +17,62 @@
     "session_ttl_seconds"
   ],
   "properties": {
-    "provider": { "type": "string", "minLength": 1, "maxLength": 128 },
-    "issuer": { "type": "string", "format": "uri" },
-    "authorization_endpoint": { "type": "string", "format": "uri" },
-    "token_endpoint": { "type": "string", "format": "uri" },
-    "jwks_uri": { "type": "string", "format": "uri" },
-    "client_id": { "type": "string", "minLength": 1 },
-    "client_secret_ref": { "type": "string", "minLength": 1 },
-    "redirect_uri": { "type": "string", "format": "uri" },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "issuer": {
+      "type": "string"
+    },
+    "authorization_endpoint": {
+      "type": "string"
+    },
+    "token_endpoint": {
+      "type": "string"
+    },
+    "jwks_uri": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "client_secret_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "redirect_uri": {
+      "type": "string"
+    },
     "scopes": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1 }
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "audience": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string", "minLength": 1, "maxLength": 256 }
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
     },
-    "flow_ttl_seconds": { "type": "integer", "minimum": 30, "maximum": 900 },
-    "session_ttl_seconds": { "type": "integer", "minimum": 1, "maximum": 2592000 }
+    "flow_ttl_seconds": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 900
+    },
+    "session_ttl_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2592000
+    }
   }
 }

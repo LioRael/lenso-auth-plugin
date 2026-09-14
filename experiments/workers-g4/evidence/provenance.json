@@ -1,0 +1,40 @@
+{
+  "worker": "lenso-workers-g4-proof",
+  "url": "https://lenso-workers-g4-proof.lenso.workers.dev",
+  "version": "e840b9ae-2f7a-4c5e-9ca6-d2d3ef3c289d",
+  "artifact_sha256": {
+    "pkg/lenso_workers_g4_host_bg.wasm": "916c1986d2af00b076bee7c8b7a475490bc6990ab0272fa320e9740ee31439ce",
+    "pkg/lenso_workers_g4_host.js": "cc5bc154c8cd2788be4a4c7cb1da03e0c1eed1db8aef823b6d788cedc425b979",
+    "worker.mjs": "84805ce2dc99d1d00c8cffcc35ff364c9586c87d76c684c817b570bee0ace394",
+    "idp-fixture.mjs": "b8bf17df852bdc63035cdca5f845011cf50889e481059183a71482d0e6648756",
+    "Cargo.lock": "d2c62f1fcfe21652c9da6b7ee81845383a317dee439c94452c1f6d1f26627564",
+    "host/src/lib.rs": "01ae23e53e0793f98246db461c58d3a743afb8755054856fc9808896d0656183",
+    "host/src/http_host.rs": "c42531c53cf76962ae929427dbe14b63e2925415145843b8a097cb367c27fbff",
+    "host/src/catalog_plan.rs": "ed5e228ce3a4c2745cd6ea76c198bca4b2d154b4e41762eff37a0dcab4481619"
+  },
+  "native_workspace_tests": {
+    "passed": 77,
+    "failed": 0,
+    "ignored": 0
+  },
+  "remote_tests": {
+    "storage.json": 30,
+    "session.json": 13,
+    "failure.json": 11
+  },
+  "shared_runtime_sha256": {
+    "runner.mjs": "d0385b34167db30dc5aa59b0d59be1fe45b71670e2f6be5a19136add2b41d950",
+    "http.mjs": "eca681d7d9a8391bc07bd840f0dcdfab094151d7b4953f9be4e72cd6da1c7797"
+  },
+  "private_storage_sha256": {
+    "d1.rs": "10aea9f352ce8fb76c808c29d6609c33f74c01718bff594bcd1c30c36db841f7",
+    "d1-binding.mjs": "e92a82ec502bb8b1f97465210e40df20a85577de9f1adec34d07e6548f065c30"
+  },
+  "verified_at_utc": "2026-09-14T16:19:54.440263+00:00",
+  "auth_baseline": "b68d87654e18910e8d14649e48e3166636fa99a1",
+  "secret_scans": {
+    "repository_candidate_files": 312,
+    "generated_bundle_files": 2,
+    "leaks": 0
+  }
+}
