@@ -129,3 +129,32 @@ Formatting, four Node storage/freshness tests and the repository ownership tests
 also pass. This source inclusion correction does not change storage/business
 policy. No new deployment was performed; the recorded remote version and Wasm
 hash above continue to identify the original G4 qualification artifact.
+
+### Egress lifetime correction and requalification
+
+Independent review found that the initial JS Host fenced D1 completions but passed
+Web's Fetch Promise directly to Rust. An abandoned Wasm generation could receive
+a late egress callback. The Host now owns a separate egress forwarding Promise,
+synchronously clears resolve/reject references before reset, aborts native Fetch
+from the event's own finalizer and bounds settlement of Fetch, body reads, reader
+cancellation and Web operation promises. Cleanup also rejects a cancellation
+started after its initial pending-work snapshot. Shared Rust policy is unchanged.
+
+Four focused Node tests use the actual Web transport and shared generation runner:
+pending Fetch plus peer trap, late rejection, pending body read/cancellation, and
+normal success. Replacing the corrected cleanup condition with its old snapshot
+logic makes the cancellation-race regression fail. All eight egress/storage Node
+tests pass.
+
+The JS correction was deployed to the existing isolated Worker as version
+`97296988-1c51-4c72-91d3-c56385ab76ca`. The Wasm artifact remains unchanged. Five new
+real probes in `egress.json` exercise a valid controlled OIDC callback, pending
+actual token Fetch, forced generation abandonment, owner signal abort and healthy
+fresh Account/Router composition after the delayed IdP response. Local regression
+proves callbacks stay fenced even when native Fetch ignores abort; the real probe
+confirms actual Workers Fetch cancellation and post-abandonment recovery.
+
+All original 54 remote assertions were rerun successfully on this corrected JS
+deployment (30 storage, 13 session, 11 failure), for 59 total including the new
+egress probes. The latest provenance retains the original deployment record and
+identifies the unchanged Wasm, changed JS hashes and the new version separately.

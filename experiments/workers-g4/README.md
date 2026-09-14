@@ -27,7 +27,9 @@ node_modules/.bin/wrangler d1 migrations apply ACCOUNT_DB --remote
 node_modules/.bin/wrangler d1 migrations apply OAUTH_DB --remote
 node prepare-secrets.mjs /private/path/g4-secrets.json
 node_modules/.bin/wrangler secret bulk /private/path/g4-secrets.json
+node --test egress-scope.test.mjs
 node_modules/.bin/wrangler deploy
+G4_SECRETS=/private/path/g4-secrets.json python3 qualify-egress.py
 G4_SECRETS=/private/path/g4-secrets.json python3 qualify.py
 G4_SECRETS=/private/path/g4-secrets.json python3 qualify-session.py
 G4_SECRETS=/private/path/g4-secrets.json python3 qualify-failure.py
@@ -45,7 +47,7 @@ Python qualification retries only TLS handshake setup, before HTTP application
 bytes are sent. It never retries requests or ambiguous writes. Evidence contains
 check names and booleans, not credentials, PKCE values, assertion proofs or keys.
 The fixture has explicit private injection switches for missing-table failure,
-delayed consume and generation abandonment; they are not shipped Auth operations.
+delayed consume, pending-egress abandonment and generation abandonment; they are not shipped Auth operations.
 
 ## Event storage lifetime
 
@@ -56,6 +58,15 @@ replica read. Invalidation disconnects promise forwarding before Wasm reset with
 calling Rust or native I/O. Unabortable native work may still commit; cleanup returns
 false after 250 ms, yielding `storage_cleanup_unconfirmed`. Never replay issuance
 after uncertainty. Native completion and application cancellation are distinct.
+
+Egress also belongs to this event boundary. `createEgressScope` wraps Web's actual
+transport with a separate Rust-facing Promise, clears both callback references
+before reset, and aborts Fetch only from the owning finalizer. It tracks raw Fetch,
+body reads, reader cancellation and the Web operation. Cleanup checks that no new
+pending cancellation remains after its snapshot settles; otherwise it fails closed
+under the same 250 ms bound. `invalidate` itself never invokes native I/O or Rust.
+The wrapper projects the response fields consumed by the pinned Web adapter; HTTP
+validation and response policy remain in Web's shared implementation.
 
 Secrets and test-generated credentials must remain outside the repository. Delete
 the private local secrets file and task-owned remote resources after cohort

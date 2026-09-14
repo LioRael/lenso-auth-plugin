@@ -16,6 +16,7 @@ export async function fixture(request,env){
   return new Response(null,{status:302,headers:{...headers,location:callback.href}});
  }
  if(url.pathname==='/fixture/token'&&request.method==='POST'){
+  if(request.headers.get('x-proof-delay')===env.PROOF_KEY)await new Promise(resolve=>setTimeout(resolve,750));
   const q=new URLSearchParams(await request.text());if(q.get('client_secret')!==env.OIDC_SECRET||q.get('client_id')!=='g4-proof')return new Response('Invalid client',{status:401});
   try{
    const [payload,signature]=q.get('code').split('.');if(!await crypto.subtle.verify('HMAC',await hmac(env.OIDC_SECRET),unb64(signature),enc.encode(payload)))throw Error();
