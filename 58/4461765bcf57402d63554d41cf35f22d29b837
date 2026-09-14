@@ -1,0 +1,115 @@
+.github/workflows/ci.yml
+  s_3724267b9ee00e::t_75181197ef1159 47-50
+Cargo.lock
+  s_3724267b9ee00e::t_c4b3b6dd6f58af 730,733,743,747,1102,1105,1124-1125,1250,1253,1267-1268,1276,2960,3237-3246
+crates/lenso-auth-account-plugin/Cargo.toml
+  s_3724267b9ee00e::t_23b2df98b8e3a6 14-18,20-23,38,42
+crates/lenso-auth-account-plugin/migrations/d1/001_account.sql
+  s_3724267b9ee00e::t_4432c0d8174de1 1-33
+crates/lenso-auth-account-plugin/src/delegation.rs
+  s_3724267b9ee00e::t_90291f27499679 3-5,60-61,97,119,125-127,131,144,157,170,178,190,194,201
+crates/lenso-auth-account-plugin/src/lib.rs
+  s_3724267b9ee00e::t_dd9a2287ba559e 4,6,41,44,49,52,57,63-64,66-68,73,76,96,122-132,134-142,160-168,179,185,235-236,241,249,310,335,397,426,452,485,539-544,546-549,582,620,684-725,727,740,750,757-759,786-792,856-944,950-963,1047-1054,1060-1062,1067,1073,1084,1098,1110-1112,1116,1132,1150,1171,1188-1190
+crates/lenso-auth-account-plugin/src/storage.rs
+  s_3724267b9ee00e::t_5e8daa5e5e6bd8 1,5,8-11,43-68,70,75-83,88,91-96,100,103-107,112,115-119,124,127-132,136,139-144,147-187,190-252
+crates/lenso-auth-account-plugin/src/storage/d1.rs
+  s_3724267b9ee00e::t_72fea05c3c93e5 1-235
+crates/lenso-auth-account-plugin/src/storage/postgres.rs
+  s_3724267b9ee00e::t_3169b21ee46041 1-425
+crates/lenso-auth-oauth-flow-plugin/Cargo.toml
+  s_3724267b9ee00e::t_07dba9d0e3c543 12-16,18-21,31,35
+crates/lenso-auth-oauth-flow-plugin/migrations/d1/001_oauth_flows.sql
+  s_3724267b9ee00e::t_5fb15c5f7574ad 1-13
+crates/lenso-auth-oauth-flow-plugin/src/lib.rs
+  s_3724267b9ee00e::t_e4eef00123fdf8 2,4,6,22,24,26,30,39-40,42-44,48,52-64,66,77,83,94-95,148-160,182-184,186-188,201-202,228-265,267,276,332-333,337-398
+crates/lenso-auth-oauth-flow-plugin/src/storage.rs
+  s_3724267b9ee00e::t_d8794c5481889b 1-179
+crates/lenso-auth-oidc-client-plugin/Cargo.toml
+  s_3724267b9ee00e::t_a11f6647b82dd8 13-15,17
+crates/lenso-auth-oidc-client-plugin/configuration.schema.json
+  s_3724267b9ee00e::t_59b350d34235ad 20-47,52-55,61-70,72-76
+crates/lenso-auth-router-plugin/src/lib.rs
+  s_3724267b9ee00e::t_b1e073f19ddc22 29,136-159
+crates/lenso-auth-web-session-plugin/Cargo.toml
+  s_3724267b9ee00e::t_cfb580d107afc6 14-16
+docs/adr/0007-private-workers-auth-storage.md
+  s_3724267b9ee00e::t_7c2250b959def0 1-93
+experiments/workers-g4/.gitignore
+  s_3724267b9ee00e::t_70519be10700ac 1-5
+experiments/workers-g4/Cargo.lock
+  s_3724267b9ee00e::t_2b61b21f4ef1ca 1-2382
+experiments/workers-g4/Cargo.toml
+  s_3724267b9ee00e::t_bd8fea87cbb43f 1-18
+experiments/workers-g4/README.md
+  s_3724267b9ee00e::t_e05f820459fb79 1-68
+experiments/workers-g4/build.sh
+  s_3724267b9ee00e::t_ed54555e12ec57 1-35
+experiments/workers-g4/cancellation.mjs
+  s_3724267b9ee00e::t_1276996b3d12fb 1
+experiments/workers-g4/clock.mjs
+  s_3724267b9ee00e::t_dfeffcfbb7a0ed 1
+experiments/workers-g4/evidence/failure.json
+  s_3724267b9ee00e::t_70720cdf4c9938 1-16
+experiments/workers-g4/evidence/provenance.json
+  s_3724267b9ee00e::t_b22f6d2abe1338 1-40
+experiments/workers-g4/evidence/qualification.md
+  s_3724267b9ee00e::t_4c859b77443887 1-109
+experiments/workers-g4/evidence/session.json
+  s_3724267b9ee00e::t_fdf8a7d7fa5e1c 1-19
+experiments/workers-g4/evidence/storage.json
+  s_3724267b9ee00e::t_72216f5c900bc0 1-35
+experiments/workers-g4/host/Cargo.toml
+  s_3724267b9ee00e::t_8029fb332e5d49 1-39
+experiments/workers-g4/host/src/catalog_plan.rs
+  s_3724267b9ee00e::t_50500100f25844 1-109
+experiments/workers-g4/host/src/http_host.rs
+  s_3724267b9ee00e::t_64147335aed74b 1-173
+experiments/workers-g4/host/src/lib.rs
+  s_3724267b9ee00e::t_1c000598c5a886 1-351
+experiments/workers-g4/idp-fixture.mjs
+  s_3724267b9ee00e::t_7b0fdbbac7c64a 1-29
+experiments/workers-g4/package.json
+  s_3724267b9ee00e::t_960a3fe12a52d2 1
+experiments/workers-g4/pnpm-lock.yaml
+  s_3724267b9ee00e::t_f469116b0e609c 1-869
+experiments/workers-g4/pnpm-workspace.yaml
+  s_3724267b9ee00e::t_82767595d04f34 1-4
+experiments/workers-g4/prepare-secrets.mjs
+  s_3724267b9ee00e::t_de94a5be25fdb5 1-14
+experiments/workers-g4/qualification.py
+  s_3724267b9ee00e::t_d63115d19013e0 1-25
+experiments/workers-g4/qualify-failure.py
+  s_3724267b9ee00e::t_b1f4b4fce99182 1-37
+experiments/workers-g4/qualify-session.py
+  s_3724267b9ee00e::t_431f5ee69e0014 1-36
+experiments/workers-g4/qualify.py
+  s_3724267b9ee00e::t_1341309bb77131 1-62
+experiments/workers-g4/transport.py
+  s_3724267b9ee00e::t_796ff33710b8e5 1-20
+experiments/workers-g4/worker.mjs
+  s_3724267b9ee00e::t_7b029f2dff35d6 1-33
+experiments/workers-g4/wrangler.jsonc
+  s_3724267b9ee00e::t_68ad1e1fc30ff7 1-15
+workers/d1-binding.mjs
+  s_3724267b9ee00e::t_8201e6cd3b18af 1-63
+workers/d1-binding.test.mjs
+  s_3724267b9ee00e::t_322ca31e1c8012 1-21
+workers/d1.rs
+  s_3724267b9ee00e::t_71efd1f3b18e3c 1-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "584461765bcf57402d63554d41cf35f22d29b837",
+  "prompts": {},
+  "sessions": {
+    "s_3724267b9ee00e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09863-bdc5-7501-9f17-8276e89fcd6d",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
