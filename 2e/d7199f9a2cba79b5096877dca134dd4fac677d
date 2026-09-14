@@ -1,0 +1,35 @@
+.github/workflows/ci.yml
+  s_3724267b9ee00e::t_cb733f8dd439ee 51-52
+crates/lenso-auth-account-plugin/Cargo.toml
+  s_3724267b9ee00e::t_784ccf21a26488 30-31
+crates/lenso-auth-account-plugin/src/workers.rs
+  s_3724267b9ee00e::t_c8bb659eca204a 1-91
+crates/lenso-auth-oauth-flow-plugin/Cargo.toml
+  s_3724267b9ee00e::t_9a4ded1b2eb6cb 27
+crates/lenso-auth-oauth-flow-plugin/src/workers.rs
+  s_3724267b9ee00e::t_d116a2a4f8483e 1-91
+docs/adr/0007-private-workers-auth-storage.md
+  s_3724267b9ee00e::t_e6065976562338 94-111
+experiments/workers-g4/evidence/qualification.md
+  s_3724267b9ee00e::t_bcb3a14317b90b 110-131
+workers/check-packages.py
+  s_3724267b9ee00e::t_1f3788257bf3fd 1-75
+workers/d1-binding.test.mjs
+  s_3724267b9ee00e::t_0afd36515a4373 2,23-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2ed7199f9a2cba79b5096877dca134dd4fac677d",
+  "prompts": {},
+  "sessions": {
+    "s_3724267b9ee00e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09863-bdc5-7501-9f17-8276e89fcd6d",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
