@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import {createD1StorageScope} from './d1-binding.mjs';
 test('event closure blocks new I/O and waits for admitted native work',async()=>{
@@ -18,4 +19,12 @@ test('uncertain native work is bounded and late completion never calls abandoned
  scope.invalidate();assert.equal(await scope.settled(),false);
  resolve([{success:true}]);await Promise.resolve();await Promise.resolve();
  assert.equal(forwarded,false);assert.equal(await scope.settled(),true);
+});
+
+test('package-owned Rust bridges match the private canonical source',()=>{
+ const source=readFileSync(new URL('./d1.rs',import.meta.url),'utf8');
+ for(const owner of ['account','oauth-flow']){
+  const copy=readFileSync(new URL(`../crates/lenso-auth-${owner}-plugin/src/workers.rs`,import.meta.url),'utf8');
+  assert.equal(copy,source,`${owner} workers.rs must match workers/d1.rs`);
+ }
 });

@@ -107,3 +107,25 @@ the task-owned databases. Final evidence contains no credential or key values.
 The coordinator retains the dedicated resources and private secret-file custody
 for cohort rollout/rollback checks. Delete these resources and the private file
 when that qualification ends. They are not a production installation.
+
+### Package self-containment follow-up
+
+The initial qualification used workspace source paths. Delivery review found that
+Account and OAuth Flow imported `workers/d1.rs` from outside their package roots.
+Each owner now includes a byte-identical `src/workers.rs`; the Node freshness test
+locks both copies to the private canonical transport source.
+
+`CARGO='/Users/leosouthey/Projects/framework/.lenso-tools/bin/lenso-cargo +1.94.0'
+python3 workers/check-packages.py` passed for both owners. It packages and extracts
+real Cargo archives, then runs locked `wasm32-unknown-unknown` checks with default
+features disabled and `workers` enabled. Account Admin, Auth Delegation and OAuth
+Flow Capability archives supply the existing unpublished dependencies. Resolved
+metadata confirms every local dependency comes from an extracted archive; no
+owner or Capability workspace path substitutes for package contents. All existing
+`publish = false` settings remain unchanged. This is a packaging check, not a
+claim that these private crates are available from the registry.
+
+Formatting, four Node storage/freshness tests and the repository ownership tests
+also pass. This source inclusion correction does not change storage/business
+policy. No new deployment was performed; the recorded remote version and Wasm
+hash above continue to identify the original G4 qualification artifact.

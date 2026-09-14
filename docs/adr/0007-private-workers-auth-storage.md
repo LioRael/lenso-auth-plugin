@@ -91,3 +91,21 @@ their previous rules. This corrects composition independently of the storage tar
 OIDC Client configuration removes URI `format` annotations unsupported by the
 normal HostCatalog restricted-schema validator. Existing Rust HTTPS, fragment,
 credential, issuer and redirect validation remains mandatory before Ready.
+
+## Package self-containment
+
+Each storage owner packages its own `src/workers.rs`. These byte-identical copies
+come from Auth-owned `workers/d1.rs`; the Node CI test rejects drift. This small
+transport module contains no Account or OAuth business policy. It avoids a new
+public support crate and never resolves a Rust source file outside its package.
+The JS binding remains an explicit Host asset copied from `workers/d1-binding.mjs`.
+
+`workers/check-packages.py` creates actual Cargo archives, extracts them outside
+the repository, and checks both owners with only `workers` enabled for
+`wasm32-unknown-unknown`. The three unpublished Capability dependencies are also
+packaged and supplied exclusively from extracted archives; the check rejects any
+source-workspace dependency in the resolved graph. Matching dependency versions
+permit packaging while every existing `publish = false` setting remains intact.
+This proves archive self-containment, not registry availability or publication
+readiness for those private crates. Packaging uses isolated inputs and leaves the
+repository lockfile unchanged.

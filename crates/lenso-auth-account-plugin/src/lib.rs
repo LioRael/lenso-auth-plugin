@@ -854,7 +854,6 @@ async fn resolve(
 }
 
 #[cfg(feature = "workers")]
-#[path = "../../../workers/d1.rs"]
 pub mod workers;
 
 /// Build the selected Auth implementation with a request-owned D1 binding.

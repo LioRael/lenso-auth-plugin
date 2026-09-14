@@ -335,7 +335,6 @@ fn db_error(error: impl fmt::Display) -> RuntimeFailure {
 }
 
 #[cfg(feature = "workers")]
-#[path = "../../../workers/d1.rs"]
 pub mod workers;
 
 /// Build the selected Auth implementation with a request-owned D1 binding.

@@ -48,6 +48,8 @@ jobs:
         run: cargo clippy --locked --target wasm32-unknown-unknown --no-default-features --features workers -p lenso-auth-account-plugin -p lenso-auth-oauth-flow-plugin -p lenso-auth-web-session-plugin -p lenso-auth-oidc-client-plugin -p lenso-auth-router-plugin -- -D warnings
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
+      - name: Check extracted Workers Auth packages
+        run: python3 workers/check-packages.py
       - name: Package public crates
         run: |
           # Package this same-release edge together; live publishing keeps the dependency order.
