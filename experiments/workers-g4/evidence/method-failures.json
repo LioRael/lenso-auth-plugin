@@ -1,0 +1,28 @@
+{
+  "passed": 22,
+  "checks": [
+    "Phone wrong OTP attempt one",
+    "Phone wrong OTP attempt two",
+    "Phone OTP attempt limit is exact",
+    "Phone correct OTP cannot bypass exhausted attempts",
+    "password.login fails closed for method-storage",
+    "password.login fails closed for method-missing-binding",
+    "password.login recovers after unavailable binding",
+    "phone.password_login fails closed for method-storage",
+    "phone.password_login fails closed for method-missing-binding",
+    "phone.password_login recovers after unavailable binding",
+    "device.list fails closed for method-storage",
+    "device.list fails closed for method-missing-binding",
+    "device.list recovers after unavailable binding",
+    "api.authenticate fails closed for method-storage",
+    "api.authenticate fails closed for method-missing-binding",
+    "api.authenticate recovers after unavailable binding",
+    "oidc.metadata fails closed for method-storage",
+    "oidc.metadata fails closed for method-missing-binding",
+    "oidc.metadata recovers after unavailable binding",
+    "Phone expired OTP rejected",
+    "OIDC expired authorization code rejected",
+    "API Token expired credential rejected"
+  ],
+  "deployment_version": "ff78dedc-5803-4679-b6d0-3c9ded68f95a"
+}

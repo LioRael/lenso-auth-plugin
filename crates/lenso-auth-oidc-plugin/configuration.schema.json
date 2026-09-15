@@ -3,20 +3,42 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema", "database_url_secret", "signing_key_secret", "code_pepper_secret",
-    "issuer", "jwks", "client_id", "redirect_uris", "authorize_callers", "audience",
-    "code_ttl_seconds", "token_ttl_seconds"
+    "schema",
+    "signing_key_secret",
+    "code_pepper_secret",
+    "issuer",
+    "jwks",
+    "client_id",
+    "redirect_uris",
+    "authorize_callers",
+    "audience",
+    "code_ttl_seconds",
+    "token_ttl_seconds"
   ],
   "properties": {
-    "schema": { "type": "string" },
-    "database_url_secret": { "type": "string" },
-    "signing_key_secret": { "type": "string" },
-    "code_pepper_secret": { "type": "string" },
-    "issuer": { "type": "string" },
+    "schema": {
+      "type": "string"
+    },
+    "database_url_secret": {
+      "type": "string",
+      "default": "",
+      "maxLength": 256
+    },
+    "signing_key_secret": {
+      "type": "string"
+    },
+    "code_pepper_secret": {
+      "type": "string"
+    },
+    "issuer": {
+      "type": "string"
+    },
     "jwks": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["keys"],
+      "required": [
+        "keys"
+      ],
       "properties": {
         "keys": {
           "type": "array",
@@ -25,25 +47,77 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["kty", "use", "alg", "n", "e"],
+            "required": [
+              "kty",
+              "use",
+              "alg",
+              "n",
+              "e"
+            ],
             "properties": {
-              "kty": { "const": "RSA" },
-              "kid": { "type": "string", "minLength": 1, "maxLength": 256 },
-              "use": { "const": "sig" },
-              "alg": { "const": "RS256" },
-              "n": { "type": "string", "minLength": 342, "maxLength": 1366 },
-              "e": { "type": "string", "minLength": 2, "maxLength": 11 }
+              "kty": {
+                "const": "RSA"
+              },
+              "kid": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "use": {
+                "const": "sig"
+              },
+              "alg": {
+                "const": "RS256"
+              },
+              "n": {
+                "type": "string",
+                "minLength": 342,
+                "maxLength": 1366
+              },
+              "e": {
+                "type": "string",
+                "minLength": 2,
+                "maxLength": 11
+              }
             }
           }
         }
       }
     },
-    "key_id": { "type": "string" },
-    "client_id": { "type": "string" },
-    "redirect_uris": { "type": "array", "items": { "type": "string" } },
-    "authorize_callers": { "type": "array", "items": { "type": "string" } },
-    "audience": { "type": "array", "items": { "type": "string" } },
-    "code_ttl_seconds": { "type": "integer" },
-    "token_ttl_seconds": { "type": "integer" }
+    "key_id": {
+      "type": "string"
+    },
+    "client_id": {
+      "type": "string"
+    },
+    "redirect_uris": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "authorize_callers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "code_ttl_seconds": {
+      "type": "integer"
+    },
+    "token_ttl_seconds": {
+      "type": "integer"
+    },
+    "d1_binding": {
+      "type": "string",
+      "default": "",
+      "maxLength": 128
+    }
   }
 }

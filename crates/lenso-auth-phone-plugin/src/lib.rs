@@ -1,6 +1,11 @@
 //! Phone OTP and phone-password authentication with private durable state.
+#[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
+mod storage;
+#[cfg(feature = "workers")]
+pub mod workers;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
@@ -28,11 +33,15 @@ use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationE
 use lenso_capability_sms_delivery as sms;
 use lenso_capability_sms_delivery::{SendRequest, SmsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
+#[cfg(feature = "postgres")]
 pub use operator::{PhoneOperator, PhoneOperatorError};
+#[cfg(feature = "postgres")]
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+#[cfg(feature = "postgres")]
 use sqlx::Row;
 use std::{
     cell::RefCell, collections::BTreeMap, fmt, future::Future, rc::Rc, sync::Arc,
@@ -45,6 +54,7 @@ use zeroize::Zeroizing;
 const TIMEOUT: StdDuration = StdDuration::from_secs(10);
 const MAX_PASSWORD_WORK_JOBS: usize = 4;
 const DUMMY_PASSWORD_INPUT: &str = "lenso-auth-phone-password-dummy-input";
+#[cfg(feature = "postgres")]
 const STALE_FAILURE_PRUNE_BATCH: i64 = 256;
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -56,7 +66,10 @@ enum Environment {
 #[serde(deny_unknown_fields)]
 pub struct PhoneConfig {
     schema: String,
+    #[serde(default)]
     database_url_secret: String,
+    #[serde(default)]
+    d1_binding: String,
     otp_secret_ref: String,
     environment: Environment,
     return_debug_code: bool,
@@ -74,12 +87,33 @@ pub struct PhoneConfig {
 }
 impl PhoneConfig {
     fn validate(&self) -> Result<(), RuntimeFailure> {
-        schema_plan(self.schema.clone()).map_err(|e| invalid(&e.to_string()))?;
-        if self.database_url_secret.is_empty()
+        if self.schema.is_empty()
+            || self.schema.len() > 63
+            || !self.schema.as_bytes()[0].is_ascii_lowercase()
+            || !self
+                .schema
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || matches!(self.schema.as_str(), "public" | "information_schema")
+            || self.schema.starts_with("pg_")
+        {
+            return Err(invalid("invalid Phone schema owner"));
+        }
+        if !self.d1_binding.is_empty()
+            && (!self.database_url_secret.is_empty()
+                || self.d1_binding.len() > 128
+                || !self
+                    .d1_binding
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+        {
+            return Err(invalid("invalid Phone D1 selection"));
+        }
+        if (self.database_url_secret.is_empty() && self.d1_binding.is_empty())
             || self.otp_secret_ref.is_empty()
             || self.database_url_secret == self.otp_secret_ref
             || self.set_password_callers.is_empty()
-            || self.set_password_callers.iter().any(|v| !valid_name(v))
+            || self.set_password_callers.iter().any(|v| !valid_caller(v))
             || self.audience.is_empty()
             || !(4..=10).contains(&self.otp_code_length)
             || !(60..=3600).contains(&self.otp_ttl_seconds)
@@ -102,14 +136,14 @@ fn validate_config(config: &PhoneConfig) -> Result<(), RuntimeFailure> {
 }
 #[derive(Clone)]
 struct Prepared {
-    postgres: OwnedPostgres,
+    store: storage::PhoneStore,
     otp_secret: Zeroizing<Vec<u8>>,
     password_work: PasswordWork,
 }
 impl fmt::Debug for Prepared {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Prepared")
-            .field("schema", &self.postgres.schema())
+            .field("storage", &self.store)
             .finish_non_exhaustive()
     }
 }
@@ -170,6 +204,7 @@ impl PasswordWork {
 enum PasswordWorkError {
     #[error("password work capacity is exhausted")]
     Saturated,
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("password worker terminated")]
     Join,
     #[error(transparent)]
@@ -184,6 +219,13 @@ enum PhonePasswordError {
     Random,
 }
 
+#[cfg_attr(
+    target_arch = "wasm32",
+    allow(
+        clippy::unused_async,
+        reason = "Native password jobs await the blocking executor"
+    )
+)]
 async fn run_password_job<T, F>(permits: Arc<Semaphore>, job: F) -> Result<T, PasswordWorkError>
 where
     T: Send + 'static,
@@ -192,13 +234,21 @@ where
     let permit = permits
         .try_acquire_owned()
         .map_err(|_| PasswordWorkError::Saturated)?;
-    tokio::task::spawn_blocking(move || {
+    #[cfg(target_arch = "wasm32")]
+    {
         let _permit = permit;
-        job()
-    })
-    .await
-    .map_err(|_| PasswordWorkError::Join)?
-    .map_err(PasswordWorkError::from)
+        job().map_err(PasswordWorkError::from)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            job()
+        })
+        .await
+        .map_err(|_| PasswordWorkError::Join)?
+        .map_err(PasswordWorkError::from)
+    }
 }
 
 async fn verify_candidate_with<E, F, Fut>(
@@ -230,6 +280,8 @@ impl fmt::Debug for Active {
 struct PhoneAuthPlugin {
     #[config]
     config: PhoneConfig,
+    #[allow(dead_code)]
+    d1: EventStorageBinding,
     secrets: Port<secrets::SecretsClient>,
     directory: Port<directory::DirectoryClient>,
     issuer: Port<credential_issuer::CredentialIssuerClient>,
@@ -326,7 +378,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                 ),
                 max_starts: a.config.max_starts_per_ip,
             };
-            match reserve_otp_challenge(&a.prepared.postgres, &reservation).await? {
+            match a.prepared.store.reserve_otp_challenge(&reservation).await? {
                 OtpReservationOutcome::Inserted => {}
                 OtpReservationOutcome::RateLimited => {
                     return Ok(Err(StartOtpError::RateLimited));
@@ -345,11 +397,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                 )
                 .await;
             if !matches!(delivery,Ok(ref v)if v.accepted) {
-                sqlx::query("DELETE FROM phone_otp_challenges WHERE challenge_id=$1")
-                    .bind(&challenge_id)
-                    .execute(a.prepared.postgres.pool())
-                    .await
-                    .map_err(db)?;
+                a.prepared.store.delete_challenge(&challenge_id).await?;
                 return match delivery {
                     Err(SmsInvocationError::Runtime(e)) => Err(e),
                     _ => Ok(Err(StartOtpError::DeliveryRejected)),
@@ -379,41 +427,15 @@ impl PhoneProvider for PhoneAuthPlugin {
             {
                 return Ok(Err(VerifyOtpError::InvalidChallenge));
             }
-            let mut tx = a.prepared.postgres.pool().begin().await.map_err(db)?;
-            let row=sqlx::query("SELECT phone,code_digest,attempts,expires_at,consumed_at IS NOT NULL AS consumed FROM phone_otp_challenges WHERE challenge_id=$1 FOR UPDATE").bind(&r.challenge_id).fetch_optional(&mut*tx).await.map_err(db)?;
-            let Some(row) = row else {
-                return Ok(Err(VerifyOtpError::InvalidChallenge));
+            let phone = match a
+                .prepared
+                .store
+                .consume(&r, &a.prepared.otp_secret, a.config.otp_max_attempts)
+                .await?
+            {
+                Ok(phone) => phone,
+                Err(error) => return Ok(Err(error)),
             };
-            if row.try_get::<bool, _>("consumed").map_err(db)? {
-                return Ok(Err(VerifyOtpError::InvalidChallenge));
-            }
-            let attempts: i32 = row.try_get("attempts").map_err(db)?;
-            if attempts >= a.config.otp_max_attempts {
-                return Ok(Err(VerifyOtpError::TooManyAttempts));
-            }
-            let expires: OffsetDateTime = row.try_get("expires_at").map_err(db)?;
-            if expires <= OffsetDateTime::now_utc() {
-                return Ok(Err(VerifyOtpError::Expired));
-            }
-            let stored: Vec<u8> = row.try_get("code_digest").map_err(db)?;
-            if !otp_matches(&a.prepared.otp_secret, &r.challenge_id, &r.code, &stored)? {
-                sqlx::query(
-                    "UPDATE phone_otp_challenges SET attempts=attempts+1 WHERE challenge_id=$1",
-                )
-                .bind(&r.challenge_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(db)?;
-                tx.commit().await.map_err(db)?;
-                return Ok(Err(if attempts + 1 >= a.config.otp_max_attempts {
-                    VerifyOtpError::TooManyAttempts
-                } else {
-                    VerifyOtpError::InvalidCode
-                }));
-            }
-            sqlx::query("UPDATE phone_otp_challenges SET consumed_at=transaction_timestamp() WHERE challenge_id=$1").bind(&r.challenge_id).execute(&mut*tx).await.map_err(db)?;
-            tx.commit().await.map_err(db)?;
-            let phone: String = row.try_get("phone").map_err(db)?;
             let identity = directory
                 .ensure_identity_with_context(
                     context.clone(),
@@ -433,7 +455,10 @@ impl PhoneProvider for PhoneAuthPlugin {
                 }
                 Err(DirectoryEnsureIdentityInvocationError::Runtime(e)) => return Err(e),
             };
-            sqlx::query("INSERT INTO phone_identities(phone,subject_id)VALUES($1,$2)ON CONFLICT(phone)DO UPDATE SET subject_id=EXCLUDED.subject_id").bind(&phone).bind(&identity.subject).execute(a.prepared.postgres.pool()).await.map_err(db)?;
+            a.prepared
+                .store
+                .bind_identity(&phone, &identity.subject)
+                .await?;
             let credential = match issue(
                 &a,
                 &issuer,
@@ -497,12 +522,7 @@ impl PhoneProvider for PhoneAuthPlugin {
                 }
                 Err(DirectoryReadStatusInvocationError::Runtime(e)) => return Err(e),
             }
-            let phone: Option<String> =
-                sqlx::query_scalar("SELECT phone FROM phone_identities WHERE subject_id=$1")
-                    .bind(&r.subject)
-                    .fetch_optional(a.prepared.postgres.pool())
-                    .await
-                    .map_err(db)?;
+            let phone = a.prepared.store.phone_for_subject(&r.subject).await?;
             let Some(phone) = phone else {
                 return Ok(Err(SetPasswordError::NotFound));
             };
@@ -512,7 +532,10 @@ impl PhoneProvider for PhoneAuthPlugin {
                 .hash(r.password)
                 .await
                 .map_err(|error| password_work_failure(&error))?;
-            sqlx::query("INSERT INTO phone_passwords(subject_id,phone,password_hash)VALUES($1,$2,$3)ON CONFLICT(subject_id)DO UPDATE SET password_hash=EXCLUDED.password_hash,updated_at=transaction_timestamp()").bind(&r.subject).bind(phone).bind(hash).execute(a.prepared.postgres.pool()).await.map_err(db)?;
+            a.prepared
+                .store
+                .set_password(&r.subject, &phone, &hash)
+                .await?;
             Ok(Ok(SetPasswordResponse { updated: true }))
         })
     }
@@ -532,29 +555,19 @@ impl PhoneProvider for PhoneAuthPlugin {
                 - Duration::seconds(
                     i64::try_from(a.config.password_failure_window_seconds).expect("validated"),
                 );
-            if phone_failure_limit_reached(
-                &a.prepared.postgres,
-                &phone,
-                since,
-                a.config.max_password_failures,
-            )
-            .await?
+            if a.prepared
+                .store
+                .phone_failure_limit_reached(&phone, since, a.config.max_password_failures)
+                .await?
             {
                 return Ok(Err(PasswordLoginError::RateLimited));
             }
-            let row =
-                sqlx::query("SELECT subject_id,password_hash FROM phone_passwords WHERE phone=$1")
-                    .bind(&phone)
-                    .fetch_optional(a.prepared.postgres.pool())
-                    .await
-                    .map_err(db)?;
-            let (subject, stored_hash) = match row {
-                Some(row) => (
-                    Some(row.try_get::<String, _>("subject_id").map_err(db)?),
-                    Some(row.try_get::<String, _>("password_hash").map_err(db)?),
-                ),
-                None => (None, None),
-            };
+            let (subject, stored_hash) = a
+                .prepared
+                .store
+                .password(&phone)
+                .await?
+                .map_or((None, None), |(subject, hash)| (Some(subject), Some(hash)));
             let valid = match a
                 .prepared
                 .password_work
@@ -568,19 +581,17 @@ impl PhoneProvider for PhoneAuthPlugin {
                 Err(error) => return Err(password_work_failure(&error)),
             };
             if !valid {
-                return match record_phone_failure_if_allowed(
-                    &a.prepared.postgres,
-                    &phone,
-                    since,
-                    a.config.max_password_failures,
-                )
-                .await?
+                return match a
+                    .prepared
+                    .store
+                    .record_phone_failure_if_allowed(&phone, since, a.config.max_password_failures)
+                    .await?
                 {
                     FailureAdmission::Recorded => Ok(Err(PasswordLoginError::InvalidCredentials)),
                     FailureAdmission::RateLimited => Ok(Err(PasswordLoginError::RateLimited)),
                 };
             }
-            clear_phone_failures(&a.prepared.postgres, &phone).await?;
+            a.prepared.store.clear_phone_failures(&phone).await?;
             let subject = subject.expect("verified credential has a subject");
             let credential = match issue(
                 &a,
@@ -653,22 +664,52 @@ impl Lifecycle for PhoneAuthPlugin {
         let deps = context.dependencies().clone();
         let cancel = context.cancellation();
         let state = self.prepared.clone();
-        let dbs = resolve(&self.secrets, &deps, cancel.clone(), &c.database_url_secret).await?;
-        let otp = resolve(&self.secrets, &deps, cancel, &c.otp_secret_ref).await?;
+        let otp = resolve(&self.secrets, &deps, cancel.clone(), &c.otp_secret_ref).await?;
         if otp.len() < 32 {
             return Err(failure("OTP secret must contain at least 32 bytes"));
         }
-        let postgres = OwnedPostgres::prepare(
-            &dbs,
-            schema_plan(c.schema.clone()).map_err(|e| invalid(&e.to_string()))?,
-        )
-        .await
-        .map_err(|e| failure(&e.to_string()))?;
+        let store = if c.d1_binding.is_empty() {
+            #[cfg(feature = "postgres")]
+            {
+                let dbs = resolve(&self.secrets, &deps, cancel, &c.database_url_secret).await?;
+                let postgres = OwnedPostgres::prepare(
+                    &dbs,
+                    schema_plan(c.schema.clone()).map_err(|e| invalid(&e.to_string()))?,
+                )
+                .await
+                .map_err(|e| failure(&e.to_string()))?;
+
+                storage::PhoneStore::Postgres(postgres)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                return Err(failure("Phone PostgreSQL support disabled"));
+            }
+        } else {
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|binding| binding.name() == c.d1_binding)
+                    .ok_or_else(|| failure("Phone D1 binding unavailable"))?
+                    .clone();
+                let results=binding.run(vec![workers::statement("SELECT version FROM auth_phone_schema WHERE version=1 AND fingerprint='a43943ded1db550678ceed87ba38b8d24925bfe35b56bafdec2ecdd6ca428c3a'",vec![])]).await.map_err(|()|failure("Phone D1 schema unavailable"))?;
+                if results[0].results.len() != 1 {
+                    return Err(failure("Phone D1 schema mismatch"));
+                }
+                storage::PhoneStore::D1(binding)
+            }
+            #[cfg(not(feature = "workers"))]
+            {
+                return Err(failure("Phone D1 support disabled"));
+            }
+        };
         let password_work = PasswordWork::prepare()
             .await
             .map_err(|error| password_work_failure(&error))?;
         let prepared = Prepared {
-            postgres,
+            store,
             otp_secret: Zeroizing::new(otp.as_bytes().to_vec()),
             password_work,
         };
@@ -685,7 +726,7 @@ impl Lifecycle for PhoneAuthPlugin {
         self.active.borrow_mut().take();
         let prepared = self.prepared.borrow_mut().take();
         if let Some(p) = prepared {
-            p.postgres.pool().close().await;
+            p.store.close().await;
         }
         Ok(())
     }
@@ -712,6 +753,7 @@ async fn resolve(
         })
 }
 
+#[cfg(feature = "postgres")]
 async fn reserve_otp_challenge(
     postgres: &OwnedPostgres,
     reservation: &OtpReservation<'_>,
@@ -760,6 +802,7 @@ async fn reserve_otp_challenge(
     Ok(OtpReservationOutcome::Inserted)
 }
 
+#[cfg(feature = "postgres")]
 async fn phone_failure_limit_reached(
     postgres: &OwnedPostgres,
     phone: &str,
@@ -782,6 +825,7 @@ async fn phone_failure_limit_reached(
     Ok(count >= max_failures)
 }
 
+#[cfg(feature = "postgres")]
 async fn record_phone_failure_if_allowed(
     postgres: &OwnedPostgres,
     phone: &str,
@@ -808,6 +852,7 @@ async fn record_phone_failure_if_allowed(
     })
 }
 
+#[cfg(feature = "postgres")]
 async fn clear_phone_failures(postgres: &OwnedPostgres, phone: &str) -> Result<(), RuntimeFailure> {
     let mut transaction = postgres.pool().begin().await.map_err(db)?;
     lock_phone_failures(&mut transaction, phone).await?;
@@ -821,6 +866,7 @@ async fn clear_phone_failures(postgres: &OwnedPostgres, phone: &str) -> Result<(
 }
 
 #[cfg(test)]
+#[cfg(feature = "postgres")]
 async fn current_phone_failure_count(
     postgres: &OwnedPostgres,
     phone: &str,
@@ -836,6 +882,7 @@ async fn current_phone_failure_count(
     .map_err(db)
 }
 
+#[cfg(feature = "postgres")]
 async fn lock_phone_failures(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     phone: &str,
@@ -844,6 +891,7 @@ async fn lock_phone_failures(
     advisory_lock(transaction, &key).await
 }
 
+#[cfg(feature = "postgres")]
 async fn prune_phone_failures(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     phone: &str,
@@ -858,6 +906,7 @@ async fn prune_phone_failures(
     Ok(())
 }
 
+#[cfg(feature = "postgres")]
 async fn prune_stale_phone_failures(
     postgres: &OwnedPostgres,
     before: OffsetDateTime,
@@ -873,6 +922,7 @@ async fn prune_stale_phone_failures(
     Ok(result.rows_affected())
 }
 
+#[cfg(feature = "postgres")]
 async fn advisory_lock(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     key: &str,
@@ -971,11 +1021,12 @@ fn failure(d: &str) -> RuntimeFailure {
     }
 }
 #[allow(clippy::needless_pass_by_value)]
+#[cfg(feature = "postgres")]
 fn db(e: sqlx::Error) -> RuntimeFailure {
     failure(&format!("Phone Auth storage operation failed: {e}"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
 
@@ -1274,4 +1325,30 @@ mod tests {
         release.wait();
         first.await.unwrap().unwrap();
     }
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    let binding = workers::D1Binding::new(binding_name, batch);
+    lenso_native_adapter::ConfiguredPluginFactory::<PhoneAuthPlugin, _>::new(move |plugin| {
+        if plugin.config.d1_binding != binding.name() {
+            return Err(invalid("Phone requires its exact D1 binding"));
+        }
+        plugin.d1 = Some(binding.clone());
+        Ok(())
+    })
+}
+
+fn valid_caller(value: &str) -> bool {
+    value.split_once('/').map_or_else(
+        || valid_name(value),
+        |(package, instance)| valid_name(package) && valid_name(instance),
+    )
 }

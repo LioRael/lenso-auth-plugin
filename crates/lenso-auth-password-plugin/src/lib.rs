@@ -1,13 +1,17 @@
 //! Password authentication as a removable Plugin over Directory and Credential Issuer contracts.
 
+#[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
 mod storage;
+#[cfg(feature = "workers")]
+pub mod workers;
 
-use std::{
-    cell::RefCell, collections::BTreeMap, fmt, future::Future, rc::Rc, sync::Arc,
-    time::Duration as StdDuration,
-};
+use std::{cell::RefCell, collections::BTreeMap, fmt, future::Future, rc::Rc, sync::Arc};
+
+#[cfg(feature = "postgres")]
+use std::time::Duration as StdDuration;
 
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
@@ -25,19 +29,25 @@ use lenso_capability_password_auth::{
     RegisterError, RegisterRequest, RegisterResponse,
 };
 use lenso_capability_secrets as secrets;
+#[cfg(feature = "postgres")]
 use lenso_capability_secrets::{ResolveRequest, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::sync::Semaphore;
+#[cfg(feature = "postgres")]
 use zeroize::Zeroizing;
 
+#[cfg(feature = "postgres")]
 use crate::schema::schema_plan;
 
+#[cfg(feature = "postgres")]
 pub use operator::{PasswordAuthOperator, PasswordOperatorError};
 
+#[cfg(feature = "postgres")]
 const DEPENDENCY_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 const MAX_PASSWORD_WORK_JOBS: usize = 4;
 const DUMMY_PASSWORD_INPUT: &str = "lenso-auth-password-dummy-input";
@@ -46,7 +56,12 @@ const DUMMY_PASSWORD_INPUT: &str = "lenso-auth-password-dummy-input";
 #[serde(deny_unknown_fields)]
 pub struct PasswordAuthConfig {
     schema: String,
+    #[serde(default)]
+    #[lenso(default = "")]
     database_url_secret: String,
+    #[serde(default)]
+    #[lenso(default = "")]
+    d1_binding: String,
     audience: Vec<String>,
     session_ttl_seconds: u64,
     max_failures: u32,
@@ -65,6 +80,7 @@ impl PasswordAuthConfig {
         let value = Self {
             schema: schema.into(),
             database_url_secret: database_url_secret.into(),
+            d1_binding: String::new(),
             audience,
             session_ttl_seconds,
             max_failures,
@@ -74,8 +90,28 @@ impl PasswordAuthConfig {
         Ok(value)
     }
     fn validate(&self) -> Result<(), PasswordConfigError> {
-        schema_plan(self.schema.clone()).map_err(|_| PasswordConfigError::InvalidSchema)?;
-        if self.database_url_secret.is_empty() || self.database_url_secret.len() > 256 {
+        if self.schema.is_empty()
+            || self.schema.len() > 63
+            || !self.schema.as_bytes()[0].is_ascii_lowercase()
+            || !self
+                .schema
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || matches!(self.schema.as_str(), "public" | "information_schema")
+            || self.schema.starts_with("pg_")
+        {
+            return Err(PasswordConfigError::InvalidSchema);
+        }
+        if (self.d1_binding.is_empty() && self.database_url_secret.is_empty())
+            || self.database_url_secret.len() > 256
+            || (!self.d1_binding.is_empty()
+                && (!self.database_url_secret.is_empty()
+                    || self.d1_binding.len() > 128
+                    || !self
+                        .d1_binding
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')))
+        {
             return Err(PasswordConfigError::InvalidSecretReference);
         }
         if self.audience.is_empty() || self.audience.iter().any(|value| !valid_audience(value)) {
@@ -118,14 +154,14 @@ fn validate_config(config: &PasswordAuthConfig) -> Result<(), RuntimeFailure> {
 }
 
 struct ActivePassword {
-    postgres: OwnedPostgres,
+    store: storage::PasswordStore,
     config: PasswordAuthConfig,
     password_work: PasswordWork,
 }
 impl fmt::Debug for ActivePassword {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ActivePassword")
-            .field("schema", &self.postgres.schema())
+            .field("schema", &self.config.schema)
             .finish_non_exhaustive()
     }
 }
@@ -191,12 +227,20 @@ impl PasswordWork {
 enum PasswordWorkError {
     #[error("password work capacity is exhausted")]
     Saturated,
+    #[cfg(not(target_arch = "wasm32"))]
     #[error("password worker terminated")]
     Join,
     #[error(transparent)]
     Password(#[from] PasswordPluginError),
 }
 
+#[cfg_attr(
+    target_arch = "wasm32",
+    allow(
+        clippy::unused_async,
+        reason = "Native password jobs await the blocking executor"
+    )
+)]
 async fn run_password_job<T, F>(permits: Arc<Semaphore>, job: F) -> Result<T, PasswordWorkError>
 where
     T: Send + 'static,
@@ -205,13 +249,21 @@ where
     let permit = permits
         .try_acquire_owned()
         .map_err(|_| PasswordWorkError::Saturated)?;
-    tokio::task::spawn_blocking(move || {
+    #[cfg(target_arch = "wasm32")]
+    {
         let _permit = permit;
-        job()
-    })
-    .await
-    .map_err(|_| PasswordWorkError::Join)?
-    .map_err(PasswordWorkError::from)
+        job().map_err(PasswordWorkError::from)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            job()
+        })
+        .await
+        .map_err(|_| PasswordWorkError::Join)?
+        .map_err(PasswordWorkError::from)
+    }
 }
 
 async fn verify_candidate_with<E, F, Fut>(
@@ -238,7 +290,9 @@ struct PasswordAuthPlugin {
     secrets: Port<secrets::SecretsClient>,
     directory: Port<directory::DirectoryClient>,
     issuer: Port<credential_issuer::CredentialIssuerClient>,
-    postgres: Rc<RefCell<Option<OwnedPostgres>>>,
+    store: Rc<RefCell<Option<storage::PasswordStore>>>,
+    #[allow(dead_code)]
+    d1: EventStorageBinding,
     active: Rc<RefCell<Option<Rc<ActivePassword>>>>,
 }
 #[allow(clippy::missing_fields_in_debug)]
@@ -305,7 +359,7 @@ impl PasswordProvider for PasswordAuthPlugin {
                 }
                 Err(DirectoryEnsureIdentityInvocationError::Runtime(error)) => return Err(error),
             };
-            if !storage::insert_credential(&active.postgres, &identifier, &identity.subject, &hash)
+            if !storage::insert_credential(&active.store, &identifier, &identity.subject, &hash)
                 .await
                 .map_err(runtime)?
             {
@@ -342,7 +396,7 @@ impl PasswordProvider for PasswordAuthPlugin {
                     i64::try_from(active.config.failure_window_seconds).expect("validated"),
                 );
             if storage::failure_limit_reached(
-                &active.postgres,
+                &active.store,
                 &identifier,
                 since,
                 active.config.max_failures,
@@ -352,7 +406,7 @@ impl PasswordProvider for PasswordAuthPlugin {
             {
                 return Ok(Err(LoginError::RateLimited));
             }
-            let credential = storage::load_credential(&active.postgres, &identifier)
+            let credential = storage::load_credential(&active.store, &identifier)
                 .await
                 .map_err(runtime)?;
             let (subject, stored_hash) =
@@ -368,7 +422,7 @@ impl PasswordProvider for PasswordAuthPlugin {
             };
             if !valid {
                 return match storage::record_failure_if_allowed(
-                    &active.postgres,
+                    &active.store,
                     &identifier,
                     since,
                     active.config.max_failures,
@@ -380,7 +434,7 @@ impl PasswordProvider for PasswordAuthPlugin {
                     storage::FailureAdmission::RateLimited => Ok(Err(LoginError::RateLimited)),
                 };
             }
-            storage::clear_failures(&active.postgres, &identifier)
+            storage::clear_failures(&active.store, &identifier)
                 .await
                 .map_err(runtime)?;
             let subject = subject.expect("verified credential has a subject");
@@ -446,43 +500,75 @@ enum IssueCallError {
 impl Lifecycle for PasswordAuthPlugin {
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
-        let state = self.postgres.clone();
-        let dependencies = context.dependencies().clone();
-        let cancellation = context.cancellation();
-        let invocation = dependencies.invocation_context_after(DEPENDENCY_TIMEOUT, cancellation)?;
-        let database_url = self
-            .secrets
-            .resolve_with_context(
-                invocation,
-                ResolveRequest {
-                    reference: config.database_url_secret.clone(),
-                },
-            )
-            .await
-            .map(|value| Zeroizing::new(value.value))
-            .map_err(|error| match error {
-                SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
-                    detail: "password database secret was rejected".to_owned(),
-                },
-                SecretsInvocationError::Runtime(error) => error,
-            })?;
-        let postgres = OwnedPostgres::prepare(
-            &database_url,
-            schema_plan(config.schema.clone()).map_err(|error| {
-                RuntimeFailure::InvalidResolvedPlan {
+        let state = self.store.clone();
+        let store = if config.d1_binding.is_empty() {
+            #[cfg(feature = "postgres")]
+            {
+                let dependencies = context.dependencies().clone();
+                let cancellation = context.cancellation();
+                let invocation =
+                    dependencies.invocation_context_after(DEPENDENCY_TIMEOUT, cancellation)?;
+                let database_url = self
+                    .secrets
+                    .resolve_with_context(
+                        invocation,
+                        ResolveRequest {
+                            reference: config.database_url_secret.clone(),
+                        },
+                    )
+                    .await
+                    .map(|value| Zeroizing::new(value.value))
+                    .map_err(|error| match error {
+                        SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
+                            detail: "password database secret was rejected".to_owned(),
+                        },
+                        SecretsInvocationError::Runtime(error) => error,
+                    })?;
+                let postgres = OwnedPostgres::prepare(
+                    &database_url,
+                    schema_plan(config.schema.clone()).map_err(|error| {
+                        RuntimeFailure::InvalidResolvedPlan {
+                            detail: error.to_string(),
+                        }
+                    })?,
+                )
+                .await
+                .map_err(|error| RuntimeFailure::PluginFailure {
                     detail: error.to_string(),
+                })?;
+
+                storage::PasswordStore::Postgres(postgres)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = context;
+                return Err(runtime("Password PostgreSQL support is disabled"));
+            }
+        } else {
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|binding| binding.name() == config.d1_binding)
+                    .ok_or_else(|| runtime("Password D1 binding unavailable"))?
+                    .clone();
+                let results = binding.run(vec![workers::statement("SELECT version FROM auth_password_schema WHERE version=1 AND fingerprint='edd64339e40c2de926965d72b30d332ed8d50a099031596add7dbbe8f09dce40'",vec![])]).await.map_err(|()|runtime("Password D1 schema unavailable"))?;
+                if results[0].results.len() != 1 {
+                    return Err(runtime("Password D1 schema mismatch"));
                 }
-            })?,
-        )
-        .await
-        .map_err(|error| RuntimeFailure::PluginFailure {
-            detail: error.to_string(),
-        })?;
+                storage::PasswordStore::D1(binding)
+            }
+            #[cfg(not(feature = "workers"))]
+            {
+                return Err(runtime("Password D1 support is disabled"));
+            }
+        };
         let password_work = PasswordWork::prepare().await.map_err(runtime)?;
-        state.replace(Some(postgres.clone()));
+        state.replace(Some(store.clone()));
         let active = self.active.clone();
         active.replace(Some(Rc::new(ActivePassword {
-            postgres,
+            store,
             config,
             password_work,
         })));
@@ -491,9 +577,9 @@ impl Lifecycle for PasswordAuthPlugin {
 
     async fn deactivate(&self, _context: DeactivateContext) -> Result<(), RuntimeFailure> {
         self.active.borrow_mut().take();
-        let postgres = self.postgres.borrow_mut().take();
+        let postgres = self.store.borrow_mut().take();
         if let Some(postgres) = postgres {
-            postgres.pool().close().await;
+            postgres.close().await;
         }
         Ok(())
     }
@@ -501,12 +587,16 @@ impl Lifecycle for PasswordAuthPlugin {
 
 #[derive(Debug, Error)]
 enum PasswordPluginError {
+    #[cfg(feature = "postgres")]
     #[error("PostgreSQL operation `{operation}` failed")]
     Database {
         operation: &'static str,
         #[source]
         source: sqlx::Error,
     },
+    #[cfg(feature = "workers")]
+    #[error("Password Auth storage unavailable")]
+    Storage,
     #[error("password hashing failed")]
     Hash,
     #[error("random source unavailable")]
@@ -552,7 +642,7 @@ fn valid_audience(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b':' | b'@'))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
 
@@ -631,11 +721,11 @@ mod tests {
         let identifier = "concurrent@example.test";
 
         let outcomes = tokio::join!(
-            storage::record_failure_if_allowed(&postgres, identifier, since, 2),
-            storage::record_failure_if_allowed(&postgres, identifier, since, 2),
-            storage::record_failure_if_allowed(&postgres, identifier, since, 2),
-            storage::record_failure_if_allowed(&postgres, identifier, since, 2),
-            storage::record_failure_if_allowed(&postgres, identifier, since, 2),
+            storage::postgres::record_failure_if_allowed(&postgres, identifier, since, 2),
+            storage::postgres::record_failure_if_allowed(&postgres, identifier, since, 2),
+            storage::postgres::record_failure_if_allowed(&postgres, identifier, since, 2),
+            storage::postgres::record_failure_if_allowed(&postgres, identifier, since, 2),
+            storage::postgres::record_failure_if_allowed(&postgres, identifier, since, 2),
         );
         let recorded = [outcomes.0, outcomes.1, outcomes.2, outcomes.3, outcomes.4]
             .into_iter()
@@ -644,7 +734,7 @@ mod tests {
             .count();
         assert_eq!(recorded, 2);
         assert_eq!(
-            storage::current_failure_count(&postgres, identifier, since)
+            storage::postgres::current_failure_count(&postgres, identifier, since)
                 .await
                 .unwrap(),
             2
@@ -678,7 +768,7 @@ mod tests {
             .await
             .unwrap();
         let cutoff = OffsetDateTime::now_utc() - Duration::minutes(1);
-        let stale_count = storage::STALE_FAILURE_PRUNE_BATCH + 5;
+        let stale_count = storage::postgres::STALE_FAILURE_PRUNE_BATCH + 5;
         sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) SELECT 'stale-' || value, $1 FROM generate_series(1,$2) AS value")
             .bind(cutoff - Duration::minutes(1))
             .bind(stale_count)
@@ -691,7 +781,7 @@ mod tests {
             .await
             .unwrap();
 
-        storage::failure_limit_reached(&postgres, "probe", cutoff, 10)
+        storage::postgres::failure_limit_reached(&postgres, "probe", cutoff, 10)
             .await
             .unwrap();
         let remaining_stale: i64 =
@@ -709,11 +799,11 @@ mod tests {
         .unwrap();
         assert_eq!(
             remaining_stale,
-            stale_count - storage::STALE_FAILURE_PRUNE_BATCH
+            stale_count - storage::postgres::STALE_FAILURE_PRUNE_BATCH
         );
         assert_eq!(active, 2);
 
-        storage::failure_limit_reached(&postgres, "probe", cutoff, 10)
+        storage::postgres::failure_limit_reached(&postgres, "probe", cutoff, 10)
             .await
             .unwrap();
         let remaining_stale: i64 =
@@ -769,7 +859,7 @@ mod tests {
             .unwrap();
         sqlx::query("INSERT INTO password_login_failures(identifier,failed_at) SELECT 'stale-race-' || value, $1 FROM generate_series(1,$2) AS value")
             .bind(cutoff - Duration::minutes(1))
-            .bind(storage::STALE_FAILURE_PRUNE_BATCH)
+            .bind(storage::postgres::STALE_FAILURE_PRUNE_BATCH)
             .execute(postgres.pool())
             .await
             .unwrap();
@@ -781,20 +871,24 @@ mod tests {
             tokio::join!(
                 async {
                     prune_barrier.wait().await;
-                    storage::prune_stale_login_failures(&postgres, cutoff).await
+                    storage::postgres::prune_stale_login_failures(&postgres, cutoff).await
                 },
                 async {
                     record_barrier.wait().await;
-                    storage::record_failure_if_allowed(&postgres, identifier, cutoff, 2).await
+                    storage::postgres::record_failure_if_allowed(&postgres, identifier, cutoff, 2)
+                        .await
                 },
             )
         })
         .await
         .expect("global prune and keyed record must not deadlock");
-        assert_eq!(pruned.unwrap(), storage::STALE_FAILURE_PRUNE_BATCH as u64);
+        assert_eq!(
+            pruned.unwrap(),
+            storage::postgres::STALE_FAILURE_PRUNE_BATCH as u64
+        );
         assert_eq!(admission.unwrap(), storage::FailureAdmission::Recorded);
         assert_eq!(
-            storage::current_failure_count(&postgres, identifier, cutoff)
+            storage::postgres::current_failure_count(&postgres, identifier, cutoff)
                 .await
                 .unwrap(),
             1
@@ -870,4 +964,25 @@ mod tests {
         release.wait();
         first.await.unwrap().unwrap();
     }
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
+
+/// Creates a fresh generated factory with the configured event-owned binding.
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    let binding = workers::D1Binding::new(binding_name, batch);
+    lenso_native_adapter::ConfiguredPluginFactory::<PasswordAuthPlugin, _>::new(move |plugin| {
+        if plugin.config.d1_binding != binding.name() {
+            return Err(runtime("Password Auth requires its exact D1 binding"));
+        }
+        plugin.d1 = Some(binding.clone());
+        Ok(())
+    })
 }

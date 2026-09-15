@@ -1,6 +1,6 @@
-# ADR 0007: Private Workers storage for the representative Auth composition
+# ADR 0007: Private Workers storage for Auth method owners
 
-- Status: experimental implementation; target qualification is separate
+- Status: implemented and qualified in an isolated Workers composition; production rollout is separate
 - Baseline: Auth `b68d87654e18910e8d14649e48e3166636fa99a1`
 - Upstream: Lenso ADRs 0039, 0041, 0042, 0064, 0066
 
@@ -21,15 +21,15 @@ Postgres and requires database_url_secret. Named D1 requires that reference empt
 or omitted and an exact injected binding. Missing support fails preparation.
 Account configuration schema now derives from Rust like OAuth Flow. Declared empty-string/list defaults preserve omitted native fields and avoid nullable schema combinations. The existing
 schema namespace remains an owner label; it cannot select another database.
-Deploy the two owners with separate D1 databases by default.
+Deploy each storage owner with a separate D1 database by default.
 
 The owner factory receives a fresh D1 bridge for each event. That bridge invokes
 D1Database.batch directly, never Sessions API or replicas. No global binding lookup,
 request-I/O cache, or persistent App instance exists. Factory injection reuses the
-pinned generated constructor, typed endpoint macros and lifecycle; these private
-generated names are an experimental integration dependency to review on upgrade.
-Register event factories before with_linked_factories; stable identity dedup retains
-the explicit implementation. No generated Capability projection is edited.
+public `ConfiguredPluginFactory` projection and normal lifecycle. Package-level
+`link_plugin()` retains private Plugin types. `with_factory_override` selects the
+owner's event factory explicitly and validates its identity independently of linked
+registration order. No generated Capability projection is edited.
 
 ## Durable semantics
 
@@ -72,8 +72,12 @@ Session and shared ingress; fixture Federated providers are not external OIDC pr
 A write can commit before event failure. Issuance lacks idempotency input; never
 blindly retry ambiguous issuance or claim exactly-once semantics. D1 has no query
 cancellation API: local abandonment is not rollback. No destructor performs durable
-writes. Password, Phone, Device, API Token and OIDC Provider are separate slices.
-These changes do not authorize production migration or claim general Auth support.
+writes. Password, Phone, Device, API Token and OIDC Provider now use the same private
+storage boundary. Password/Phone retain native Argon2 parameters and bounded job
+admission. Phone consumes OTP state conditionally; Device uses an atomic primary
+transition; API Token joins token/session expiry and revocation; OIDC consumes
+codes with exact client, redirect and PKCE predicates and retains RS256 signing.
+These changes do not authorize production migration.
 
 The JS bridge forwards native completion through a separate event-owned Promise.
 Before a Wasm generation resets, invalidate clears its resolve/reject references
@@ -109,3 +113,21 @@ permit packaging while every existing `publish = false` setting remains intact.
 This proves archive self-containment, not registry availability or publication
 readiness for those private crates. Packaging uses isolated inputs and leaves the
 repository lockfile unchanged.
+
+## Complete-method qualification
+
+The isolated `lenso-workers-auth-complete-proof` deployment
+`ff78dedc-5803-4679-b6d0-3c9ded68f95a` passed 117 recorded checks: 36 method flows,
+22 method failures/expiry/storage checks, and 59 Account/OAuth/Web Session
+regressions. Existing native PostgreSQL suites passed 33 tests for the five added
+owners. Receipts are under `experiments/workers-g4/evidence/`. SMS delivery and
+upstream identity providers are controlled fixtures; this does not qualify an
+external vendor. OIDC RS256 signatures and API Token target assertions are checked
+independently by Node crypto.
+
+`workers/check-packages.py` now covers all seven storage owners. An unpublished
+Runtime cohort can be supplied using `RUNTIME_ARCHIVES` (OS path-separated actual
+`.crate` archives); every resolved non-registry dependency must be extracted under
+the isolated proof directory. Package versions do not imply registry publication.
+The shared `createEventScope` now owns binding settlement and callback fencing;
+D1 adapters no longer compose their own cleanup hooks.

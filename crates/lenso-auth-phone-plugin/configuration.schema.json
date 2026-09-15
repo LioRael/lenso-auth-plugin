@@ -3,28 +3,86 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema", "database_url_secret", "otp_secret_ref", "environment",
-    "return_debug_code", "set_password_callers", "audience", "otp_code_length",
-    "otp_ttl_seconds", "resend_cooldown_seconds", "otp_max_attempts",
-    "start_window_seconds", "max_starts_per_ip", "max_password_failures",
-    "password_failure_window_seconds", "session_ttl_seconds"
+    "schema",
+    "otp_secret_ref",
+    "environment",
+    "return_debug_code",
+    "set_password_callers",
+    "audience",
+    "otp_code_length",
+    "otp_ttl_seconds",
+    "resend_cooldown_seconds",
+    "otp_max_attempts",
+    "start_window_seconds",
+    "max_starts_per_ip",
+    "max_password_failures",
+    "password_failure_window_seconds",
+    "session_ttl_seconds"
   ],
   "properties": {
-    "schema": { "type": "string" },
-    "database_url_secret": { "type": "string" },
-    "otp_secret_ref": { "type": "string" },
-    "environment": { "enum": ["development", "production"] },
-    "return_debug_code": { "type": "boolean" },
-    "set_password_callers": { "type": "array", "items": { "type": "string" } },
-    "audience": { "type": "array", "items": { "type": "string" } },
-    "otp_code_length": { "type": "integer" },
-    "otp_ttl_seconds": { "type": "integer" },
-    "resend_cooldown_seconds": { "type": "integer" },
-    "otp_max_attempts": { "type": "integer" },
-    "start_window_seconds": { "type": "integer" },
-    "max_starts_per_ip": { "type": "integer" },
-    "max_password_failures": { "type": "integer" },
-    "password_failure_window_seconds": { "type": "integer" },
-    "session_ttl_seconds": { "type": "integer" }
+    "schema": {
+      "type": "string"
+    },
+    "database_url_secret": {
+      "type": "string",
+      "default": "",
+      "maxLength": 256
+    },
+    "otp_secret_ref": {
+      "type": "string"
+    },
+    "environment": {
+      "enum": [
+        "development",
+        "production"
+      ]
+    },
+    "return_debug_code": {
+      "type": "boolean"
+    },
+    "set_password_callers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "otp_code_length": {
+      "type": "integer"
+    },
+    "otp_ttl_seconds": {
+      "type": "integer"
+    },
+    "resend_cooldown_seconds": {
+      "type": "integer"
+    },
+    "otp_max_attempts": {
+      "type": "integer"
+    },
+    "start_window_seconds": {
+      "type": "integer"
+    },
+    "max_starts_per_ip": {
+      "type": "integer"
+    },
+    "max_password_failures": {
+      "type": "integer"
+    },
+    "password_failure_window_seconds": {
+      "type": "integer"
+    },
+    "session_ttl_seconds": {
+      "type": "integer"
+    },
+    "d1_binding": {
+      "type": "string",
+      "default": "",
+      "maxLength": 128
+    }
   }
 }

@@ -1,1 +1,12 @@
-{"name":"lenso-workers-g4-proof","private":true,"type":"module","devDependencies":{"wrangler":"4.107.0"}}
+{
+  "name": "lenso-workers-g4-proof",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "4.107.0"
+  },
+  "dependencies": {
+    "@lenso/workers-runtime": "0.1.0",
+    "@lenso/http-egress-workers": "0.1.0"
+  }
+}

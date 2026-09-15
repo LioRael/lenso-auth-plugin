@@ -16,8 +16,14 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 CARGO = shlex.split(os.environ.get("CARGO", "cargo"))
-CAPABILITIES = ("account-admin", "auth-delegation", "oauth-flow")
-OWNERS = {"account": ("account-admin", "auth-delegation"), "oauth-flow": ("oauth-flow",)}
+OWNERS = {
+    "account": ("account-admin", "auth-delegation"), "oauth-flow": ("oauth-flow",),
+    "password": ("credential-issuer", "identity-directory", "password-auth"),
+    "phone": ("credential-issuer", "identity-directory", "phone-auth", "sms-delivery"),
+    "device": ("device-auth",), "api-token": ("auth",),
+    "oidc": ("credential-issuer", "identity-directory", "oidc-provider"),
+}
+CAPABILITIES = tuple(sorted({name for dependencies in OWNERS.values() for name in dependencies}))
 
 
 def cargo(*args, capture=False):
@@ -40,6 +46,14 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
     extracted = task / "extracted"
     extracted.mkdir()
     versions = {}
+    runtime_packages = {}
+    # Optional unpublished Runtime cohort, supplied as real archives, never source paths.
+    for archive in filter(None, os.environ.get("RUNTIME_ARCHIVES", "").split(os.pathsep)):
+        with tarfile.open(archive) as packed:
+            packed.extractall(extracted, filter="data")
+        directory = extracted / Path(archive).name.removesuffix(".crate")
+        name = tomllib.loads((directory / "Cargo.toml").read_text())["package"]["name"]
+        runtime_packages[name] = directory
 
     def package(name, config=None):
         manifest = staging / "crates" / name / "Cargo.toml"
@@ -60,7 +74,8 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         config.write_text("[patch.crates-io]\n" + "".join(
             f'lenso-capability-{name} = {{ path = {json.dumps(str(capabilities[name]))} }}\n'
             for name in dependencies
-        ))
+        ) + "".join(f'{name} = {{ path = {json.dumps(str(directory))} }}\n'
+                    for name, directory in runtime_packages.items()))
         name = f"lenso-auth-{owner}-plugin"
         directory = package(name, config)
         assert (directory / "src/workers.rs").read_bytes() == (ROOT / "workers/d1.rs").read_bytes()

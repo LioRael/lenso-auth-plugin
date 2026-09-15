@@ -19,7 +19,7 @@ impl fmt::Debug for D1Binding {
 }
 impl D1Binding {
     /// `batch` accepts JSON statements and returns a Promise of JSON results.
-    /// Use Auth-owned `createD1StorageScope().bind(database)` and wire its finalizers.
+    /// Use Auth-owned `createD1Binding(database, event_scope)` with the shared event scope.
     pub fn new(name: impl Into<Rc<str>>, batch: js_sys::Function) -> Self {
         Self {
             name: name.into(),
@@ -62,10 +62,15 @@ pub(crate) struct BatchResult {
     pub success: bool,
     #[serde(default)]
     pub results: Vec<Value>,
+    #[allow(
+        dead_code,
+        reason = "Shared wire metadata is used only by mutation owners"
+    )]
     pub meta: Meta,
 }
 #[derive(Debug, Deserialize)]
 pub(crate) struct Meta {
+    #[allow(dead_code, reason = "Not every owner reads mutation counts")]
     pub changes: u64,
 }
 pub(crate) fn field<T: serde::de::DeserializeOwned>(row: &Value, name: &str) -> Result<T, ()> {
@@ -84,6 +89,10 @@ pub(crate) fn timestamp(value: time::OffsetDateTime) -> Value {
         v.nanosecond()
     ))
 }
+#[allow(
+    dead_code,
+    reason = "Only owners with timestamp projections call this shared helper"
+)]
 pub(crate) fn decode_time(row: &Value, name: &str) -> Result<time::OffsetDateTime, ()> {
     let text: String = field(row, name)?;
     time::OffsetDateTime::parse(&text, &time::format_description::well_known::Rfc3339)

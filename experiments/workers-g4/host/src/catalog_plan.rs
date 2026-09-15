@@ -48,6 +48,10 @@ pub(super) fn resolve(
             "lenso.http-egress" => {
                 lenso_http_egress_plugin::HttpEgressEventFactory::plugin_descriptor()
             }
+            package if methods::descriptor(package).is_some() => {
+                serde_json::from_str(methods::descriptor(package).unwrap())
+                    .map_err(|e| e.to_string())?
+            }
             _ => {
                 let source = if i.package_id() == "proof.caller" {
                     instances
@@ -76,14 +80,21 @@ pub(super) fn resolve(
             ),
         );
     }
-    let mut host_bindings: Vec<_> = bindings
-        .iter()
-        .map(|b| {
-            HostBinding::to_instance(
-                ids[b.consumer_instance()].clone(),
-                b.capability_id(),
-                ids[b.provider_instance()].clone(),
-            )
+    let mut attachments = BTreeMap::<_, Vec<_>>::new();
+    for binding in &bindings {
+        attachments
+            .entry((binding.consumer_instance(), binding.capability_id()))
+            .or_default()
+            .push(ids[binding.provider_instance()].clone());
+    }
+    let mut host_bindings: Vec<_> = attachments
+        .into_iter()
+        .map(|((consumer, capability), providers)| {
+            if providers.len() == 1 {
+                HostBinding::to_instance(ids[consumer].clone(), capability, providers[0].clone())
+            } else {
+                HostBinding::to_instances(ids[consumer].clone(), capability, providers)
+            }
         })
         .collect();
     host_bindings.push(HostBinding::to_instance(

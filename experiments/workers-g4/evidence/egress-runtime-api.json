@@ -1,0 +1,12 @@
+{
+  "passed": 5,
+  "checks": [
+    "actual WebSession starts pending-egress qualification",
+    "controlled IdP provides a valid callback before abandonment",
+    "pending actual OIDC Fetch fails with generation abandonment",
+    "native Fetch started and owner finalizer aborted its signal",
+    "fresh Account Router graph is healthy after late IdP completion"
+  ],
+  "scope": "actual controlled OIDC Fetch; external IdP remains unqualified",
+  "deployment_version": "ff78dedc-5803-4679-b6d0-3c9ded68f95a"
+}
