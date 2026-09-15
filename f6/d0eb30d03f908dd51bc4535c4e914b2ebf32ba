@@ -1,0 +1,31 @@
+.github/workflows/ci.yml
+  s_3724267b9ee00e::t_c9a3ef6930e0ae 38-39,57
+Cargo.lock
+  s_3724267b9ee00e::t_81aa8390766061 1048,1050,1586,1588,1790,1792,1800-1802,1816-1818,1848,1850,1878-1879
+Cargo.toml
+  s_3724267b9ee00e::t_2dbe858bc03953 59
+experiments/workers-g4/Cargo.lock
+  s_3724267b9ee00e::t_0b13bbb62634fc 826,828,1188-1189,1203-1204,1221-1222,1233-1234,1352-1353,1413-1415,1447-1449,1463-1465,1484-1485,1499-1501,1524-1525
+experiments/workers-g4/Cargo.toml
+  s_3724267b9ee00e::t_77af939b653b96 7
+experiments/workers-g4/host/Cargo.toml
+  s_3724267b9ee00e::t_f41b9f6e210deb 38-39
+workers/package-lock.json
+  s_3724267b9ee00e::t_64f0f62d743d51 1-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f6d0eb30d03f908dd51bc4535c4e914b2ebf32ba",
+  "prompts": {},
+  "sessions": {
+    "s_3724267b9ee00e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09863-bdc5-7501-9f17-8276e89fcd6d",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
