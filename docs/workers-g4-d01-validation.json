@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "task": "D01",
+  "status": "passed",
+  "git_head": "a5bc01a2120ec46cd3ad5e0ebe31df7fc5ba90b8",
+  "recorded_at": "2026-09-15T15:13:34.555Z",
+  "runtime_receipt_sha256": "8fda3c6a4231d2d2c6e323bf1bc1de710750958987615621bde4ef8ec04436af",
+  "checks": [
+    {
+      "name": "focused_js_and_egress",
+      "status": "passed",
+      "tests": 10
+    },
+    {
+      "name": "focused_python",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "name": "workers_release_build",
+      "status": "passed"
+    },
+    {
+      "name": "matrix_execution",
+      "status": "passed",
+      "scenarios": 14,
+      "samples": 370
+    },
+    {
+      "name": "strict_matrix_acceptance",
+      "status": "passed",
+      "argv": [
+        "python3",
+        "experiments/workers-g4/check-profile.py",
+        "docs/workers-g4-d01.raw.json.gz"
+      ]
+    },
+    {
+      "name": "credential_evidence_scan",
+      "status": "passed",
+      "forbidden_values": [
+        "private_key_pem",
+        "argon2id_hash",
+        "bearer_credential"
+      ]
+    }
+  ],
+  "cleanup": {
+    "resources_removed": true,
+    "processes_disposed": true
+  },
+  "claim_boundary": "Local serial workerd characterization only; no CPU, production capacity, SLA, cloud cost or external IdP claim."
+}

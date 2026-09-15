@@ -89,3 +89,11 @@ This is build tooling for Auth's private transport, with no new shared SQL,
 migration, or public Capability contract. `workers/check-packages.py` runs the
 generation check, then compiles actual extracted archives with workers enabled
 and verifies every non-registry dependency is also an extracted archive.
+
+## Separate local Workers matrix
+
+[D01 G4 characterization](workers-g4-d01.md) defines external end-to-end wall
+measurements for cold/warm Ready, real password login, token and OIDC operations,
+and failure recovery, with Wasm memory and D1 observations. The local matrix
+completed all 370 serial samples and passed its strict receipt validator. It
+makes no Workers CPU or production-capacity claim.

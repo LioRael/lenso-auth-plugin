@@ -210,7 +210,7 @@ pub(super) fn registry(
 }
 
 #[derive(Clone, Debug)]
-struct Sms;
+pub(super) struct Sms;
 impl NativePluginFactory for Sms {
     fn package_id(&self) -> &'static str {
         "proof.sms"
