@@ -4,7 +4,7 @@
   "status": "passed",
   "git_head": "a5bc01a2120ec46cd3ad5e0ebe31df7fc5ba90b8",
   "recorded_at": "2026-09-15T15:13:34.555Z",
-  "runtime_receipt_sha256": "68749b33c3a1cae993417031cfeefca76b3e31ef680a6482dcc4f7e3f4ab5891",
+  "runtime_receipt_sha256": "8fda3c6a4231d2d2c6e323bf1bc1de710750958987615621bde4ef8ec04436af",
   "checks": [
     {
       "name": "focused_js_and_egress",
@@ -32,7 +32,7 @@
       "argv": [
         "python3",
         "experiments/workers-g4/check-profile.py",
-        "docs/workers-g4-d01.json"
+        "docs/workers-g4-d01.raw.json.gz"
       ]
     },
     {

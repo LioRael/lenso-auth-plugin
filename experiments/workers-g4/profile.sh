@@ -19,5 +19,5 @@ node "$root/node_modules/@lenso/workers-runtime/build.mjs" \
   --manifest "$root/Cargo.toml" --package lenso-workers-g4-host --out-dir "$profile_tmp/pkg"
 node --test "$root/profile.test.mjs" "$root/egress-scope.test.mjs"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/test-profile.py"
-G4_PROFILE_ARTIFACT_DIR="$profile_tmp/pkg" node "$root/profile.mjs" "${1:-$root/../../docs/workers-g4-d01.json}"
-python3 "$root/check-profile.py" "${1:-$root/../../docs/workers-g4-d01.json}"
+G4_PROFILE_ARTIFACT_DIR="$profile_tmp/pkg" node "$root/profile.mjs" "${1:-$root/../../docs/workers-g4-d01.raw.json.gz}"
+python3 "$root/check-profile.py" "${1:-$root/../../docs/workers-g4-d01.raw.json.gz}"

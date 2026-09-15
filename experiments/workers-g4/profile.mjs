@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { gzipSync } from 'node:zlib';
 import { cpus, platform, arch, release, totalmem, tmpdir } from 'node:os';
 import { mkdtemp, readFile, writeFile, rm, copyFile, realpath } from 'node:fs/promises';
 import { resolve, dirname, relative } from 'node:path';
@@ -240,7 +241,8 @@ try {
     row.wasm_observed_max_bytes = row.sample_count ? Math.max(...row.samples.flatMap(s => s.memory.map(m => m.bytes))) : null;
   }
   evidence.finished_at = new Date().toISOString();
-  await writeFile(output, `${JSON.stringify(evidence, null, 2)}\n`);
+  const serialized = `${JSON.stringify(evidence, null, 2)}\n`;
+  await writeFile(output, output.endsWith('.gz') ? gzipSync(serialized, { level: 9, mtime: 0 }) : serialized);
   console.log(`D01 ${evidence.status}: ${relative(repo, output)}`);
   process.off('SIGINT', stop); process.off('SIGTERM', stop);
 }

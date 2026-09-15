@@ -4,7 +4,7 @@
 
 The complete 14-scenario G4 matrix ran on 2026-09-15 with **370 serial samples** against the real release Wasm bundle in Miniflare/workerd. The strict receipt checker passed. This is a local characterization of the Worker adaptation path; it is not a cloud capacity or SLA result.
 
-- [Machine-readable receipt](workers-g4-d01.json)
+- [Compressed machine-readable receipt](workers-g4-d01.raw.json.gz)
 - [Validation receipt](workers-g4-d01-validation.json)
 - Base commit: `a5bc01a2120ec46cd3ad5e0ebe31df7fc5ba90b8`
 - Node v26.8.2; workerd 1.20260701.1; Miniflare 4.20260701.0

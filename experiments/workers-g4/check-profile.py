@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Validate D01 receipts; incomplete evidence never passes the default gate."""
 import argparse
+import gzip
 import json
 import math
 from pathlib import Path
@@ -105,5 +106,6 @@ if __name__ == '__main__':
     parser.add_argument('evidence', type=Path)
     parser.add_argument('--allow-incomplete', action='store_true', help='Audit incomplete receipt structure only; not an acceptance pass')
     args = parser.parse_args()
-    validate(json.loads(args.evidence.read_text()), args.allow_incomplete)
+    raw = gzip.decompress(args.evidence.read_bytes()).decode() if args.evidence.suffix == '.gz' else args.evidence.read_text()
+    validate(json.loads(raw), args.allow_incomplete)
     print('D01 receipt structure valid' if args.allow_incomplete else 'D01 matrix passed')
