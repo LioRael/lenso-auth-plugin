@@ -9,16 +9,24 @@ repository.workspace = true
 plugin-id = "lenso.auth.device"
 root-slot = "identity-devices"
 
+[features]
+default = ["postgres"]
+postgres = ["dep:sqlx", "dep:lenso-postgres-kit"]
+workers = ["dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "time/wasm-bindgen"]
+
 [dependencies]
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 lenso.workspace = true
-lenso-capability-device-auth = { path = "../lenso-capability-device-auth" }
+lenso-capability-device-auth = { path = "../lenso-capability-device-auth", version = "0.1.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
-lenso-postgres-kit.workspace = true
+lenso-postgres-kit = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
 time.workspace = true
 zeroize.workspace = true

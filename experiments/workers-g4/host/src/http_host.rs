@@ -125,19 +125,23 @@ pub async fn handle_http(input: String, scope: JsValue) -> Result<String, JsValu
     }
     let signing = text(&scope, "signing")?;
     let origin = text(&scope, "origin")?;
-    lenso_auth_router_plugin::__lenso_link_auth_router_plugin();
-    lenso_auth_web_session_plugin::__lenso_link_auth_web_session_plugin();
-    lenso_auth_oidc_client_plugin::__lenso_link_oidc_client_plugin();
+    lenso_auth_router_plugin::link_plugin();
+    lenso_auth_web_session_plugin::link_plugin();
+    lenso_auth_oidc_client_plugin::link_plugin();
     let ingress = WebIngressEventFactory::new();
+    lenso_auth_account_plugin::link_plugin();
+    lenso_auth_oauth_flow_plugin::link_plugin();
     let registry = NativePluginRegistry::new()
-        .with_factory(lenso_auth_account_plugin::workers_factory(
+        .with_factory_override(lenso_auth_account_plugin::workers_factory(
             "ACCOUNT_DB",
             property(&scope, "accountBatch")?.dyn_into().map_err(err)?,
         ))
-        .with_factory(lenso_auth_oauth_flow_plugin::workers_factory(
+        .map_err(err)?
+        .with_factory_override(lenso_auth_oauth_flow_plugin::workers_factory(
             "OAUTH_DB",
             property(&scope, "oauthBatch")?.dyn_into().map_err(err)?,
         ))
+        .map_err(err)?
         .with_factory(ingress.clone())
         .with_factory(HttpEgressEventFactory::from_js(
             property(&scope, "httpFetch")?.dyn_into().map_err(err)?,
@@ -154,7 +158,7 @@ pub async fn handle_http(input: String, scope: JsValue) -> Result<String, JsValu
     let _event = EventGuard(driver.clone());
     let token = CancellationToken::new();
     let _cancel = CancellationGuard::new(scope, token.clone());
-    let app = Kernel::start_native(plan(&signing, Some(&origin))?, driver, registry)
+    let app = Kernel::start_native(plan(&signing, Some(&origin), None)?, driver, registry)
         .await
         .map_err(|e| JsValue::from_str(&format!("startup: {e:?}")))?;
     let response = ingress.handle(request, token).await;

@@ -344,50 +344,16 @@ pub fn workers_factory(
     binding_name: impl Into<Rc<str>>,
     batch: js_sys::Function,
 ) -> impl lenso_native_adapter::NativePluginFactory {
-    WorkersFactory(workers::D1Binding::new(binding_name, batch))
-}
-#[cfg(feature = "workers")]
-#[derive(Debug)]
-struct WorkersFactory(workers::D1Binding);
-#[cfg(feature = "workers")]
-impl lenso_native_adapter::NativePluginFactory for WorkersFactory {
-    fn package_id(&self) -> &'static str {
-        PACKAGE_ID
-    }
-    fn package_version(&self) -> &'static str {
-        PACKAGE_VERSION
-    }
-    fn instantiate(
-        &self,
-        context: lenso_native_adapter::NativePluginFactoryContext<'_>,
-    ) -> Result<lenso_native_adapter::NativePluginInstance, RuntimeFailure> {
-        let mut value = OAuthFlowPlugin::__lenso_construct(context)?;
-        if value.config.d1_binding != self.0.name() {
+    let binding = workers::D1Binding::new(binding_name, batch);
+    lenso_native_adapter::ConfiguredPluginFactory::<OAuthFlowPlugin, _>::new(move |value| {
+        if value.config.d1_binding != binding.name() {
             return Err(RuntimeFailure::InvalidResolvedPlan {
                 detail: "Auth factory requires its exact configured D1 binding".to_owned(),
             });
         }
-        value.d1 = Some(self.0.clone());
-        let plugin = Rc::new(value);
-        let lifecycle = __LensoLifecycleOAuthFlowPlugin {
-            plugin: plugin.clone(),
-        };
-        let mut requests = Vec::new();
-        let mut streams = Vec::new();
-        let mut events = Vec::new();
-        let (r, s, e) = oauth_flow::__lenso_native_endpoints_oauth_flow!(
-            plugin.as_ref().clone(),
-            lenso::__private
-        );
-        requests.extend(r);
-        streams.extend(s);
-        events.extend(e);
-        Ok(
-            lenso_native_adapter::NativePluginInstance::with_all_endpoints(
-                requests, streams, events, lifecycle,
-            ),
-        )
-    }
+        value.d1 = Some(binding.clone());
+        Ok(())
+    })
 }
 
 #[cfg(feature = "workers")]

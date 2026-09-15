@@ -1179,8 +1179,10 @@ version = "0.1.0"
 dependencies = [
  "base64",
  "futures",
+ "getrandom 0.2.17",
  "getrandom 0.4.3",
  "hmac 0.12.1",
+ "js-sys",
  "lenso",
  "lenso-app-plan",
  "lenso-auth-sdk",
@@ -1197,6 +1199,8 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "zeroize",
 ]
 
@@ -1204,6 +1208,7 @@ dependencies = [
 name = "lenso-auth-device-plugin"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "lenso",
  "lenso-capability-device-auth",
  "lenso-capability-secrets",
@@ -1216,6 +1221,8 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "zeroize",
 ]
 
@@ -1303,8 +1310,10 @@ name = "lenso-auth-oidc-plugin"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "getrandom 0.2.17",
  "getrandom 0.4.3",
  "hmac 0.12.1",
+ "js-sys",
  "jsonwebtoken",
  "lenso",
  "lenso-capability-credential-issuer",
@@ -1321,6 +1330,8 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "zeroize",
 ]
 
@@ -1330,6 +1341,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "getrandom 0.4.3",
+ "js-sys",
  "lenso",
  "lenso-capability-credential-issuer",
  "lenso-capability-identity-directory",
@@ -1344,6 +1356,8 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "zeroize",
 ]
 
@@ -1355,6 +1369,7 @@ dependencies = [
  "base64",
  "getrandom 0.4.3",
  "hmac 0.12.1",
+ "js-sys",
  "lenso",
  "lenso-capability-credential-issuer",
  "lenso-capability-identity-directory",
@@ -1371,6 +1386,8 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "zeroize",
 ]
 
@@ -1781,8 +1798,7 @@ dependencies = [
 [[package]]
 name = "lenso-native-adapter"
 version = "0.3.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e86e544821007fe7cc687126e7088600bf5e1f7fe8ca627a9c6f56da4bfcdac"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
 dependencies = [
  "futures",
  "inventory",
@@ -1797,8 +1813,7 @@ dependencies = [
 [[package]]
 name = "lenso-native-adapter-macros"
 version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "556c77b2384c98892bad05f70170b629f25914825807a853d0c803d35d7f0330"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1858,8 +1873,7 @@ dependencies = [
 [[package]]
 name = "lenso-runtime-codec"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1890cbb0b2cd544d4d412fc1330ad6a0760bb2b16b6ac46e26a50f6a98c910b7"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
 dependencies = [
  "futures",
  "hex",

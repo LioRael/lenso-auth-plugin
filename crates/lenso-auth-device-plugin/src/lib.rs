@@ -1,6 +1,11 @@
 //! Durable device observations and trust facts.
+#[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
+mod storage;
+#[cfg(feature = "workers")]
+pub mod workers;
 
 use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
 use lenso_capability_device_auth as device;
@@ -10,17 +15,24 @@ use lenso_capability_device_auth::{
     SetTrustError, SetTrustRequest, SetTrustResponse,
 };
 use lenso_capability_secrets as secrets;
+#[cfg(feature = "postgres")]
 use lenso_capability_secrets::{ResolveRequest, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
+#[cfg(feature = "postgres")]
 pub use operator::{DeviceAuthOperator, DeviceOperatorError};
+#[cfg(feature = "postgres")]
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
-use sqlx::Row;
-use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
+#[cfg(feature = "postgres")]
+use std::time::Duration as StdDuration;
+use std::{cell::RefCell, fmt, rc::Rc};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+#[cfg(feature = "postgres")]
 use zeroize::Zeroizing;
 
+#[cfg(feature = "postgres")]
 const DEPENDENCY_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,7 +45,12 @@ enum SetTrustOutcome {
 #[serde(deny_unknown_fields)]
 pub struct DeviceAuthConfig {
     schema: String,
+    #[serde(default)]
+    #[lenso(default = "")]
     database_url_secret: String,
+    #[serde(default)]
+    #[lenso(default = "")]
+    d1_binding: String,
 }
 impl DeviceAuthConfig {
     pub fn new(
@@ -43,21 +60,39 @@ impl DeviceAuthConfig {
         let value = Self {
             schema: schema.into(),
             database_url_secret: database_url_secret.into(),
+            d1_binding: String::new(),
         };
-        schema_plan(value.schema.clone()).map_err(|error| RuntimeFailure::InvalidResolvedPlan {
-            detail: error.to_string(),
-        })?;
-        if value.database_url_secret.is_empty() {
-            return Err(RuntimeFailure::InvalidResolvedPlan {
-                detail: "device database secret reference is empty".to_owned(),
-            });
-        }
+        validate_config(&value)?;
         Ok(value)
     }
 }
 
 fn validate_config(config: &DeviceAuthConfig) -> Result<(), RuntimeFailure> {
-    DeviceAuthConfig::new(config.schema.clone(), config.database_url_secret.clone()).map(|_| ())
+    let valid_name = |value: &str| {
+        !value.is_empty()
+            && value.len() <= 63
+            && value.bytes().enumerate().all(|(index, byte)| {
+                byte.is_ascii_lowercase() || (index > 0 && (byte.is_ascii_digit() || byte == b'_'))
+            })
+    };
+    if !valid_name(&config.schema)
+        || matches!(config.schema.as_str(), "public" | "information_schema")
+        || config.schema.starts_with("pg_")
+        || config.database_url_secret.len() > 256
+        || (config.d1_binding.is_empty() && config.database_url_secret.is_empty())
+        || (!config.d1_binding.is_empty()
+            && (!config.database_url_secret.is_empty()
+                || config.d1_binding.len() > 128
+                || !config
+                    .d1_binding
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')))
+    {
+        return Err(RuntimeFailure::InvalidResolvedPlan {
+            detail: "invalid Device Auth storage configuration".into(),
+        });
+    }
+    Ok(())
 }
 
 #[lenso::plugin(lifecycle, validate = validate_config)]
@@ -66,7 +101,9 @@ struct DeviceAuthPlugin {
     #[config]
     config: DeviceAuthConfig,
     secrets: Port<secrets::SecretsClient>,
-    state: Rc<RefCell<Option<OwnedPostgres>>>,
+    state: Rc<RefCell<Option<storage::DeviceStore>>>,
+    #[allow(dead_code)]
+    d1: EventStorageBinding,
 }
 #[allow(clippy::missing_fields_in_debug)]
 impl fmt::Debug for DeviceAuthPlugin {
@@ -77,7 +114,7 @@ impl fmt::Debug for DeviceAuthPlugin {
     }
 }
 impl DeviceAuthPlugin {
-    fn postgres(&self) -> Result<OwnedPostgres, RuntimeFailure> {
+    fn store(&self) -> Result<storage::DeviceStore, RuntimeFailure> {
         self.state
             .borrow()
             .clone()
@@ -93,21 +130,16 @@ impl DeviceProvider for DeviceAuthPlugin {
         _context: InvocationContext,
         request: ObserveRequest,
     ) -> NativeRequestFuture<DeviceObserve> {
-        let postgres = self.postgres();
+        let store = self.store();
         Box::pin(async move {
-            let postgres = postgres?;
+            let store = store?;
             if !valid(&request.subject) {
                 return Ok(Err(ObserveError::InvalidSubject));
             }
             if !valid(&request.device_id) {
                 return Ok(Err(ObserveError::InvalidDevice));
             }
-            let row=sqlx::query("INSERT INTO auth_devices(subject_id,device_id,last_seen_ip,last_seen_user_agent) VALUES($1,$2,$3,$4) ON CONFLICT(subject_id,device_id) DO UPDATE SET last_seen_ip=EXCLUDED.last_seen_ip,last_seen_user_agent=EXCLUDED.last_seen_user_agent,updated_at=transaction_timestamp() RETURNING (created_at=updated_at) AS created,trusted_at IS NOT NULL AS trusted").bind(&request.subject).bind(&request.device_id).bind(&request.client_ip).bind(&request.user_agent).fetch_one(postgres.pool()).await.map_err(db)?;
-            Ok(Ok(ObserveResponse {
-                device_id: request.device_id,
-                created: row.try_get("created").map_err(db)?,
-                trusted: row.try_get("trusted").map_err(db)?,
-            }))
+            store.observe(request).await.map(Ok)
         })
     }
     fn list(
@@ -115,32 +147,16 @@ impl DeviceProvider for DeviceAuthPlugin {
         _context: InvocationContext,
         request: ListRequest,
     ) -> NativeRequestFuture<DeviceList> {
-        let postgres = self.postgres();
+        let store = self.store();
         Box::pin(async move {
-            let postgres = postgres?;
+            let store = store?;
             if !valid(&request.subject) {
                 return Ok(Err(ListError::InvalidSubject));
             }
-            let rows=sqlx::query("SELECT device_id,trusted_at IS NOT NULL AS trusted,primary_at IS NOT NULL AS primary,last_seen_ip,last_seen_user_agent,updated_at FROM auth_devices WHERE subject_id=$1 ORDER BY updated_at DESC LIMIT 200").bind(&request.subject).fetch_all(postgres.pool()).await.map_err(db)?;
-            let devices = rows
-                .into_iter()
-                .map(|row| -> Result<_, RuntimeFailure> {
-                    let updated: OffsetDateTime = row.try_get("updated_at").map_err(db)?;
-                    Ok(ListResponseDevicesItem {
-                        device_id: row.try_get("device_id").map_err(db)?,
-                        trusted: row.try_get("trusted").map_err(db)?,
-                        primary: row.try_get("primary").map_err(db)?,
-                        last_seen_ip: row.try_get("last_seen_ip").map_err(db)?,
-                        last_seen_user_agent: row.try_get("last_seen_user_agent").map_err(db)?,
-                        updated_at: updated.format(&Rfc3339).map_err(|error| {
-                            RuntimeFailure::PluginFailure {
-                                detail: error.to_string(),
-                            }
-                        })?,
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Ok(ListResponse { devices }))
+            store
+                .list(&request.subject)
+                .await
+                .map(|devices| Ok(ListResponse { devices }))
         })
     }
     fn set_trust(
@@ -148,16 +164,16 @@ impl DeviceProvider for DeviceAuthPlugin {
         _context: InvocationContext,
         request: SetTrustRequest,
     ) -> NativeRequestFuture<DeviceSetTrust> {
-        let postgres = self.postgres();
+        let store = self.store();
         Box::pin(async move {
-            let postgres = postgres?;
+            let store = store?;
             if !valid(&request.subject) {
                 return Ok(Err(SetTrustError::InvalidSubject));
             }
             if !valid(&request.device_id) {
                 return Ok(Err(SetTrustError::InvalidDevice));
             }
-            if set_device_trust(&postgres, &request).await? == SetTrustOutcome::NotFound {
+            if store.set_trust(&request).await? == SetTrustOutcome::NotFound {
                 return Ok(Err(SetTrustError::NotFound));
             }
             Ok(Ok(SetTrustResponse { changed: true }))
@@ -165,6 +181,7 @@ impl DeviceProvider for DeviceAuthPlugin {
     }
 }
 
+#[cfg(feature = "postgres")]
 async fn set_device_trust(
     postgres: &OwnedPostgres,
     request: &SetTrustRequest,
@@ -208,45 +225,75 @@ async fn set_device_trust(
 impl Lifecycle for DeviceAuthPlugin {
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
-        let state = self.state.clone();
-        let cancellation = context.cancellation();
-        let invocation = context
-            .dependencies()
-            .invocation_context_after(DEPENDENCY_TIMEOUT, cancellation)?;
-        let database_url = self
-            .secrets
-            .resolve_with_context(
-                invocation,
-                ResolveRequest {
-                    reference: config.database_url_secret,
-                },
+        if !config.d1_binding.is_empty() {
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|binding| binding.name() == config.d1_binding)
+                    .ok_or_else(storage::failure)?
+                    .clone();
+                let result = binding.run(vec![workers::statement(
+                    "SELECT version FROM auth_device_schema WHERE version=1 AND fingerprint='a406b7c5c8b3d1f656723dda5a41a912d4f434031fa9dfcf6e6372c0dc128994'", vec![])]).await.map_err(|()| storage::failure())?;
+                if result[0].results.len() != 1 {
+                    return Err(storage::failure());
+                }
+                self.state.replace(Some(storage::DeviceStore::D1(binding)));
+                return Ok(());
+            }
+            #[cfg(not(feature = "workers"))]
+            return Err(storage::failure());
+        }
+        #[cfg(not(feature = "postgres"))]
+        {
+            let _ = context;
+            Err(storage::failure())
+        }
+        #[cfg(feature = "postgres")]
+        {
+            let state = self.state.clone();
+            let cancellation = context.cancellation();
+            let invocation = context
+                .dependencies()
+                .invocation_context_after(DEPENDENCY_TIMEOUT, cancellation)?;
+            let database_url = self
+                .secrets
+                .resolve_with_context(
+                    invocation,
+                    ResolveRequest {
+                        reference: config.database_url_secret,
+                    },
+                )
+                .await
+                .map(|value| Zeroizing::new(value.value))
+                .map_err(|error| match error {
+                    SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
+                        detail: "device database secret was rejected".to_owned(),
+                    },
+                    SecretsInvocationError::Runtime(error) => error,
+                })?;
+            let postgres = OwnedPostgres::prepare(
+                &database_url,
+                schema_plan(config.schema).map_err(|error| {
+                    RuntimeFailure::InvalidResolvedPlan {
+                        detail: error.to_string(),
+                    }
+                })?,
             )
             .await
-            .map(|value| Zeroizing::new(value.value))
-            .map_err(|error| match error {
-                SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
-                    detail: "device database secret was rejected".to_owned(),
-                },
-                SecretsInvocationError::Runtime(error) => error,
-            })?;
-        let postgres = OwnedPostgres::prepare(
-            &database_url,
-            schema_plan(config.schema).map_err(|error| RuntimeFailure::InvalidResolvedPlan {
+            .map_err(|error| RuntimeFailure::PluginFailure {
                 detail: error.to_string(),
-            })?,
-        )
-        .await
-        .map_err(|error| RuntimeFailure::PluginFailure {
-            detail: error.to_string(),
-        })?;
-        state.replace(Some(postgres));
-        Ok(())
+            })?;
+            state.replace(Some(storage::DeviceStore::Postgres(postgres)));
+            Ok(())
+        }
     }
 
     async fn deactivate(&self, _context: DeactivateContext) -> Result<(), RuntimeFailure> {
         let postgres = self.state.borrow_mut().take();
         if let Some(postgres) = postgres {
-            postgres.pool().close().await;
+            postgres.close().await;
         }
         Ok(())
     }
@@ -258,13 +305,14 @@ fn valid(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
 }
+#[cfg(feature = "postgres")]
 fn db(error: impl fmt::Display) -> RuntimeFailure {
     RuntimeFailure::PluginFailure {
         detail: format!("Device Auth storage operation failed: {error}"),
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "postgres"))]
 mod tests {
     use super::*;
 
@@ -380,4 +428,27 @@ mod tests {
         assert_eq!(primary_count, 1);
         cleanup_test_postgres(&database_url, &schema, postgres).await;
     }
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
+
+/// Creates a fresh generated factory with its exact event-owned D1 binding.
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    let binding = workers::D1Binding::new(binding_name, batch);
+    lenso_native_adapter::ConfiguredPluginFactory::<DeviceAuthPlugin, _>::new(move |plugin| {
+        if plugin.config.d1_binding != binding.name() {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail: "Device Auth requires its exact D1 binding".into(),
+            });
+        }
+        plugin.d1 = Some(binding.clone());
+        Ok(())
+    })
 }

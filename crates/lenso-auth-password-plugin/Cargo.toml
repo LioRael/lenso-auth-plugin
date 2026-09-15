@@ -11,7 +11,15 @@ description = "Password registration and login Plugin for Lenso vNext."
 plugin-id = "lenso.auth.password"
 root-slot = "auth-methods"
 
+[features]
+default = ["postgres"]
+postgres = ["dep:sqlx", "dep:lenso-postgres-kit", "tokio/rt"]
+workers = ["dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
+
 [dependencies]
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 lenso.workspace = true
 argon2.workspace = true
 getrandom.workspace = true
@@ -21,13 +29,13 @@ lenso-capability-password-auth = { path = "../lenso-capability-password-auth", v
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
-lenso-postgres-kit.workspace = true
+lenso-postgres-kit = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
 time.workspace = true
-tokio = { version = "1.52", features = ["rt", "sync"] }
+tokio = { version = "1.52", features = ["sync"] }
 zeroize.workspace = true
 
 [dev-dependencies]

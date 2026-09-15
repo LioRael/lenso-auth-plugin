@@ -1,11 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createEgressScope} from './egress-scope.mjs';
-import {createEventHttpFetch} from '../../../../lenso-web/feat-workers-http-parity/crates/lenso-http-egress-plugin/js/event-fetch.mjs';
-import {createEventRunner} from '../../../../lenso-runtime-rust/design-workers-compatibility/experiments/workers-runtime/runner.mjs';
+import {createScopedHttpFetch} from '@lenso/http-egress-workers';
+import {createEventRunner,createEventScope} from '@lenso/workers-runtime';
 const request={url:'https://idp.invalid/token',method:'POST',headers:[],body:new Uint8Array(),limits:{max_response_body_bytes:1024,max_response_head_bytes:1024,request_timeout_millis:1000}};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
-function setup(fetch) {return createEgressScope({createTransport:createEventHttpFetch,fetch,setTimeout,clearTimeout,cleanupTimeoutMs:5})}
+function setup(fetch) {return createEventScope(scope=>({fetch:createScopedHttpFetch(scope,{fetch,setTimeout,clearTimeout})}),{cleanupTimeoutMs:5})}
 test('peer abandonment fences pending Fetch before reset, aborts it, and rejects uncertain cleanup',async()=>{
  let release, signal, callbacks=0, cancelled=0, reset=0;
  const scope=setup((_url,options)=>{signal=options.signal;return new Promise(resolve=>release=resolve)});
@@ -17,9 +16,9 @@ test('peer abandonment fences pending Fetch before reset, aborts it, and rejects
  assert.equal(reset,1);assert.equal(signal.aborted,true);assert.equal(callbacks,0);
  release(new Response(new ReadableStream({cancel(){cancelled++}})));
  await tick();await tick();
- assert.equal(cancelled,1);assert.equal(callbacks,0);assert.equal(await scope.settled(),true);
+ assert.equal(cancelled,1);assert.equal(callbacks,0);assert.equal(await scope.settled(),false);
  assert.equal((await runner.run(()=>'{}')).generation,2);
- await assert.rejects(scope.fetch(request).promise,e=>e.code==='transport_failure');
+ await assert.rejects(scope.fetch(request).promise,/event_scope_closed/);
 });
 test('late rejection is handled without reaching invalidated callbacks',async()=>{
  let reject, callbacks=0;
@@ -27,7 +26,7 @@ test('late rejection is handled without reaching invalidated callbacks',async()=
  scope.fetch(request).promise.then(()=>callbacks++,()=>callbacks++);
  scope.invalidate();scope.abort();assert.equal(await scope.settled(),false);
  reject(new Error('late native rejection'));await tick();
- assert.equal(callbacks,0);assert.equal(await scope.settled(),true);
+ assert.equal(callbacks,0);assert.equal(await scope.settled(),false);
 });
 test('pending body read and reader cancellation remain tracked after transport abort',async()=>{
  let releaseRead, cancelled=0, callbacks=0;const releaseCancel=[];
@@ -40,7 +39,7 @@ test('pending body read and reader cancellation remain tracked after transport a
  await tick();assert.ok(cancelled>1);releaseRead({done:true});releaseCancel[0]();
  assert.equal(await settling,false);
  releaseCancel.forEach(resolve=>resolve());await tick();
- assert.equal(callbacks,0);assert.equal(await scope.settled(),true);
+ assert.equal(callbacks,0);assert.equal(await scope.settled(),false);
 });
 test('normal result passes through and all owner work settles',async()=>{
  const scope=setup(async()=>new Response('hello'));

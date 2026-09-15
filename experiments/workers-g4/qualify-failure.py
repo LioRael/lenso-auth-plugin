@@ -3,6 +3,10 @@
 import base64,hashlib,hmac,json,os,subprocess,urllib.request,urllib.error,uuid
 from transport import opener
 from qualification import URL,KEY,checks,check,call,ok,issue,auth,future
+CONFIG=os.environ.get('G4_CONFIG')
+if not CONFIG:
+ assert URL=='https://lenso-workers-g4-proof.lenso.workers.dev', 'Set G4_CONFIG for a different proof Worker before database fault injection'
+ CONFIG='wrangler.jsonc'
 def probe(fault=None):
  req=urllib.request.Request(URL, json.dumps({'operation':'read_status','request':{'subject':'missing'}}).encode(),headers={'content-type':'application/json','x-proof-key':KEY,'User-Agent':'Lenso-G4-Qualification/1.0',**({'x-proof-fault':fault} if fault else {})})
  try:
@@ -18,7 +22,7 @@ private=json.load(open(os.environ.get('G4_SECRETS','/tmp/lenso-workers-g4-secret
 check('storage failure redacts every configured secret',all(v not in body for v in private.values()))
 check('fresh event recovers after storage failure',probe()[0]==200)
 def sql(command,database='ACCOUNT_DB'):
- result=subprocess.run(['node_modules/.bin/wrangler','d1','execute',database,'--remote','--command',command,'--json'],capture_output=True,text=True)
+ result=subprocess.run(['node_modules/.bin/wrangler','d1','execute',database,'--remote','--config',CONFIG,'--command',command,'--json'],capture_output=True,text=True)
  assert result.returncode==0,'owned D1 operator command';return json.loads(result.stdout)
 try:
  sql("UPDATE auth_account_schema SET fingerprint='g4-intentionally-mismatched' WHERE version=1")

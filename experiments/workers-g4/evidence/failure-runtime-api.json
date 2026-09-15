@@ -1,0 +1,17 @@
+{
+  "passed": 11,
+  "checks": [
+    "forced generation abandonment fails closed",
+    "session persists across generation replacement",
+    "real D1 missing-table failure prevents Ready",
+    "storage failure redacts every configured secret",
+    "fresh event recovers after storage failure",
+    "owned D1 schema mismatch prevents Ready",
+    "restored owned migration record recovers",
+    "identity races left no orphan subjects",
+    "database evidence served by primary",
+    "corrupt encrypted custody fails closed",
+    "decryption failure does not restore consumed state"
+  ],
+  "deployment_version": "ff78dedc-5803-4679-b6d0-3c9ded68f95a"
+}

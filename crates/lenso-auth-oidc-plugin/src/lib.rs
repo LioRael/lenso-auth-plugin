@@ -1,6 +1,11 @@
 //! Protocol-neutral OIDC authorization-code provider with PKCE.
+#[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
+mod storage;
+#[cfg(feature = "workers")]
+pub mod workers;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
@@ -23,11 +28,15 @@ use lenso_capability_oidc_provider::{
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
+#[cfg(feature = "postgres")]
 pub use operator::{OidcOperator, OidcOperatorError};
+#[cfg(feature = "postgres")]
 use schema::schema_plan;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(feature = "postgres")]
 use sqlx::Row;
 use std::{
     cell::RefCell,
@@ -43,7 +52,10 @@ const TIMEOUT: StdDuration = StdDuration::from_secs(10);
 #[serde(deny_unknown_fields)]
 pub struct OidcConfig {
     schema: String,
+    #[serde(default)]
     database_url_secret: String,
+    #[serde(default)]
+    d1_binding: String,
     signing_key_secret: String,
     code_pepper_secret: String,
     issuer: String,
@@ -164,8 +176,29 @@ fn decode_public_component(
 
 impl OidcConfig {
     fn validate(&self) -> Result<(), RuntimeFailure> {
-        schema_plan(self.schema.clone()).map_err(|e| invalid(&e.to_string()))?;
-        if self.database_url_secret.is_empty()
+        if self.schema.is_empty()
+            || self.schema.len() > 63
+            || !self.schema.as_bytes()[0].is_ascii_lowercase()
+            || !self
+                .schema
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || matches!(self.schema.as_str(), "public" | "information_schema")
+            || self.schema.starts_with("pg_")
+        {
+            return Err(invalid("invalid OIDC schema owner"));
+        }
+        if !self.d1_binding.is_empty()
+            && (!self.database_url_secret.is_empty()
+                || self.d1_binding.len() > 128
+                || !self
+                    .d1_binding
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+        {
+            return Err(invalid("invalid OIDC D1 selection"));
+        }
+        if (self.database_url_secret.is_empty() && self.d1_binding.is_empty())
             || self.signing_key_secret.is_empty()
             || self.code_pepper_secret.is_empty()
             || self.database_url_secret == self.signing_key_secret
@@ -181,7 +214,7 @@ impl OidcConfig {
             || self.redirect_uris.is_empty()
             || self.redirect_uris.iter().any(|v| v.contains('#'))
             || self.authorize_callers.is_empty()
-            || self.authorize_callers.iter().any(|v| !valid_name(v))
+            || self.authorize_callers.iter().any(|v| !valid_caller(v))
             || self.audience.is_empty()
             || !(30..=600).contains(&self.code_ttl_seconds)
             || !(1..=86400).contains(&self.token_ttl_seconds)
@@ -196,14 +229,14 @@ fn validate_config(config: &OidcConfig) -> Result<(), RuntimeFailure> {
 }
 #[derive(Clone)]
 struct Prepared {
-    postgres: OwnedPostgres,
+    store: storage::OidcStore,
     signing_key: Rc<EncodingKey>,
     pepper: Zeroizing<Vec<u8>>,
 }
 impl fmt::Debug for Prepared {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Prepared")
-            .field("schema", &self.postgres.schema())
+            .field("storage", &self.store)
             .finish_non_exhaustive()
     }
 }
@@ -227,6 +260,8 @@ impl fmt::Debug for Active {
 struct OidcPlugin {
     #[config]
     config: OidcConfig,
+    #[allow(dead_code)]
+    d1: EventStorageBinding,
     secrets: Port<secrets::SecretsClient>,
     directory: Port<directory::DirectoryClient>,
     issuer: Port<credential_issuer::CredentialIssuerClient>,
@@ -338,7 +373,7 @@ impl OidcProviderProvider for OidcPlugin {
             let digest = code_digest(&a.prepared.pepper, &code)?;
             let expires = OffsetDateTime::now_utc()
                 + Duration::seconds(i64::try_from(a.config.code_ttl_seconds).expect("validated"));
-            sqlx::query("INSERT INTO oidc_authorization_codes(code_digest,subject_id,client_id,redirect_uri,scope,code_challenge,nonce,expires_at)VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(digest).bind(&r.subject).bind(&r.client_id).bind(&r.redirect_uri).bind(&r.scope).bind(&r.code_challenge).bind(&r.nonce).bind(expires).execute(a.prepared.postgres.pool()).await.map_err(db)?;
+            a.prepared.store.insert(&digest, &r, expires).await?;
             Ok(Ok(AuthorizeResponse {
                 code,
                 redirect_uri: r.redirect_uri,
@@ -364,26 +399,14 @@ impl OidcProviderProvider for OidcPlugin {
                 return Ok(Err(ExchangeError::InvalidRequest));
             }
             let digest = code_digest(&a.prepared.pepper, &r.code)?;
-            let mut tx = a.prepared.postgres.pool().begin().await.map_err(db)?;
-            let row=sqlx::query("SELECT subject_id,client_id,redirect_uri,scope,code_challenge,nonce,expires_at,consumed_at IS NOT NULL AS consumed FROM oidc_authorization_codes WHERE code_digest=$1 FOR UPDATE").bind(&digest).fetch_optional(&mut*tx).await.map_err(db)?;
-            let Some(row) = row else {
+            let Some(storage::ConsumedCode {
+                subject,
+                scope,
+                nonce,
+            }) = a.prepared.store.consume(&digest, &r).await?
+            else {
                 return Ok(Err(ExchangeError::InvalidGrant));
             };
-            let expires: OffsetDateTime = row.try_get("expires_at").map_err(db)?;
-            if row.try_get::<bool, _>("consumed").map_err(db)?
-                || expires <= OffsetDateTime::now_utc()
-                || row.try_get::<String, _>("client_id").map_err(db)? != r.client_id
-                || row.try_get::<String, _>("redirect_uri").map_err(db)? != r.redirect_uri
-                || pkce(&r.code_verifier)
-                    != row.try_get::<String, _>("code_challenge").map_err(db)?
-            {
-                return Ok(Err(ExchangeError::InvalidGrant));
-            }
-            sqlx::query("UPDATE oidc_authorization_codes SET consumed_at=transaction_timestamp() WHERE code_digest=$1").bind(&digest).execute(&mut*tx).await.map_err(db)?;
-            tx.commit().await.map_err(db)?;
-            let subject: String = row.try_get("subject_id").map_err(db)?;
-            let scope: String = row.try_get("scope").map_err(db)?;
-            let nonce: Option<String> = row.try_get("nonce").map_err(db)?;
             let token_exp = OffsetDateTime::now_utc()
                 + Duration::seconds(i64::try_from(a.config.token_ttl_seconds).expect("validated"));
             let credential = issuer
@@ -451,23 +474,53 @@ impl Lifecycle for OidcPlugin {
         let deps = context.dependencies().clone();
         let cancel = context.cancellation();
         let prepared = self.prepared.clone();
-        let dbs = resolve(&self.secrets, &deps, cancel.clone(), &c.database_url_secret).await?;
         let pem = resolve(&self.secrets, &deps, cancel.clone(), &c.signing_key_secret).await?;
-        let pepper = resolve(&self.secrets, &deps, cancel, &c.code_pepper_secret).await?;
+        let pepper = resolve(&self.secrets, &deps, cancel.clone(), &c.code_pepper_secret).await?;
         if pepper.len() < 32 {
             return Err(failure("OIDC code pepper must contain at least 32 bytes"));
         }
         let signing = EncodingKey::from_rsa_pem(pem.as_bytes())
             .map_err(|e| failure(&format!("invalid OIDC RSA signing key: {e}")))?;
         verify_signing_key(&signing, &c.jwks, c.key_id.as_deref())?;
-        let postgres = OwnedPostgres::prepare(
-            &dbs,
-            schema_plan(c.schema.clone()).map_err(|e| invalid(&e.to_string()))?,
-        )
-        .await
-        .map_err(|e| failure(&e.to_string()))?;
+        let store = if c.d1_binding.is_empty() {
+            #[cfg(feature = "postgres")]
+            {
+                let dbs = resolve(&self.secrets, &deps, cancel, &c.database_url_secret).await?;
+                let postgres = OwnedPostgres::prepare(
+                    &dbs,
+                    schema_plan(c.schema.clone()).map_err(|e| invalid(&e.to_string()))?,
+                )
+                .await
+                .map_err(|e| failure(&e.to_string()))?;
+
+                storage::OidcStore::Postgres(postgres)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                return Err(failure("OIDC PostgreSQL support disabled"));
+            }
+        } else {
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|binding| binding.name() == c.d1_binding)
+                    .ok_or_else(|| failure("OIDC D1 binding unavailable"))?
+                    .clone();
+                let results=binding.run(vec![workers::statement("SELECT version FROM auth_oidc_schema WHERE version=1 AND fingerprint='908cae7d94fdd122aac9e3813dc12509fca9b86a7cb471d906272b4f465847ce'",vec![])]).await.map_err(|()|failure("OIDC D1 schema unavailable"))?;
+                if results[0].results.len() != 1 {
+                    return Err(failure("OIDC D1 schema mismatch"));
+                }
+                storage::OidcStore::D1(binding)
+            }
+            #[cfg(not(feature = "workers"))]
+            {
+                return Err(failure("OIDC D1 support disabled"));
+            }
+        };
         let prepared_value = Prepared {
-            postgres,
+            store,
             signing_key: Rc::new(signing),
             pepper: Zeroizing::new(pepper.as_bytes().to_vec()),
         };
@@ -484,7 +537,7 @@ impl Lifecycle for OidcPlugin {
         self.active.borrow_mut().take();
         let prepared = self.prepared.borrow_mut().take();
         if let Some(p) = prepared {
-            p.postgres.pool().close().await;
+            p.store.close().await;
         }
         Ok(())
     }
@@ -573,8 +626,36 @@ fn failure(d: &str) -> RuntimeFailure {
     }
 }
 #[allow(clippy::needless_pass_by_value)]
+#[cfg(feature = "postgres")]
 fn db(e: sqlx::Error) -> RuntimeFailure {
     failure(&format!("OIDC storage operation failed: {e}"))
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
+
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    let binding = workers::D1Binding::new(binding_name, batch);
+    lenso_native_adapter::ConfiguredPluginFactory::<OidcPlugin, _>::new(move |plugin| {
+        if plugin.config.d1_binding != binding.name() {
+            return Err(invalid("OIDC requires its exact D1 binding"));
+        }
+        plugin.d1 = Some(binding.clone());
+        Ok(())
+    })
+}
+
+fn valid_caller(value: &str) -> bool {
+    value.split_once('/').map_or_else(
+        || valid_name(value),
+        |(package, instance)| valid_name(package) && valid_name(instance),
+    )
 }
 
 #[cfg(test)]

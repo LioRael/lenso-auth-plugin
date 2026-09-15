@@ -1,8 +1,11 @@
-//! Opaque API-token Auth Plugin with Plugin-owned `PostgreSQL` state.
+//! Opaque API-token Auth Plugin with privately owned persistence.
 
 mod operator;
+#[cfg(feature = "postgres")]
 mod schema;
 mod storage;
+#[cfg(feature = "workers")]
+pub mod workers;
 
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 
@@ -15,6 +18,7 @@ use lenso_capability_auth::{
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+#[cfg(feature = "postgres")]
 use lenso_postgres_kit::OwnedPostgres;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -23,7 +27,9 @@ use zeroize::Zeroizing;
 
 pub use operator::{ApiTokenAuthOperator, AuthOperatorError, IssueApiToken, IssuedApiToken};
 
-use crate::{schema::schema_plan, storage::load_credential};
+#[cfg(feature = "postgres")]
+use crate::schema::schema_plan;
+use crate::storage::load_credential;
 
 /// Package identity for the linked Rust API Token Auth Plugin.
 /// Exact Cargo package version linked into the Host.
@@ -38,7 +44,12 @@ pub struct ApiTokenAuthConfig {
     schema: String,
     issuer: String,
     assertion_public_key: String,
+    #[serde(default)]
+    #[lenso(default = "")]
     database_url_secret: String,
+    #[serde(default)]
+    #[lenso(default = "")]
+    d1_binding: String,
     assertion_signing_key_secret: String,
     token_pepper_secret: String,
     assertion_ttl_seconds: u64,
@@ -60,6 +71,7 @@ impl ApiTokenAuthConfig {
             issuer: issuer.into(),
             assertion_public_key: assertion_public_key.into(),
             database_url_secret: database_url_secret.into(),
+            d1_binding: String::new(),
             assertion_signing_key_secret: assertion_signing_key_secret.into(),
             token_pepper_secret: token_pepper_secret.into(),
             assertion_ttl_seconds,
@@ -81,7 +93,28 @@ impl ApiTokenAuthConfig {
     }
 
     fn validate(&self) -> Result<(), AuthConfigError> {
-        schema_plan(self.schema.clone()).map_err(|_| AuthConfigError::InvalidSchema)?;
+        if self.schema.is_empty()
+            || self.schema.len() > 63
+            || !self.schema.as_bytes()[0].is_ascii_lowercase()
+            || !self
+                .schema
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || matches!(self.schema.as_str(), "public" | "information_schema")
+            || self.schema.starts_with("pg_")
+        {
+            return Err(AuthConfigError::InvalidSchema);
+        }
+        if !self.d1_binding.is_empty()
+            && (!self.database_url_secret.is_empty()
+                || self.d1_binding.len() > 128
+                || !self
+                    .d1_binding
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+        {
+            return Err(AuthConfigError::InvalidSecretReference);
+        }
         if !valid_identity(&self.issuer) {
             return Err(AuthConfigError::InvalidIssuer);
         }
@@ -90,11 +123,17 @@ impl ApiTokenAuthConfig {
             &self.assertion_public_key,
         )
         .map_err(|_| AuthConfigError::InvalidPublicKey)?;
-        for reference in [
+        for (index, reference) in [
             &self.database_url_secret,
             &self.assertion_signing_key_secret,
             &self.token_pepper_secret,
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if reference.is_empty() && !self.d1_binding.is_empty() && index == 0 {
+                continue;
+            }
             if !valid_secret_reference(reference) {
                 return Err(AuthConfigError::InvalidSecretReference);
             }
@@ -117,6 +156,7 @@ impl fmt::Debug for ApiTokenAuthConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ApiTokenAuthConfig")
+            .field("d1_binding", &self.d1_binding)
             .field("schema", &self.schema)
             .field("issuer", &self.issuer)
             .field("assertion_public_key", &self.assertion_public_key)
@@ -162,7 +202,7 @@ fn validate_config(config: &ApiTokenAuthConfig) -> Result<(), RuntimeFailure> {
 
 #[derive(Clone)]
 struct PreparedAuth {
-    postgres: OwnedPostgres,
+    store: storage::ApiTokenStore,
     issuer: ActorAssertionIssuer,
     token_pepper: Zeroizing<Vec<u8>>,
     assertion_ttl: Duration,
@@ -172,7 +212,7 @@ impl fmt::Debug for PreparedAuth {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("PreparedAuth")
-            .field("schema", &self.postgres.schema())
+            .field("storage", &self.store)
             .field("issuer", &self.issuer)
             .field("token_pepper", &"<redacted>")
             .field("assertion_ttl", &self.assertion_ttl)
@@ -187,6 +227,8 @@ struct ApiTokenAuthPlugin {
     config: ApiTokenAuthConfig,
     secrets: Port<secrets::SecretsClient>,
     state: Rc<RefCell<Option<PreparedAuth>>>,
+    #[allow(dead_code)]
+    d1: EventStorageBinding,
 }
 
 #[allow(clippy::missing_fields_in_debug)]
@@ -228,13 +270,6 @@ impl Lifecycle for ApiTokenAuthPlugin {
         let state = self.state.clone();
         let dependencies = context.dependencies().clone();
         let cancellation = context.cancellation();
-        let database_url = resolve_secret(
-            &self.secrets,
-            &dependencies,
-            cancellation.clone(),
-            &config.database_url_secret,
-        )
-        .await?;
         let signing_secret = resolve_secret(
             &self.secrets,
             &dependencies,
@@ -245,7 +280,7 @@ impl Lifecycle for ApiTokenAuthPlugin {
         let token_pepper = resolve_secret(
             &self.secrets,
             &dependencies,
-            cancellation,
+            cancellation.clone(),
             &config.token_pepper_secret,
         )
         .await?;
@@ -261,20 +296,62 @@ impl Lifecycle for ApiTokenAuthPlugin {
                 detail: "configured Auth signing key does not match its public key".to_owned(),
             });
         }
-        let postgres = OwnedPostgres::prepare(
-            &database_url,
-            schema_plan(config.schema.clone()).map_err(|error| {
-                RuntimeFailure::InvalidResolvedPlan {
-                    detail: format!("API Token Auth schema plan is invalid: {error}"),
-                }
-            })?,
-        )
-        .await
-        .map_err(|error| RuntimeFailure::PluginFailure {
-            detail: format!("API Token Auth storage is unavailable: {error}"),
-        })?;
+        let store = if config.d1_binding.is_empty() {
+            #[cfg(feature = "postgres")]
+            {
+                let database_url = resolve_secret(
+                    &self.secrets,
+                    &dependencies,
+                    cancellation.clone(),
+                    &config.database_url_secret,
+                )
+                .await?;
+                let postgres = OwnedPostgres::prepare(
+                    &database_url,
+                    schema_plan(config.schema.clone()).map_err(|error| {
+                        RuntimeFailure::InvalidResolvedPlan {
+                            detail: format!("API Token Auth schema plan is invalid: {error}"),
+                        }
+                    })?,
+                )
+                .await
+                .map_err(|error| RuntimeFailure::PluginFailure {
+                    detail: format!("API Token Auth storage is unavailable: {error}"),
+                })?;
+                storage::ApiTokenStore::Postgres(postgres)
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                return Err(RuntimeFailure::PluginFailure {
+                    detail: "API Token PostgreSQL support disabled".into(),
+                });
+            }
+        } else {
+            #[cfg(feature = "workers")]
+            {
+                let binding = self
+                    .d1
+                    .as_ref()
+                    .filter(|binding| binding.name() == config.d1_binding)
+                    .ok_or_else(|| RuntimeFailure::PluginFailure {
+                        detail: "API Token D1 binding unavailable".into(),
+                    })?
+                    .clone();
+                storage::ApiTokenStore::prepare_workers(binding)
+                    .await
+                    .map_err(|_| RuntimeFailure::PluginFailure {
+                        detail: "API Token D1 schema unavailable".into(),
+                    })?
+            }
+            #[cfg(not(feature = "workers"))]
+            {
+                return Err(RuntimeFailure::PluginFailure {
+                    detail: "API Token D1 support disabled".into(),
+                });
+            }
+        };
         state.replace(Some(PreparedAuth {
-            postgres,
+            store,
             issuer,
             token_pepper: Zeroizing::new(token_pepper.as_bytes().to_vec()),
             assertion_ttl: Duration::seconds(
@@ -288,7 +365,7 @@ impl Lifecycle for ApiTokenAuthPlugin {
     async fn deactivate(&self, _context: DeactivateContext) -> Result<(), RuntimeFailure> {
         let prepared = self.state.borrow_mut().take();
         if let Some(prepared) = prepared {
-            prepared.postgres.pool().close().await;
+            prepared.store.close().await;
         }
         Ok(())
     }
@@ -296,8 +373,12 @@ impl Lifecycle for ApiTokenAuthPlugin {
 
 #[derive(Debug, Error)]
 enum AuthPluginError {
+    #[cfg(feature = "workers")]
+    #[error("API Token storage unavailable")]
+    Storage,
     #[error("Auth secret material is invalid")]
     InvalidSecretMaterial,
+    #[cfg(feature = "postgres")]
     #[error("PostgreSQL operation `{operation}` failed")]
     Database {
         operation: &'static str,
@@ -321,7 +402,7 @@ async fn authenticate(
     }
     let digest = storage::token_digest(&prepared.token_pepper, &credential.value)
         .map_err(|error| runtime_failure(&error))?;
-    let stored = load_credential(&prepared.postgres, &digest)
+    let stored = load_credential(&prepared.store, &digest)
         .await
         .map_err(|error| runtime_failure(&error))?
         .ok_or(AuthInvocationError::Domain(AuthenticateError::Invalid))?;
@@ -407,6 +488,27 @@ fn valid_token(token: &str) -> bool {
         && encoded
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+#[cfg(feature = "workers")]
+type EventStorageBinding = Option<workers::D1Binding>;
+#[cfg(not(feature = "workers"))]
+type EventStorageBinding = ();
+#[cfg(feature = "workers")]
+pub fn workers_factory(
+    binding_name: impl Into<Rc<str>>,
+    batch: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    let binding = workers::D1Binding::new(binding_name, batch);
+    lenso_native_adapter::ConfiguredPluginFactory::<ApiTokenAuthPlugin, _>::new(move |plugin| {
+        if plugin.config.d1_binding != binding.name() {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail: "API Token requires its exact D1 binding".into(),
+            });
+        }
+        plugin.d1 = Some(binding.clone());
+        Ok(())
+    })
 }
 
 #[cfg(test)]

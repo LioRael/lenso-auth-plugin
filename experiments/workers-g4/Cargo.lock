@@ -47,6 +47,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -75,6 +87,15 @@ name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest 0.10.7",
+]
 
 [[package]]
 name = "block-buffer"
@@ -802,7 +823,9 @@ dependencies = [
 
 [[package]]
 name = "lenso"
-version = "0.5.19"
+version = "0.5.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fffd165f75b1705e90f02c4677769e604e456111cb2133605ee1628d0ba7411b"
 dependencies = [
  "futures",
  "lenso-kernel",
@@ -846,6 +869,51 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "thiserror",
+ "time",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-api-token-plugin"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "futures",
+ "getrandom 0.2.17",
+ "getrandom 0.4.3",
+ "hmac",
+ "js-sys",
+ "lenso",
+ "lenso-auth-sdk",
+ "lenso-capability-auth",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "time",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-device-plugin"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "lenso",
+ "lenso-capability-device-auth",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "serde_json",
  "thiserror",
  "time",
  "wasm-bindgen",
@@ -899,6 +967,85 @@ dependencies = [
  "sha2 0.10.9",
  "time",
  "url",
+ "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-oidc-plugin"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "getrandom 0.2.17",
+ "getrandom 0.4.3",
+ "hmac",
+ "js-sys",
+ "jsonwebtoken",
+ "lenso",
+ "lenso-capability-credential-issuer",
+ "lenso-capability-identity-directory",
+ "lenso-capability-oidc-provider",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "time",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-password-plugin"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "getrandom 0.4.3",
+ "js-sys",
+ "lenso",
+ "lenso-capability-credential-issuer",
+ "lenso-capability-identity-directory",
+ "lenso-capability-password-auth",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "time",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-phone-plugin"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "base64",
+ "getrandom 0.4.3",
+ "hmac",
+ "js-sys",
+ "lenso",
+ "lenso-capability-credential-issuer",
+ "lenso-capability-identity-directory",
+ "lenso-capability-phone-auth",
+ "lenso-capability-secrets",
+ "lenso-capability-sms-delivery",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "time",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "zeroize",
 ]
 
@@ -1006,6 +1153,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-device-auth"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-federated-auth"
 version = "0.1.0"
 dependencies = [
@@ -1023,6 +1185,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-http-client"
 version = "0.3.0"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
 dependencies = [
  "futures",
  "lenso-contract-codegen",
@@ -1036,6 +1199,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-http-endpoint"
 version = "0.3.1"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
 dependencies = [
  "futures",
  "http",
@@ -1052,6 +1216,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-http-endpoint-macros"
 version = "0.1.4"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1062,6 +1227,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-http-stream-endpoint"
 version = "0.1.1"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
 dependencies = [
  "futures",
  "lenso-contract-codegen",
@@ -1103,12 +1269,86 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-oidc-provider"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-password-auth"
+version = "0.3.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-phone-auth"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-secrets"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad18ecc2b6e2678b0cdc2ef23413ff5c92b73ec30d89184a0a464c586bc33981"
 dependencies = [
  "futures",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-sms-delivery"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-websocket-endpoint"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
+dependencies = [
+ "futures",
+ "lenso-contract-codegen",
  "lenso-contract-runtime",
  "lenso-kernel",
  "lenso-plugin-authoring",
@@ -1166,6 +1406,7 @@ dependencies = [
 [[package]]
 name = "lenso-http-egress-plugin"
 version = "0.3.1"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
 dependencies = [
  "bytes",
  "futures",
@@ -1176,7 +1417,7 @@ dependencies = [
  "lenso-capability-http-client",
  "lenso-kernel",
  "lenso-native-adapter",
- "lenso-native-adapter-macros 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lenso-native-adapter-macros",
  "serde",
  "serde_json",
  "tokio",
@@ -1198,12 +1439,13 @@ dependencies = [
 [[package]]
 name = "lenso-native-adapter"
 version = "0.3.13"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
 dependencies = [
  "futures",
  "inventory",
  "lenso-app-plan",
  "lenso-kernel",
- "lenso-native-adapter-macros 0.2.4",
+ "lenso-native-adapter-macros",
  "lenso-plugin-authoring",
  "lenso-runtime-codec",
  "serde_json",
@@ -1212,20 +1454,7 @@ dependencies = [
 [[package]]
 name = "lenso-native-adapter-macros"
 version = "0.2.4"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "serde_json",
- "syn 2.0.119",
- "toml",
-]
-
-[[package]]
-name = "lenso-native-adapter-macros"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "556c77b2384c98892bad05f70170b629f25914825807a853d0c803d35d7f0330"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1244,6 +1473,7 @@ checksum = "8f24f444677f5b9857d4aa6f2ca90002243eb756a7f153bb721206f88abe6b07"
 [[package]]
 name = "lenso-runtime-codec"
 version = "0.4.1"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
 dependencies = [
  "futures",
  "hex",
@@ -1258,7 +1488,9 @@ dependencies = [
 [[package]]
 name = "lenso-web-ingress-plugin"
 version = "0.4.2"
+source = "git+https://github.com/LioRael/lenso-web?rev=0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f#0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f"
 dependencies = [
+ "base64",
  "bytes",
  "futures",
  "http",
@@ -1266,12 +1498,25 @@ dependencies = [
  "lenso-app-plan",
  "lenso-capability-http-endpoint",
  "lenso-capability-http-stream-endpoint",
+ "lenso-capability-websocket-endpoint",
  "lenso-kernel",
  "lenso-native-adapter",
  "matchit",
  "serde",
  "serde_json",
+ "sha1",
  "tokio",
+]
+
+[[package]]
+name = "lenso-workers-driver"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-runtime-rust?rev=905a59141ca0e349b734fb7de99d010f2b0dc0df#905a59141ca0e349b734fb7de99d010f2b0dc0df"
+dependencies = [
+ "futures",
+ "lenso-kernel",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -1284,8 +1529,13 @@ dependencies = [
  "js-sys",
  "lenso-app-plan",
  "lenso-auth-account-plugin",
+ "lenso-auth-api-token-plugin",
+ "lenso-auth-device-plugin",
  "lenso-auth-oauth-flow-plugin",
  "lenso-auth-oidc-client-plugin",
+ "lenso-auth-oidc-plugin",
+ "lenso-auth-password-plugin",
+ "lenso-auth-phone-plugin",
  "lenso-auth-router-plugin",
  "lenso-auth-sdk",
  "lenso-auth-web-session-plugin",
@@ -1293,16 +1543,22 @@ dependencies = [
  "lenso-capability-auth",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",
+ "lenso-capability-device-auth",
  "lenso-capability-federated-auth",
  "lenso-capability-http-client",
  "lenso-capability-http-endpoint",
  "lenso-capability-identity-directory",
  "lenso-capability-oauth-flow",
+ "lenso-capability-oidc-provider",
+ "lenso-capability-password-auth",
+ "lenso-capability-phone-auth",
  "lenso-capability-secrets",
+ "lenso-capability-sms-delivery",
  "lenso-http-egress-plugin",
  "lenso-kernel",
  "lenso-native-adapter",
  "lenso-web-ingress-plugin",
+ "lenso-workers-driver",
  "serde",
  "serde_json",
  "time",
@@ -1441,6 +1697,17 @@ dependencies = [
  "elliptic-curve",
  "primeorder",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "password-hash"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
+dependencies = [
+ "base64ct",
+ "rand_core",
+ "subtle",
 ]
 
 [[package]]
@@ -1835,6 +2102,17 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "sha1"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest 0.10.7",
 ]
 
 [[package]]

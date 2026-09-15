@@ -1,12 +1,12 @@
 import {initSync,__wbg_reset_state,invoke,handle_http} from './pkg/lenso_workers_g4_host.js';
 import module from './pkg/lenso_workers_g4_host_bg.wasm';
 import {clearTimers} from './clock.mjs';
-import {createEventRunner} from '../../../../lenso-runtime-rust/design-workers-compatibility/experiments/workers-runtime/runner.mjs';
-import {createCancellationScope,createHttpHandler} from '../../../../lenso-runtime-rust/design-workers-compatibility/experiments/workers-runtime/http.mjs';
-import {createD1StorageScope} from '../../workers/d1-binding.mjs';
-import {createEventHttpFetch} from '../../../../lenso-web/feat-workers-http-parity/crates/lenso-http-egress-plugin/js/event-fetch.mjs';
+import {createEventRunner} from '@lenso/workers-runtime/runner';
+import {createHttpHandler} from '@lenso/workers-runtime/http';
+import {createEventScope} from '@lenso/workers-runtime';
+import {createD1Binding} from '../../workers/d1-binding.mjs';
+import {createScopedHttpFetch} from '@lenso/http-egress-workers';
 import {fixture} from './idp-fixture.mjs';
-import {createEgressScope} from './egress-scope.mjs';
 const runner=createEventRunner({instantiate:()=>initSync({module}),resetState:__wbg_reset_state,clearTimers,eventLimitMs:15000});
 function proofDatabase(database,fault){
  if(fault!=="delayed-consume")return database;
@@ -16,7 +16,6 @@ function proofDatabase(database,fault){
  }};
 }
 function createScope(request,env){
- const storage=createD1StorageScope();
  const egressProof={started:false,aborted:false};
  const proofFetch=(url,options)=>{
   if(request.headers.get('x-proof-fault')!=='egress-abandon'||new URL(url).pathname!=='/fixture/token')return fetch(url,options);
@@ -26,10 +25,15 @@ function createScope(request,env){
   setTimeout(()=>{void runner.run(()=>{throw new Error('qualification pending egress abandonment')}).catch(()=>{})},10);
   return native;
  };
- const egress=createEgressScope({createTransport:createEventHttpFetch,fetch:proofFetch,setTimeout,clearTimeout});
- const scope=createCancellationScope({signing:env.SIGNING_KEY,pepper:env.TOKEN_PEPPER,oauth:env.OAUTH_KEY,oidc:env.OIDC_SECRET,origin:new URL(request.url).origin,accountBatch:storage.bind(request.headers.get("x-proof-fault")==="storage"?{prepare:sql=>env.ACCOUNT_DB.prepare(sql),batch:()=>env.ACCOUNT_DB.batch([env.ACCOUNT_DB.prepare("SELECT 1 FROM g4_deliberately_missing_table")])}:env.ACCOUNT_DB),oauthBatch:storage.bind(proofDatabase(env.OAUTH_DB,request.headers.get("x-proof-fault"))),httpFetch:egress.fetch});
- const abort=scope.abort.bind(scope),invalidate=scope.invalidate.bind(scope);
- scope.abort=()=>{storage.close();egress.abort();abort()};scope.invalidate=()=>{storage.invalidate();egress.invalidate();invalidate()};scope.settled=async()=>{const outcomes=await Promise.all([storage.settled(),egress.settled()]);return outcomes.every(Boolean)};scope.egressProof=egressProof;return scope;
+ return createEventScope(scope=>({
+  signing:env.SIGNING_KEY,pepper:env.TOKEN_PEPPER,oauth:env.OAUTH_KEY,oidc:env.OIDC_SECRET,
+  origin:new URL(request.url).origin,egressProof,
+  otp:env.OTP_SECRET,providerSigning:env.PROVIDER_SIGNING_KEY,providerJwks:JSON.stringify(env.PROVIDER_JWKS),
+  ...Object.fromEntries([['passwordBatch','PASSWORD_DB'],['phoneBatch','PHONE_DB'],['deviceBatch','DEVICE_DB'],['apiBatch','API_TOKEN_DB'],['oidcBatch','OIDC_DB']].filter(([,binding])=>env[binding] && request.headers.get('x-proof-fault')!=='method-missing-binding').map(([name,binding])=>[name,createD1Binding(request.headers.get('x-proof-fault')==='method-storage'?{prepare:sql=>env[binding].prepare(sql),batch:()=>Promise.reject(new Error('qualification method storage unavailable'))}:env[binding],scope)])),
+  accountBatch:createD1Binding(request.headers.get("x-proof-fault")==="storage"?{prepare:sql=>env.ACCOUNT_DB.prepare(sql),batch:()=>env.ACCOUNT_DB.batch([env.ACCOUNT_DB.prepare("SELECT 1 FROM g4_deliberately_missing_table")])}:env.ACCOUNT_DB,scope),
+  oauthBatch:createD1Binding(proofDatabase(env.OAUTH_DB,request.headers.get("x-proof-fault")),scope),
+  httpFetch:createScopedHttpFetch(scope,{fetch:proofFetch,setTimeout,clearTimeout}),
+ }));
 }
 export default {async fetch(request,env){
  const idp=await fixture(request,env);if(idp)return idp;

@@ -11,7 +11,16 @@ description = "PostgreSQL-backed opaque API token Auth Plugin for Lenso vNext."
 plugin-id = "lenso.auth.api-token"
 root-slot = "auth"
 
+[features]
+default = ["postgres"]
+postgres = ["dep:sqlx", "dep:lenso-postgres-kit"]
+workers = ["dep:getrandom02", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
+
 [dependencies]
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"], optional = true }
+js-sys = { version = "0.3", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
 lenso.workspace = true
 base64.workspace = true
 futures.workspace = true
@@ -22,11 +31,11 @@ lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
-lenso-postgres-kit.workspace = true
+lenso-postgres-kit = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
 time.workspace = true
 zeroize.workspace = true

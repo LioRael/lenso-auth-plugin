@@ -1,0 +1,10 @@
+{
+  "name": "@lenso/auth-workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {".": "./d1-binding.mjs"},
+  "files": ["d1-binding.mjs"],
+  "scripts": {"test": "node --test d1-binding.test.mjs"},
+  "devDependencies": {"@lenso/workers-runtime": "0.1.0"}
+}

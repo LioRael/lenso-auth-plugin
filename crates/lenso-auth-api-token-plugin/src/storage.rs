@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 
 use hmac::{Hmac, Mac};
-use lenso_postgres_kit::OwnedPostgres;
 use serde_json::Value;
 use sha2::Sha256;
-use sqlx::Row;
 use time::OffsetDateTime;
 
 use crate::AuthPluginError;
@@ -20,46 +18,6 @@ pub(crate) struct StoredCredential {
     pub(crate) revoked: bool,
 }
 
-pub(crate) async fn load_credential(
-    postgres: &OwnedPostgres,
-    digest: &[u8],
-) -> Result<Option<StoredCredential>, AuthPluginError> {
-    let row = sqlx::query(
-        "SELECT sessions.subject, sessions.actor_kind, sessions.assurance,\n\
-                sessions.audience, sessions.claims,\n\
-                LEAST(sessions.expires_at, tokens.expires_at) AS expires_at,\n\
-                (sessions.revoked_at IS NOT NULL OR tokens.revoked_at IS NOT NULL) AS revoked\n\
-         FROM api_tokens AS tokens\n\
-         JOIN auth_sessions AS sessions ON sessions.session_id = tokens.session_id\n\
-         WHERE tokens.token_digest = $1",
-    )
-    .bind(digest)
-    .fetch_optional(postgres.pool())
-    .await
-    .map_err(|source| AuthPluginError::Database {
-        operation: "load API token credential",
-        source,
-    })?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let claims: sqlx::types::Json<BTreeMap<String, Value>> =
-        row.try_get("claims")
-            .map_err(|source| AuthPluginError::Database {
-                operation: "decode API token claims",
-                source,
-            })?;
-    Ok(Some(StoredCredential {
-        subject: decode(&row, "subject")?,
-        actor_kind: decode(&row, "actor_kind")?,
-        assurance: decode(&row, "assurance")?,
-        audience: decode(&row, "audience")?,
-        claims: claims.0,
-        expires_at: decode(&row, "expires_at")?,
-        revoked: decode(&row, "revoked")?,
-    }))
-}
-
 pub(crate) fn token_digest(pepper: &[u8], token: &str) -> Result<Vec<u8>, AuthPluginError> {
     if pepper.len() < 32 {
         return Err(AuthPluginError::InvalidSecretMaterial);
@@ -70,13 +28,59 @@ pub(crate) fn token_digest(pepper: &[u8], token: &str) -> Result<Vec<u8>, AuthPl
     Ok(mac.finalize().into_bytes().to_vec())
 }
 
-fn decode<T>(row: &sqlx::postgres::PgRow, column: &'static str) -> Result<T, AuthPluginError>
-where
-    for<'row> T: sqlx::Decode<'row, sqlx::Postgres> + sqlx::Type<sqlx::Postgres>,
-{
-    row.try_get(column)
-        .map_err(|source| AuthPluginError::Database {
-            operation: "decode API token credential",
-            source,
-        })
+#[cfg(feature = "workers")]
+mod d1;
+#[cfg(feature = "postgres")]
+mod postgres;
+#[derive(Clone, Debug)]
+pub(crate) enum ApiTokenStore {
+    #[cfg(feature = "postgres")]
+    Postgres(lenso_postgres_kit::OwnedPostgres),
+    #[cfg(feature = "workers")]
+    D1(crate::workers::D1Binding),
 }
+impl ApiTokenStore {
+    #[cfg_attr(
+        not(feature = "postgres"),
+        allow(
+            clippy::unused_async,
+            reason = "Native storage shutdown is asynchronous"
+        )
+    )]
+    pub(crate) async fn close(&self) {
+        match self {
+            #[cfg(feature = "postgres")]
+            Self::Postgres(pg) => pg.pool().close().await,
+            #[cfg(feature = "workers")]
+            Self::D1(_) => (),
+        }
+    }
+    #[cfg(feature = "workers")]
+    pub(crate) async fn prepare_workers(
+        binding: crate::workers::D1Binding,
+    ) -> Result<Self, crate::AuthOperatorError> {
+        let results=binding.run(vec![crate::workers::statement("SELECT version FROM auth_api_token_schema WHERE version=1 AND fingerprint='d58aeed9f2569d8d24b83b2d81e5a7ecc33ad0fb7e6c2097be282e6f280e52db'",vec![])]).await.map_err(|()|crate::AuthOperatorError::Storage)?;
+        if results[0].results.len() != 1 {
+            return Err(crate::AuthOperatorError::Storage);
+        }
+        Ok(Self::D1(binding))
+    }
+}
+
+pub(crate) async fn load_credential(
+    store: &ApiTokenStore,
+    digest: &[u8],
+) -> Result<Option<StoredCredential>, AuthPluginError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        ApiTokenStore::Postgres(pg) => postgres::load_credential(pg, digest).await,
+        #[cfg(feature = "workers")]
+        ApiTokenStore::D1(binding) => d1::load_credential(binding, digest).await,
+    }
+}
+
+#[cfg(feature = "workers")]
+pub(crate) use d1::{
+    issue as issue_workers, revoke_session as revoke_session_workers,
+    revoke_token as revoke_token_workers,
+};

@@ -1,10 +1,3 @@
-#[allow(
-    dead_code,
-    reason = "Shared Driver includes helpers unused by this host."
-)]
-#[path = "../../../../../../lenso-runtime-rust/design-workers-compatibility/experiments/workers-g1/host/src/driver.rs"]
-mod driver;
-use driver::WorkersDriver;
 use lenso_app_plan::{
     CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan, PluginInstancePlan,
     ResolvedAppPlan,
@@ -23,6 +16,7 @@ use lenso_kernel::{
 use lenso_native_adapter::{
     NativePluginFactory, NativePluginFactoryContext, NativePluginInstance, NativePluginRegistry,
 };
+use lenso_workers_driver::WorkersDriver;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, rc::Rc, time::Duration};
@@ -123,7 +117,11 @@ impl NativePluginFactory for Caller {
         Ok(NativePluginInstance::default())
     }
 }
-fn plan(signing: &str, origin: Option<&str>) -> Result<ResolvedAppPlan, JsValue> {
+fn plan(
+    signing: &str,
+    origin: Option<&str>,
+    method: Option<(&str, Value)>,
+) -> Result<ResolvedAppPlan, JsValue> {
     let account_config = json!({"schema":"auth","d1_binding":"ACCOUNT_DB","issuer":"g4-proof","assertion_public_key":lenso_auth_account_plugin::assertion_public_key(signing),"assertion_signing_key_secret":"signing","token_pepper_secret":"pepper","assertion_ttl_seconds":30,"admin_callers":["proof.caller/caller"],"delegation_callers":["proof.caller/caller"]});
     let mut account = PluginInstancePlan::new("account", lenso_auth_account_plugin::PACKAGE_ID)
         .with_configuration(account_config.to_string())
@@ -243,6 +241,9 @@ fn plan(signing: &str, origin: Option<&str>) -> Result<ResolvedAppPlan, JsValue>
         ),
     );
     let mut instances = vec![caller, denied, account, router, oauth, secrets];
+    if let Some((method, jwks)) = method {
+        methods::extend_plan(&mut instances, &mut bindings, method, signing, jwks);
+    }
     if let Some(origin) = origin {
         http_host::extend_plan(&mut instances, &mut bindings, origin);
     }
@@ -264,31 +265,58 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
     let account_batch: js_sys::Function =
         property(&scope, "accountBatch")?.dyn_into().map_err(err)?;
     let oauth_batch: js_sys::Function = property(&scope, "oauthBatch")?.dyn_into().map_err(err)?;
-    // Insert explicit factories before linked defaults: stable linked-factory dedup keeps these event resources.
-    lenso_auth_router_plugin::__lenso_link_auth_router_plugin();
+    // Select exact event implementations explicitly; registration order is irrelevant.
+    lenso_auth_router_plugin::link_plugin();
+    methods::link();
+    lenso_auth_account_plugin::link_plugin();
+    lenso_auth_oauth_flow_plugin::link_plugin();
     let registry = NativePluginRegistry::new()
-        .with_factory(lenso_auth_account_plugin::workers_factory(
+        .with_factory_override(lenso_auth_account_plugin::workers_factory(
             "ACCOUNT_DB",
             account_batch,
         ))
-        .with_factory(lenso_auth_oauth_flow_plugin::workers_factory(
+        .map_err(err)?
+        .with_factory_override(lenso_auth_oauth_flow_plugin::workers_factory(
             "OAUTH_DB",
             oauth_batch,
         ))
+        .map_err(err)?
         .with_linked_factories()
         .with_factory(Caller)
         .with_factory(Secrets(BTreeMap::from([
             ("signing".into(), signing.clone()),
             ("pepper".into(), pepper),
             ("oauth".into(), oauth),
+            ("otp".into(), text(&scope, "otp").unwrap_or_default()),
+            (
+                "provider-signing".into(),
+                text(&scope, "providerSigning").unwrap_or_default(),
+            ),
         ])));
+    let registry = methods::registry(registry, methods::selected(&input.operation), &scope)?;
     let driver = WorkersDriver::new();
     let _event = EventGuard(driver.clone());
     let cancellation = CancellationToken::new();
-    let _cancel = CancellationGuard::new(scope, cancellation.clone());
-    let app = Kernel::start_native(plan(&signing, None)?, driver, registry)
-        .await
-        .map_err(|failure| JsValue::from_str(&format!("startup: {failure:?}")))?;
+    let _cancel = CancellationGuard::new(scope.clone(), cancellation.clone());
+    let app = Kernel::start_native(
+        plan(
+            &signing,
+            None,
+            methods::selected(&input.operation).map(|method| {
+                (
+                    method,
+                    serde_json::from_str(
+                        &text(&scope, "providerJwks").unwrap_or_else(|_| "null".into()),
+                    )
+                    .unwrap_or(Value::Null),
+                )
+            }),
+        )?,
+        driver,
+        registry,
+    )
+    .await
+    .map_err(|failure| JsValue::from_str(&format!("startup: {failure:?}")))?;
     let caller = if input.denied {
         "proof.caller/denied"
     } else {
@@ -321,7 +349,8 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
   "grant"=>call!(delegation::Delegation,delegation::GRANT_OPERATION),
   "create"=>call!(flow::OauthFlowCreate,flow::CREATE_OPERATION),
   "consume"=>call!(flow::OauthFlowConsume,flow::CONSUME_OPERATION),
-  _=>Err(err("unknown proof operation")),
+  operation if methods::selected(operation).is_some()=>methods::invoke(&app,caller,operation,input.request,&scope,cancellation.clone()).await,
+ _=>Err(err("unknown proof operation")),
  }}.await;
     let ready = app.is_ready();
     let shutdown = app.shutdown(Duration::from_secs(2)).await;
@@ -333,6 +362,7 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
 
 mod catalog_plan;
 mod http_host;
+mod methods;
 
 struct ProofActor;
 impl lenso_auth_sdk::TypedActor for ProofActor {

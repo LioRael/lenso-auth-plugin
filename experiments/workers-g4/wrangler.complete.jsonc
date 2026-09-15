@@ -1,0 +1,76 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lenso-workers-auth-complete-proof",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-07-08",
+  "compatibility_flags": [
+    "global_fetch_strictly_public",
+    "enable_request_signal"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "limits": {
+    "cpu_ms": 1000
+  },
+  "observability": {
+    "enabled": false
+  },
+  "d1_databases": [
+    {
+      "binding": "PASSWORD_DB",
+      "database_name": "lenso-auth-complete-password-proof",
+      "database_id": "a8c19b74-763c-4946-bc33-288ed83d1966",
+      "migrations_dir": "../../crates/lenso-auth-password-plugin/migrations/d1"
+    },
+    {
+      "binding": "ACCOUNT_DB",
+      "database_name": "lenso-auth-complete-account-proof",
+      "database_id": "0925f923-11ab-4752-9521-bf738012d5a8",
+      "migrations_dir": "../../crates/lenso-auth-account-plugin/migrations/d1"
+    },
+    {
+      "binding": "OAUTH_DB",
+      "database_name": "lenso-auth-complete-oauth-flow-proof",
+      "database_id": "65613b68-4fbb-408c-9bc8-4a10320ce2f3",
+      "migrations_dir": "../../crates/lenso-auth-oauth-flow-plugin/migrations/d1"
+    },
+    {
+      "binding": "PHONE_DB",
+      "database_name": "lenso-auth-complete-phone-proof",
+      "database_id": "64a7dbe4-aaea-4060-bca6-7329ded32555",
+      "migrations_dir": "../../crates/lenso-auth-phone-plugin/migrations/d1"
+    },
+    {
+      "binding": "DEVICE_DB",
+      "database_name": "lenso-auth-complete-device-proof",
+      "database_id": "95b3a398-2612-4bf1-a052-0d7d33c1631e",
+      "migrations_dir": "../../crates/lenso-auth-device-plugin/migrations/d1"
+    },
+    {
+      "binding": "API_TOKEN_DB",
+      "database_name": "lenso-auth-complete-api-token-proof",
+      "database_id": "c92401cd-7be1-438c-96c9-611b63924f9a",
+      "migrations_dir": "../../crates/lenso-auth-api-token-plugin/migrations/d1"
+    },
+    {
+      "binding": "OIDC_DB",
+      "database_name": "lenso-auth-complete-oidc-proof",
+      "database_id": "4afe7511-3bf6-4864-a245-49743598cc4e",
+      "migrations_dir": "../../crates/lenso-auth-oidc-plugin/migrations/d1"
+    }
+  ],
+  "vars": {
+    "PROVIDER_JWKS": {
+      "keys": [
+        {
+          "kty": "RSA",
+          "n": "oRLLGV-uLkhMnRqZeFR6HAQz3ZKiM8CF8jMl-GRxng1h3vJUHPfsm5dUzVloVvQhDyo5ik8On_rS-e4yVPlBYAt3Md7_VTPGzlLnUpgHA8Unxvl8CTHoPfhz5xvRscDf0ZJxYKbGKP9wCuGIBaMffh0VGNWg784V5JvD8EV-87MpGGO5Ic_koXf2vGw6uD5QHPuvGh-ulNEXNTog1_OzcSvOdJooEvhzWSGD7YiaVLFz_a2FwkEr-HETJOF2p2YXTBCMHQoCvTB0Xn46OphjQOSmQ1Vm_KAjMn_Nskw57hHFZR4tmQg5XrtzsEEH5iGdRM2c6otAOogCBabkaCOv0Q",
+          "e": "AQAB",
+          "kid": "proof-rsa",
+          "alg": "RS256",
+          "use": "sig"
+        }
+      ]
+    }
+  }
+}
