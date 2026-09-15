@@ -1,0 +1,150 @@
+docs/storage-migrations.md
+  s_21258fca71be0b::t_e983ee1f0ae966 1-84
+  s_21258fca71be0b::t_c810c1b24dd657 85-100
+experiments/workers-g4/host/src/migration_fixture.rs
+  s_21258fca71be0b::t_f221ac97c63805 1-21
+  s_21258fca71be0b::t_587ac8c22f0557 22-30
+experiments/workers-g4/migration-proof.mjs
+  s_21258fca71be0b::t_07961b62234a72 1-62
+  s_21258fca71be0b::t_cc549db93cc512 63-81
+workers/generate-migrations.py
+  s_21258fca71be0b::t_8061c0a9cbb852 1-102
+  s_21258fca71be0b::t_c207cff20bfb89 103-112
+experiments/workers-g4/migration-proof-worker.mjs
+  s_21258fca71be0b::t_07961b62234a72 1-27
+  s_21258fca71be0b::t_678d729db95a96 28-31
+.github/workflows/ci.yml
+  s_21258fca71be0b::t_d5c4394728741c 40-41,56-59
+.gitignore
+  s_21258fca71be0b::t_6c6277fafd1e01 5-7
+Cargo.lock
+  s_21258fca71be0b::t_3d8eaa579bd0f7 1115-1116,1194-1195,1220-1221,1271-1272,1332-1333,1361-1362,1392-1393,1812-1835,1874,1876,1878
+Cargo.toml
+  s_21258fca71be0b::t_edab8e9f9d065b 61-63
+crates/lenso-auth-account-plugin/Cargo.toml
+  s_21258fca71be0b::t_487fa0c8118af8 17,20-21
+crates/lenso-auth-account-plugin/src/lib.rs
+  s_21258fca71be0b::t_7f7dd97da583e5 716-718,857-858
+crates/lenso-auth-account-plugin/src/migration.rs
+  s_21258fca71be0b::t_ba68fdde3e50b1 1-64
+crates/lenso-auth-account-plugin/src/schema.rs
+  s_21258fca71be0b::t_d474ad355ad4ce 7,12,17
+crates/lenso-auth-account-plugin/src/workers.rs
+  s_21258fca71be0b::t_fb46b4eb2ce655 1-2
+crates/lenso-auth-api-token-plugin/Cargo.toml
+  s_21258fca71be0b::t_9c12e76eb405fc 17,20-21
+crates/lenso-auth-api-token-plugin/src/lib.rs
+  s_21258fca71be0b::t_63691514fed47a 3-4
+crates/lenso-auth-api-token-plugin/src/migration.rs
+  s_21258fca71be0b::t_603c8b93ad9edf 1-64
+crates/lenso-auth-api-token-plugin/src/schema.rs
+  s_21258fca71be0b::t_c6a12952c009eb 6
+crates/lenso-auth-api-token-plugin/src/storage.rs
+  s_21258fca71be0b::t_1ab6b9dd684123 62-64
+crates/lenso-auth-api-token-plugin/src/workers.rs
+  s_21258fca71be0b::t_b47b3c9e2e9788 1-2
+crates/lenso-auth-device-plugin/Cargo.toml
+  s_21258fca71be0b::t_66d16fdd99a5b6 15,18-19
+crates/lenso-auth-device-plugin/src/lib.rs
+  s_21258fca71be0b::t_771dff97bb9afa 2-3,239-241
+crates/lenso-auth-device-plugin/src/migration.rs
+  s_21258fca71be0b::t_9d5d9c2694775b 1-64
+crates/lenso-auth-device-plugin/src/schema.rs
+  s_21258fca71be0b::t_68576a487a579b 7,12
+crates/lenso-auth-device-plugin/src/workers.rs
+  s_21258fca71be0b::t_d8b9a321d42bce 1-2
+crates/lenso-auth-oauth-flow-plugin/Cargo.toml
+  s_21258fca71be0b::t_14346912d77fdc 15,18-19
+crates/lenso-auth-oauth-flow-plugin/src/lib.rs
+  s_21258fca71be0b::t_88f77fdc426109 257-259,339-340
+crates/lenso-auth-oauth-flow-plugin/src/migration.rs
+  s_21258fca71be0b::t_a42133cf76fdb6 1-64
+crates/lenso-auth-oauth-flow-plugin/src/schema.rs
+  s_21258fca71be0b::t_22421a0b2df7fd 7-12
+crates/lenso-auth-oauth-flow-plugin/src/workers.rs
+  s_21258fca71be0b::t_ef4e6b20dfc393 1-2
+crates/lenso-auth-oidc-plugin/Cargo.toml
+  s_21258fca71be0b::t_442af213f21dce 15,18-19
+crates/lenso-auth-oidc-plugin/src/lib.rs
+  s_21258fca71be0b::t_0d7d606d2cd6e4 2-3,513-515
+crates/lenso-auth-oidc-plugin/src/migration.rs
+  s_21258fca71be0b::t_9375bb196de3c9 1-64
+crates/lenso-auth-oidc-plugin/src/schema.rs
+  s_21258fca71be0b::t_d110a555744fd8 6
+crates/lenso-auth-oidc-plugin/src/workers.rs
+  s_21258fca71be0b::t_802aa52f0a710f 1-2
+crates/lenso-auth-password-plugin/Cargo.toml
+  s_21258fca71be0b::t_8fc42a36dc5a40 17,20-21
+crates/lenso-auth-password-plugin/src/lib.rs
+  s_21258fca71be0b::t_f62e12e69ecdfd 3-4,55,57-59,191-192,195-196,198-199,558-560,568,622-645,969,1014-1016
+crates/lenso-auth-password-plugin/src/migration.rs
+  s_21258fca71be0b::t_70c24a14852748 1-64
+crates/lenso-auth-password-plugin/src/password_work_tests.rs
+  s_21258fca71be0b::t_997632acb3d042 1-151
+crates/lenso-auth-password-plugin/src/schema.rs
+  s_21258fca71be0b::t_7ae139c24c0020 7,12
+crates/lenso-auth-password-plugin/src/workers.rs
+  s_21258fca71be0b::t_dbcff282f7323a 1-2
+crates/lenso-auth-phone-plugin/Cargo.toml
+  s_21258fca71be0b::t_b534ef681b3fd9 15,18-19
+crates/lenso-auth-phone-plugin/src/lib.rs
+  s_21258fca71be0b::t_6853f78a9948f1 2-3,58,60-63,169-170,173-174,176-177,700-702,710-711,996-1019,1330,1380-1382
+crates/lenso-auth-phone-plugin/src/migration.rs
+  s_21258fca71be0b::t_90a19f9632c9ed 1-64
+crates/lenso-auth-phone-plugin/src/password_work_tests.rs
+  s_21258fca71be0b::t_c8f6bbe39f9ee3 1-151
+crates/lenso-auth-phone-plugin/src/schema.rs
+  s_21258fca71be0b::t_94cc51f024d647 7,12
+crates/lenso-auth-phone-plugin/src/workers.rs
+  s_21258fca71be0b::t_d1ceb02fd78036 1-2
+docs/adr/0007-private-workers-auth-storage.md
+  s_21258fca71be0b::t_d8be780e80ea42 62-63,103-106,138-164
+docs/password-performance-native.txt
+  s_21258fca71be0b::t_28d08ca8b400e7 1-15
+docs/password-performance.md
+  s_21258fca71be0b::t_3b0be3928d5e85 1-91
+docs/storage-migration-workerd.json
+  s_21258fca71be0b::t_25ae3a5939dffb 1-87
+experiments/workers-g4/Cargo.lock
+  s_21258fca71be0b::t_9cb087653d3513 152-157,266,287,299,875-876,903-904,925-926,951-952,1004-1005,1030-1031,1059-1060,1466-1489,1615-1616,1996
+experiments/workers-g4/README.md
+  s_21258fca71be0b::t_6dd6167140bed5 80-89
+experiments/workers-g4/host/Cargo.toml
+  s_21258fca71be0b::t_37c3aec0839e86 9-10
+experiments/workers-g4/host/src/lib.rs
+  s_21258fca71be0b::t_4ec67717be4d84 382-432
+experiments/workers-g4/package.json
+  s_21258fca71be0b::t_3780aaaadf173a 9
+experiments/workers-g4/pnpm-lock.yaml
+  s_21258fca71be0b::t_4d3678bf1d089d 10-16,393-400,729-732
+experiments/workers-g4/pnpm-workspace.yaml
+  s_21258fca71be0b::t_1b221993133745 5-8
+workers/check-packages.py
+  s_21258fca71be0b::t_463c2562305f2b 4,15,37-39,54-56,64-69,74-76,92-102,111
+workers/d1-binding.test.mjs
+  s_21258fca71be0b::t_83286442669042 3,27-29
+workers/generate-bridges.mjs
+  s_21258fca71be0b::t_c39d37cba6a4d2 1-29
+workers/package-lock.json
+  s_21258fca71be0b::t_88ee0eb0cd698f 11,15-17
+workers/package.json
+  s_21258fca71be0b::t_33b27fe223e890 8-9
+workers/test-migration-generation.py
+  s_21258fca71be0b::t_b46abd29baaeee 1-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "96254d4fc87d8ed16b3aae62e268e53084d8715b",
+  "prompts": {},
+  "sessions": {
+    "s_21258fca71be0b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0a45b-2d5b-75d1-bc5a-2923a5486851",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
