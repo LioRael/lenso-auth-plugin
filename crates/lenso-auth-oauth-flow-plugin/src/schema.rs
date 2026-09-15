@@ -4,9 +4,13 @@ const MIGRATIONS: &[Migration] = sql_migrations![
     (
         1,
         "create-oauth-flows",
-        "migrations/001_create_oauth_flows.sql",
+        "migrations/postgres/001_create_oauth_flows.sql",
     ),
-    (2, "add-oidc-nonce", "migrations/002_add_oidc_nonce.sql",),
+    (
+        2,
+        "add-oidc-nonce",
+        "migrations/postgres/002_add_oidc_nonce.sql",
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {

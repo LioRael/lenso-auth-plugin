@@ -1,4 +1,6 @@
 //! Protocol-neutral OIDC authorization-code provider with PKCE.
+#[cfg(feature = "workers")]
+pub mod migration;
 #[cfg(feature = "postgres")]
 mod operator;
 #[cfg(feature = "postgres")]
@@ -508,10 +510,9 @@ impl Lifecycle for OidcPlugin {
                     .filter(|binding| binding.name() == c.d1_binding)
                     .ok_or_else(|| failure("OIDC D1 binding unavailable"))?
                     .clone();
-                let results=binding.run(vec![workers::statement("SELECT version FROM auth_oidc_schema WHERE version=1 AND fingerprint='908cae7d94fdd122aac9e3813dc12509fca9b86a7cb471d906272b4f465847ce'",vec![])]).await.map_err(|()|failure("OIDC D1 schema unavailable"))?;
-                if results[0].results.len() != 1 {
-                    return Err(failure("OIDC D1 schema mismatch"));
-                }
+                migration::verify(&binding)
+                    .await
+                    .map_err(|_| failure("D1 migration verification failed"))?;
                 storage::OidcStore::D1(binding)
             }
             #[cfg(not(feature = "workers"))]

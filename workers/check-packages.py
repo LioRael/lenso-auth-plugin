@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile extracted Workers owner packages with extracted private Capability deps.
 
-Requires Python 3.12+ and the wasm32-unknown-unknown Rust target. CARGO accepts a
+Requires Python 3.12+, Node.js and the wasm32-unknown-unknown Rust target. CARGO accepts a
 command, e.g. '/path/to/lenso-cargo +1.94.0'. No registry publication occurs.
 """
 import json
@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import sys
 import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +34,9 @@ def cargo(*args, capture=False):
     ).stdout
 
 
+subprocess.run(["node", str(ROOT / "workers/generate-bridges.mjs"), "--check"], check=True)
+subprocess.run([sys.executable, str(ROOT / "workers/generate-migrations.py"), "--check"], check=True)
+
 with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
     task = Path(temporary)
     staging = task / "source"
@@ -47,7 +51,9 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
     extracted.mkdir()
     versions = {}
     runtime_packages = {}
-    # Optional unpublished Runtime cohort, supplied as real archives, never source paths.
+    # Optional unpublished dependency cohort (Runtime or migration kits), supplied
+    # as real archives, never source paths. Patches also apply during Capability
+    # packaging because Cargo resolves the complete staged workspace.
     for archive in filter(None, os.environ.get("RUNTIME_ARCHIVES", "").split(os.pathsep)):
         with tarfile.open(archive) as packed:
             packed.extractall(extracted, filter="data")
@@ -55,13 +61,19 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         name = tomllib.loads((directory / "Cargo.toml").read_text())["package"]["name"]
         runtime_packages[name] = directory
 
-    def package(name, config=None):
+    cohort_config = task / "cohort-patch.toml"
+    cohort_config.write_text("[patch.crates-io]\n" + "".join(
+        f'{name} = {{ path = {json.dumps(str(directory))} }}\n'
+        for name, directory in runtime_packages.items()))
+
+    def package(name, config=cohort_config, workers=False):
         manifest = staging / "crates" / name / "Cargo.toml"
         versions[name] = tomllib.loads(manifest.read_text())["package"]["version"]
         args = ["package", "--manifest-path", manifest, "--no-verify", "--allow-dirty",
                 "--target-dir", archives]
-        if config:
-            args += ["--no-default-features", "--features", "workers", "--config", config]
+        args += ["--config", config]
+        if workers:
+            args += ["--no-default-features", "--features", "workers"]
         cargo(*args)
         archive = archives / "package" / f"{name}-{versions[name]}.crate"
         with tarfile.open(archive) as packed:
@@ -77,8 +89,17 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         ) + "".join(f'{name} = {{ path = {json.dumps(str(directory))} }}\n'
                     for name, directory in runtime_packages.items()))
         name = f"lenso-auth-{owner}-plugin"
-        directory = package(name, config)
-        assert (directory / "src/workers.rs").read_bytes() == (ROOT / "workers/d1.rs").read_bytes()
+        directory = package(name, config, workers=True)
+        source = ROOT / "crates" / name
+        for relative in ("src/workers.rs", "src/migration.rs"):
+            assert (directory / relative).read_bytes() == (source / relative).read_bytes(), relative
+        for backend in ("postgres", "d1"):
+            relative = Path("migrations") / backend
+            expected = {sql.relative_to(source): sql.read_bytes()
+                        for sql in (source / relative).rglob("*.sql")}
+            packaged = {sql.relative_to(directory): sql.read_bytes()
+                        for sql in (directory / relative).rglob("*.sql")}
+            assert expected and packaged == expected, f"{name}: {backend} migration archive drift"
         args = ["--manifest-path", directory / "Cargo.toml", "--locked",
                 "--no-default-features", "--features", "workers", "--config", config]
         cargo("check", *args, "--target", "wasm32-unknown-unknown")
@@ -87,4 +108,4 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         for dependency in graph["packages"]:
             if dependency["source"] is None:
                 assert Path(dependency["manifest_path"]).is_relative_to(extracted), dependency["name"]
-        print(f"PASS: extracted {name} Workers wasm package; all local dependencies are archives", flush=True)
+        print(f"PASS: extracted {name} Workers wasm package; exact migration plans/SQL; all local dependencies are archives", flush=True)

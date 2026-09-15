@@ -14,9 +14,11 @@ root-slot = "identity"
 [features]
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:lenso-postgres-kit"]
-workers = ["dep:getrandom02", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
+workers = ["dep:lenso-migration", "dep:lenso-migration-d1", "dep:getrandom02", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
 
 [dependencies]
+lenso-migration = { workspace = true, optional = true }
+lenso-migration-d1 = { workspace = true, optional = true }
 getrandom02 = { package = "getrandom", version = "0.2", features = ["js"], optional = true }
 js-sys = { version = "0.3", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }

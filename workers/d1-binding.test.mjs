@@ -1,5 +1,6 @@
 import test from 'node:test';
 import {readFileSync} from 'node:fs';
+import {generatedBridge, owners, generateBridges} from './generate-bridges.mjs';
 import assert from 'node:assert/strict';
 import {createD1Binding} from './d1-binding.mjs';
 import {createEventScope} from '@lenso/workers-runtime';
@@ -23,8 +24,9 @@ test('uncertain native work is bounded and late completion never calls abandoned
 });
 
 test('package-owned Rust bridges match the private canonical source',()=>{
- const source=readFileSync(new URL('./d1.rs',import.meta.url),'utf8');
- for(const owner of ['account','oauth-flow','device','password','oidc','phone','api-token']){
+ const source=generatedBridge();
+ generateBridges({check:true});
+ for(const owner of owners){
   const copy=readFileSync(new URL(`../crates/lenso-auth-${owner}-plugin/src/workers.rs`,import.meta.url),'utf8');
   assert.equal(copy,source,`${owner} workers.rs must match workers/d1.rs`);
  }

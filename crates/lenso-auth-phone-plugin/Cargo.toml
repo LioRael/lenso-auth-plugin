@@ -12,9 +12,11 @@ root-slot = "auth-methods"
 [features]
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:lenso-postgres-kit", "tokio/rt"]
-workers = ["dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
+workers = ["dep:lenso-migration", "dep:lenso-migration-d1", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
 
 [dependencies]
+lenso-migration = { workspace = true, optional = true }
+lenso-migration-d1 = { workspace = true, optional = true }
 js-sys = { version = "0.3", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }

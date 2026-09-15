@@ -6,6 +6,8 @@ publish=false
 [lib]
 crate-type=["cdylib"]
 [dependencies]
+lenso-migration="0.1.0"
+lenso-migration-d1="0.1.0"
 lenso-kernel.workspace=true
 lenso-app-plan.workspace=true
 lenso-native-adapter.workspace=true

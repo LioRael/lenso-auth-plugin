@@ -1,5 +1,7 @@
 //! Password authentication as a removable Plugin over Directory and Credential Issuer contracts.
 
+#[cfg(feature = "workers")]
+pub mod migration;
 #[cfg(feature = "postgres")]
 mod operator;
 #[cfg(feature = "postgres")]
@@ -50,7 +52,11 @@ pub use operator::{PasswordAuthOperator, PasswordOperatorError};
 #[cfg(feature = "postgres")]
 const DEPENDENCY_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 const MAX_PASSWORD_WORK_JOBS: usize = 4;
+#[cfg(test)]
 const DUMMY_PASSWORD_INPUT: &str = "lenso-auth-password-dummy-input";
+// Public timing fixture, not a credential. Generated with Argon2::default() and
+// the public salt b"lenso-dummy-salt"; preparation validates its exact policy.
+const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$bGVuc28tZHVtbXktc2FsdA$ebQ9RdZkGmHlYhZWTNykFgZWxf5wuNrQzpCGDoXz9D0";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, lenso::PluginConfig)]
 #[serde(deny_unknown_fields)]
@@ -182,19 +188,15 @@ impl fmt::Debug for PasswordWork {
 }
 
 impl PasswordWork {
-    async fn prepare() -> Result<Self, PasswordWorkError> {
-        Self::prepare_with_limit(MAX_PASSWORD_WORK_JOBS).await
+    fn prepare() -> Result<Self, PasswordWorkError> {
+        Self::prepare_with_limit(MAX_PASSWORD_WORK_JOBS)
     }
 
-    async fn prepare_with_limit(limit: usize) -> Result<Self, PasswordWorkError> {
-        let permits = Arc::new(Semaphore::new(limit));
-        let dummy_hash = run_password_job(Arc::clone(&permits), || {
-            hash_password_sync(DUMMY_PASSWORD_INPUT)
-        })
-        .await?;
+    fn prepare_with_limit(limit: usize) -> Result<Self, PasswordWorkError> {
+        validate_dummy_hash(DUMMY_PASSWORD_HASH)?;
         Ok(Self {
-            permits,
-            dummy_hash: Arc::from(dummy_hash),
+            permits: Arc::new(Semaphore::new(limit)),
+            dummy_hash: Arc::from(DUMMY_PASSWORD_HASH),
         })
     }
 
@@ -553,10 +555,9 @@ impl Lifecycle for PasswordAuthPlugin {
                     .filter(|binding| binding.name() == config.d1_binding)
                     .ok_or_else(|| runtime("Password D1 binding unavailable"))?
                     .clone();
-                let results = binding.run(vec![workers::statement("SELECT version FROM auth_password_schema WHERE version=1 AND fingerprint='edd64339e40c2de926965d72b30d332ed8d50a099031596add7dbbe8f09dce40'",vec![])]).await.map_err(|()|runtime("Password D1 schema unavailable"))?;
-                if results[0].results.len() != 1 {
-                    return Err(runtime("Password D1 schema mismatch"));
-                }
+                migration::verify(&binding)
+                    .await
+                    .map_err(|_| runtime("D1 migration verification failed"))?;
                 storage::PasswordStore::D1(binding)
             }
             #[cfg(not(feature = "workers"))]
@@ -564,7 +565,7 @@ impl Lifecycle for PasswordAuthPlugin {
                 return Err(runtime("Password D1 support is disabled"));
             }
         };
-        let password_work = PasswordWork::prepare().await.map_err(runtime)?;
+        let password_work = PasswordWork::prepare().map_err(runtime)?;
         state.replace(Some(store.clone()));
         let active = self.active.clone();
         active.replace(Some(Rc::new(ActivePassword {
@@ -618,6 +619,30 @@ fn normalize_identifier(value: &str) -> Option<String> {
 fn valid_password(value: &str) -> bool {
     (8..=1024).contains(&value.len())
 }
+// Fail closed if a dependency update changes the actual hashing policy. Checking
+// the PHC metadata is cheap; verifying the public fixture is a real-Argon2 test.
+fn validate_dummy_hash(encoded: &str) -> Result<(), PasswordPluginError> {
+    let hash = PasswordHash::new(encoded).map_err(|_| PasswordPluginError::Hash)?;
+    let engine = Argon2::default();
+    let params = engine.params();
+    let expected = argon2::password_hash::ParamsString::try_from(params)
+        .map_err(|_| PasswordPluginError::Hash)?;
+    if hash.algorithm.as_str() != argon2::Algorithm::default().as_str()
+        || hash.version != Some(argon2::Version::default() as u32)
+        || hash.params != expected
+        || hash.salt.is_none()
+        || hash.hash.as_ref().map(argon2::password_hash::Output::len)
+            != Some(
+                params
+                    .output_len()
+                    .unwrap_or(argon2::Params::DEFAULT_OUTPUT_LEN),
+            )
+    {
+        return Err(PasswordPluginError::Hash);
+    }
+    Ok(())
+}
+
 fn hash_password_sync(value: &str) -> Result<String, PasswordPluginError> {
     let mut bytes = [0_u8; 16];
     getrandom::fill(&mut bytes).map_err(|_| PasswordPluginError::Random)?;
@@ -941,7 +966,7 @@ mod tests {
 
     #[tokio::test]
     async fn password_work_rejects_overload_without_queueing() {
-        let worker = PasswordWork::prepare_with_limit(1).await.unwrap();
+        let worker = PasswordWork::prepare_with_limit(1).unwrap();
         let first_worker = worker.clone();
         let release = Arc::new(std::sync::Barrier::new(2));
         let release_worker = Arc::clone(&release);
@@ -986,3 +1011,6 @@ pub fn workers_factory(
         Ok(())
     })
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod password_work_tests;

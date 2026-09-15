@@ -1,4 +1,6 @@
 //! Durable device observations and trust facts.
+#[cfg(feature = "workers")]
+pub mod migration;
 #[cfg(feature = "postgres")]
 mod operator;
 #[cfg(feature = "postgres")]
@@ -234,11 +236,9 @@ impl Lifecycle for DeviceAuthPlugin {
                     .filter(|binding| binding.name() == config.d1_binding)
                     .ok_or_else(storage::failure)?
                     .clone();
-                let result = binding.run(vec![workers::statement(
-                    "SELECT version FROM auth_device_schema WHERE version=1 AND fingerprint='a406b7c5c8b3d1f656723dda5a41a912d4f434031fa9dfcf6e6372c0dc128994'", vec![])]).await.map_err(|()| storage::failure())?;
-                if result[0].results.len() != 1 {
-                    return Err(storage::failure());
-                }
+                migration::verify(&binding)
+                    .await
+                    .map_err(|_| storage::failure())?;
                 self.state.replace(Some(storage::DeviceStore::D1(binding)));
                 return Ok(());
             }

@@ -4,12 +4,12 @@ const MIGRATIONS: &[Migration] = sql_migrations![
     (
         1,
         "create-auth-devices",
-        "migrations/001_create_auth_devices.sql",
+        "migrations/postgres/001_create_auth_devices.sql",
     ),
     (
         2,
         "enforce-one-primary-device",
-        "migrations/002_enforce_one_primary_device.sql",
+        "migrations/postgres/002_enforce_one_primary_device.sql",
     ),
 ];
 

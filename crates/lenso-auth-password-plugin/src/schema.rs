@@ -4,12 +4,12 @@ const MIGRATIONS: &[Migration] = sql_migrations![
     (
         1,
         "create-password-credentials",
-        "migrations/001_create_password_credentials.sql",
+        "migrations/postgres/001_create_password_credentials.sql",
     ),
     (
         2,
         "index-stale-login-failures",
-        "migrations/002_index_stale_login_failures.sql",
+        "migrations/postgres/002_index_stale_login_failures.sql",
     ),
 ];
 

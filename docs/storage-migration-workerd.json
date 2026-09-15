@@ -1,0 +1,87 @@
+{
+  "runtime": "local workerd with actual D1 bindings",
+  "wasm_sha256": "6f6f7311953f518e4c7f6552efbf7a9d543b98f671c14935c8c0bbb5ecf0077e",
+  "compositions": 15,
+  "receipts": [
+    {
+      "owner": "account",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "account",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "oauth-flow",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "oauth-flow",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "password",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "password",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "phone",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "phone",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "device",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "device",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "api-token",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "api-token",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "oidc",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "oidc",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "test-only-upgrade",
+      "mode": "pending-and-rollback",
+      "passed": true
+    }
+  ],
+  "dependencies": {
+    "lenso-migration": "0.1.0",
+    "lenso-migration-d1": "0.1.0",
+    "@lenso/workers-runtime": "0.1.2"
+  }
+}
