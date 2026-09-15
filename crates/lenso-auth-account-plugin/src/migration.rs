@@ -4,15 +4,28 @@ use crate::workers::D1Binding;
 use lenso_migration::Migration;
 use lenso_migration_d1::{Error, LegacySchema, Plan, SqlMigration, Statement, Transport};
 
-const MIGRATIONS: &[Migration] = &[Migration::new(
-    1,
-    "account",
-    include_str!("../migrations/d1/001_account.sql"),
-)];
-const SQL: &[SqlMigration] = &[SqlMigration {
-    migration: MIGRATIONS[0],
-    statement_ends: &[190, 467, 748, 825, 1404, 1473, 1701, 1798, 1909],
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration::new(
+        1,
+        "account",
+        include_str!("../migrations/d1/001_account.sql"),
+    ),
+    Migration::new(
+        2,
+        "pagination-indexes",
+        include_str!("../migrations/d1/002_pagination_indexes.sql"),
+    ),
+];
+const SQL: &[SqlMigration] = &[
+    SqlMigration {
+        migration: MIGRATIONS[0],
+        statement_ends: &[190, 467, 748, 825, 1404, 1473, 1701, 1798, 1909],
+    },
+    SqlMigration {
+        migration: MIGRATIONS[1],
+        statement_ends: &[161],
+    },
+];
 pub fn plan() -> Result<Plan, Error> {
     Plan::new(
         "lenso.auth.account",

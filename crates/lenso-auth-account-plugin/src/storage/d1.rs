@@ -113,7 +113,7 @@ pub(crate) async fn list_subjects(
     db: &D1Binding,
     q: &crate::ListSubjectsRequest,
 ) -> Result<Vec<crate::ListSubjectsResponseSubjectsItem>, RuntimeFailure> {
-    let r=db.run(vec![statement(format!("SELECT subject_id,{STATUS} AS effective_status,disabled_reason,disabled_until,created_at FROM identity_subjects i WHERE (?1 IS NULL OR subject_id>?1) ORDER BY subject_id LIMIT ?2"),vec![json!(q.cursor),json!(q.limit)])]).await.map_err(rt)?;
+    let r = db.run(vec![subject_page_statement(q)]).await.map_err(rt)?;
     r[0].results
         .iter()
         .map(|row| {
@@ -143,7 +143,7 @@ pub(crate) async fn list_sessions(
     db: &D1Binding,
     q: &crate::ListSessionsRequest,
 ) -> Result<Vec<crate::ListSessionsResponseSessionsItem>, RuntimeFailure> {
-    let r=db.run(vec![statement("SELECT session_id,subject_id,actor_kind,assurance,expires_at,revoked_at IS NOT NULL AS revoked,created_at FROM auth_sessions WHERE (?1 IS NULL OR subject_id=?1) AND (?2 IS NULL OR session_id>?2) ORDER BY session_id LIMIT ?3",vec![json!(q.subject),json!(q.cursor),json!(q.limit)])]).await.map_err(rt)?;
+    let r = db.run(vec![session_page_statement(q)]).await.map_err(rt)?;
     r[0].results
         .iter()
         .map(|row| {
@@ -158,6 +158,121 @@ pub(crate) async fn list_sessions(
             })
         })
         .collect()
+}
+
+fn subject_page_statement(q: &crate::ListSubjectsRequest) -> crate::workers::Statement {
+    let select = format!(
+        "SELECT subject_id,{STATUS} AS effective_status,disabled_reason,disabled_until,created_at FROM identity_subjects i"
+    );
+    match q.cursor.as_ref() {
+        Some(cursor) => statement(
+            format!("{select} WHERE subject_id>?1 ORDER BY subject_id LIMIT ?2"),
+            vec![json!(cursor), json!(q.limit)],
+        ),
+        None => statement(
+            format!("{select} ORDER BY subject_id LIMIT ?1"),
+            vec![json!(q.limit)],
+        ),
+    }
+}
+
+fn session_page_statement(q: &crate::ListSessionsRequest) -> crate::workers::Statement {
+    let select = "SELECT session_id,subject_id,actor_kind,assurance,expires_at,revoked_at IS NOT NULL AS revoked,created_at FROM auth_sessions";
+    match (q.subject.as_ref(), q.cursor.as_ref()) {
+        (None, None) => statement(
+            format!("{select} ORDER BY session_id LIMIT ?1"),
+            vec![json!(q.limit)],
+        ),
+        (Some(subject), None) => statement(
+            format!("{select} WHERE subject_id=?1 ORDER BY session_id LIMIT ?2"),
+            vec![json!(subject), json!(q.limit)],
+        ),
+        (None, Some(cursor)) => statement(
+            format!("{select} WHERE session_id>?1 ORDER BY session_id LIMIT ?2"),
+            vec![json!(cursor), json!(q.limit)],
+        ),
+        (Some(subject), Some(cursor)) => statement(
+            format!("{select} WHERE subject_id=?1 AND session_id>?2 ORDER BY session_id LIMIT ?3"),
+            vec![json!(subject), json!(cursor), json!(q.limit)],
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn subjects(cursor: Option<&str>) -> crate::ListSubjectsRequest {
+        crate::ListSubjectsRequest {
+            cursor: cursor.map(str::to_owned),
+            limit: 2,
+        }
+    }
+
+    fn sessions(subject: Option<&str>, cursor: Option<&str>) -> crate::ListSessionsRequest {
+        crate::ListSessionsRequest {
+            subject: subject.map(str::to_owned),
+            cursor: cursor.map(str::to_owned),
+            limit: 2,
+        }
+    }
+
+    #[test]
+    fn subject_pages_use_nullable_free_first_and_seek_queries() {
+        let first = subject_page_statement(&subjects(None));
+        assert_eq!(
+            first.sql,
+            format!(
+                "SELECT subject_id,{STATUS} AS effective_status,disabled_reason,disabled_until,created_at FROM identity_subjects i ORDER BY subject_id LIMIT ?1"
+            )
+        );
+        assert_eq!(first.params, vec![json!(2)]);
+
+        let deep = subject_page_statement(&subjects(Some("usr_001")));
+        assert_eq!(
+            deep.sql,
+            format!(
+                "SELECT subject_id,{STATUS} AS effective_status,disabled_reason,disabled_until,created_at FROM identity_subjects i WHERE subject_id>?1 ORDER BY subject_id LIMIT ?2"
+            )
+        );
+        assert_eq!(deep.params, vec![json!("usr_001"), json!(2)]);
+    }
+
+    #[test]
+    fn session_pages_select_each_subject_and_cursor_variant() {
+        let select = "SELECT session_id,subject_id,actor_kind,assurance,expires_at,revoked_at IS NOT NULL AS revoked,created_at FROM auth_sessions";
+        let cases = [
+            (
+                sessions(None, None),
+                format!("{select} ORDER BY session_id LIMIT ?1"),
+                vec![json!(2)],
+            ),
+            (
+                sessions(Some("usr_001"), None),
+                format!("{select} WHERE subject_id=?1 ORDER BY session_id LIMIT ?2"),
+                vec![json!("usr_001"), json!(2)],
+            ),
+            (
+                sessions(None, Some("ses_001")),
+                format!("{select} WHERE session_id>?1 ORDER BY session_id LIMIT ?2"),
+                vec![json!("ses_001"), json!(2)],
+            ),
+            (
+                sessions(Some("usr_001"), Some("ses_001")),
+                format!(
+                    "{select} WHERE subject_id=?1 AND session_id>?2 ORDER BY session_id LIMIT ?3"
+                ),
+                vec![json!("usr_001"), json!("ses_001"), json!(2)],
+            ),
+        ];
+
+        for (request, sql, params) in cases {
+            let statement = session_page_statement(&request);
+            assert_eq!(statement.sql, sql);
+            assert_eq!(statement.params, params);
+            assert!(!statement.sql.contains("IS NULL OR"));
+        }
+    }
 }
 pub(crate) async fn set_subject_status(
     db: &D1Binding,

@@ -84,6 +84,11 @@ credentials or provisions Cloudflare resources.
 Registry adoption does not run a database migration. Existing application
 storage still requires an explicit, separately operated upgrade or legacy adoption.
 
+The Account D1 history's v2 migration adds the compound
+`auth_sessions(subject_id, session_id)` index used by subject-filtered session
+pagination. Existing v1 databases must be explicitly upgraded after legacy
+adoption; the v1 SQL and fingerprint remain unchanged.
+
 ## Recorded local verification
 
 - 52 native Auth tests passed, including real PostgreSQL acceptance tests for all

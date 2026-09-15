@@ -1,3 +1,5 @@
+#![cfg(feature = "postgres")]
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use lenso_auth_account_plugin::AccountAuthOperator;
