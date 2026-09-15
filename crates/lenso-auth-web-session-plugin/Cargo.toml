@@ -11,6 +11,9 @@ repository.workspace = true
 plugin-id = "lenso.auth.web-session"
 root-slot = "auth"
 
+[features]
+workers = ["time/wasm-bindgen", "getrandom/wasm_js"]
+
 [dependencies]
 base64.workspace = true
 getrandom.workspace = true

@@ -26,7 +26,7 @@ impl AuthRouterConfig {
         if routes.is_empty()
             || routes
                 .iter()
-                .any(|(scheme, provider)| !valid(scheme) || !valid(provider))
+                .any(|(scheme, provider)| !valid(scheme) || !valid_provider(provider))
             || routes.values().collect::<BTreeSet<_>>().len() != routes.len()
         {
             return Err(RuntimeFailure::InvalidResolvedPlan {
@@ -132,4 +132,28 @@ fn valid(v: &str) -> bool {
         && v.len() <= 64
         && v.bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+fn valid_provider(value: &str) -> bool {
+    value.split_once('/').map_or_else(
+        || valid(value),
+        |(plugin, instance)| valid(plugin) && valid(instance),
+    )
+}
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+    #[test]
+    fn normal_root_provider_keys_preserve_strict_scheme_validation() {
+        assert!(
+            AuthRouterConfig::new(BTreeMap::from([(
+                "session".into(),
+                "lenso.auth.account/account".into()
+            )]))
+            .is_ok()
+        );
+        assert!(!valid_provider("plugin/instance/extra"));
+        assert!(!valid_provider("/instance"));
+        assert!(!valid("scheme/other"));
+    }
 }
