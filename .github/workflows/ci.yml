@@ -32,16 +32,11 @@ jobs:
           toolchain: 1.94.0
           components: rustfmt,clippy
           targets: wasm32-unknown-unknown,wasm32-wasip2
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          repository: LioRael/lenso-runtime-rust
-          ref: 905a59141ca0e349b734fb7de99d010f2b0dc0df
-          path: .ci/runtime
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Install reviewed Runtime package
-        run: npm install --ignore-scripts --no-save --package-lock=false --prefix workers "$GITHUB_WORKSPACE/.ci/runtime/packages/workers-runtime"
+      - name: Install released Runtime package
+        run: npm ci --ignore-scripts --prefix workers
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check workspace
@@ -59,10 +54,7 @@ jobs:
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
       - name: Check extracted Workers Auth packages
-        run: |
-          cargo package --manifest-path .ci/runtime/Cargo.toml --no-verify -p lenso-native-adapter -p lenso-native-adapter-macros -p lenso-runtime-codec
-          export RUNTIME_ARCHIVES="$GITHUB_WORKSPACE/.ci/runtime/target/package/lenso-native-adapter-0.3.13.crate:$GITHUB_WORKSPACE/.ci/runtime/target/package/lenso-native-adapter-macros-0.2.4.crate:$GITHUB_WORKSPACE/.ci/runtime/target/package/lenso-runtime-codec-0.4.1.crate"
-          python3 workers/check-packages.py
+        run: python3 workers/check-packages.py
       - name: Package public crates
         run: |
           # Package this same-release edge together; live publishing keeps the dependency order.

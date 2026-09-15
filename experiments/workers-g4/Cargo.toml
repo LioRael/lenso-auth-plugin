@@ -4,20 +4,10 @@ members=["host"]
 [workspace.dependencies]
 lenso-kernel="=0.3.6"
 lenso-app-plan="0.4.1"
-lenso-native-adapter="0.3.13"
+lenso-native-adapter="0.3.14"
 futures="0.3"
 serde={version="1",features=["derive"]}
 serde_json="1"
 wasm-bindgen="=0.2.127"
 wasm-bindgen-futures="=0.4.77"
 js-sys="=0.3.104"
-
-[patch.crates-io]
-lenso-native-adapter = { git = "https://github.com/LioRael/lenso-runtime-rust", rev = "905a59141ca0e349b734fb7de99d010f2b0dc0df" }
-lenso-native-adapter-macros = { git = "https://github.com/LioRael/lenso-runtime-rust", rev = "905a59141ca0e349b734fb7de99d010f2b0dc0df" }
-lenso-runtime-codec = { git = "https://github.com/LioRael/lenso-runtime-rust", rev = "905a59141ca0e349b734fb7de99d010f2b0dc0df" }
-lenso-workers-driver = { git = "https://github.com/LioRael/lenso-runtime-rust", rev = "905a59141ca0e349b734fb7de99d010f2b0dc0df" }
-lenso-web-ingress-plugin = { git = "https://github.com/LioRael/lenso-web", rev = "0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f" }
-lenso-http-egress-plugin = { git = "https://github.com/LioRael/lenso-web", rev = "0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f" }
-lenso-capability-http-endpoint = { git = "https://github.com/LioRael/lenso-web", rev = "0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f" }
-lenso-capability-http-client = { git = "https://github.com/LioRael/lenso-web", rev = "0425bd1cecd7ccd3df7bf698f148bf7a915e1f1f" }
