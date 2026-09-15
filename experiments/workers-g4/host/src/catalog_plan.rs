@@ -97,11 +97,13 @@ pub(super) fn resolve(
             }
         })
         .collect();
-    host_bindings.push(HostBinding::to_instance(
-        ids["denied"].clone(),
-        flow::CAPABILITY_ID,
-        ids["oauth"].clone(),
-    ));
+    if let (Some(denied), Some(oauth)) = (ids.get("denied"), ids.get("oauth")) {
+        host_bindings.push(HostBinding::to_instance(
+            denied.clone(),
+            flow::CAPABILITY_ID,
+            oauth.clone(),
+        ));
+    }
     let host = HostCatalog::new(
         slots.into_iter().map(|(name, count)| {
             if count > 1 {

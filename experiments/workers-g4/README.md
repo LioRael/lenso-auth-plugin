@@ -13,6 +13,16 @@ The RPC and browser routes require the dedicated proof key; only fixture JWKS an
 client-authenticated token exchange are independently reachable. This is not an
 application login service or a production deployment template.
 
+## Local D01 characterization
+
+```sh
+# From the repository root; local resources only, no Wrangler deployment config.
+bash experiments/workers-g4/profile.sh
+```
+
+See [the D01 protocol and current status](../../docs/workers-g4-d01.md) for pinned
+tools, cold/warm definitions, the completed matrix and machine-readable evidence.
+
 ## Build and run
 
 The workspace intentionally uses the reviewed Runtime and Web owner worktrees

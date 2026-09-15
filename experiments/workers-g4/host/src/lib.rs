@@ -122,6 +122,15 @@ fn plan(
     origin: Option<&str>,
     method: Option<(&str, Value)>,
 ) -> Result<ResolvedAppPlan, JsValue> {
+    let (instances, bindings) = plan_parts(signing, origin, method);
+    catalog_plan::resolve(instances, bindings).map_err(|e| JsValue::from_str(&e))
+}
+
+fn plan_parts(
+    signing: &str,
+    origin: Option<&str>,
+    method: Option<(&str, Value)>,
+) -> (Vec<PluginInstancePlan>, Vec<CapabilityBinding>) {
     let account_config = json!({"schema":"auth","d1_binding":"ACCOUNT_DB","issuer":"g4-proof","assertion_public_key":lenso_auth_account_plugin::assertion_public_key(signing),"assertion_signing_key_secret":"signing","token_pepper_secret":"pepper","assertion_ttl_seconds":30,"admin_callers":["proof.caller/caller"],"delegation_callers":["proof.caller/caller"]});
     let mut account = PluginInstancePlan::new("account", lenso_auth_account_plugin::PACKAGE_ID)
         .with_configuration(account_config.to_string())
@@ -247,7 +256,7 @@ fn plan(
     if let Some(origin) = origin {
         http_host::extend_plan(&mut instances, &mut bindings, origin);
     }
-    catalog_plan::resolve(instances, bindings).map_err(|e| JsValue::from_str(&e))
+    (instances, bindings)
 }
 #[derive(Deserialize)]
 struct Input {
@@ -430,3 +439,5 @@ pub async fn migrate(
 }
 
 mod migration_fixture;
+
+mod profile;
