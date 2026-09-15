@@ -7,6 +7,13 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@lenso/http-egress-workers':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@lenso/workers-runtime':
+        specifier: 0.1.2
+        version: 0.1.2
     devDependencies:
       wrangler:
         specifier: 4.107.0
@@ -383,6 +390,14 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
+  '@lenso/http-egress-workers@0.1.0':
+    resolution: {integrity: sha512-yN3vBud8beGlYs8IeFdDjDZ+RzX5fzsF7SF65SJhN8kueT0K+KG/qDiihaMnpQtdLus58namzly1UWd+JlnNfA==}
+
+  '@lenso/workers-runtime@0.1.2':
+    resolution: {integrity: sha512-DIoji7/x4FPpBkygWt4KXHip5gfedofmPiTPyTCpnGWuaM2BiMARzH0N0bSDshyXDLXQkvsHPmlQ/ZoHZ0jBHg==}
+    engines: {node: '>=22'}
+    hasBin: true
+
   '@poppinss/colors@4.1.6':
     resolution: {integrity: sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg==}
 
@@ -710,6 +725,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@lenso/http-egress-workers@0.1.0': {}
+
+  '@lenso/workers-runtime@0.1.2': {}
 
   '@poppinss/colors@4.1.6':
     dependencies:

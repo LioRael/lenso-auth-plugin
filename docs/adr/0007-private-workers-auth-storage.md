@@ -59,7 +59,8 @@ Transport failures become redacted Runtime Failures. Credentials, signing keys,
 peppers and encryption keys never enter diagnostics or public configuration.
 Entropy uses getrandom's Web Crypto backends (including transitive 0.2 crypto).
 time/wasm-bindgen supplies Worker wall time; pinned JWT validation independently
-selects JS Date. Password security parameters/execution are unchanged.
+selects JS Date. Password security parameters and verification execution are unchanged; preparation
+validates a precomputed public dummy hash instead of hashing it per App.
 
 ## Qualification and limits
 
@@ -99,7 +100,10 @@ credential, issuer and redirect validation remains mandatory before Ready.
 ## Package self-containment
 
 Each storage owner packages its own `src/workers.rs`. These byte-identical copies
-come from Auth-owned `workers/d1.rs`; the Node CI test rejects drift. This small
+are generated from Auth-owned `workers/d1.rs` by
+`node workers/generate-bridges.mjs`; the generated header identifies the authoring
+source. `node workers/generate-bridges.mjs --check` rejects drift without writing
+files, and CI runs that check before compilation. This small
 transport module contains no Account or OAuth business policy. It avoids a new
 public support crate and never resolves a Rust source file outside its package.
 The JS binding remains an explicit Host asset copied from `workers/d1-binding.mjs`.
@@ -131,3 +135,30 @@ Runtime cohort can be supplied using `RUNTIME_ARCHIVES` (OS path-separated actua
 the isolated proof directory. Package versions do not imply registry publication.
 The shared `createEventScope` now owns binding settlement and callback fencing;
 D1 adapters no longer compose their own cleanup hooks.
+
+## Password preparation cost
+
+Password and Phone use a public precomputed dummy PHC hash. Preparation parses
+and checks its exact Argon2 algorithm, version, cost parameters and output length
+against the same `Argon2::default()` policy used for real hashes; mismatch fails
+preparation. Tests regenerate each fixture from its public input and salt.
+This removes one Argon2 hash from every owner preparation, including fresh
+Workers event Apps, without caching App state, credentials, or event I/O.
+Every App still receives its own bounded semaphore. Real password hashes keep
+fresh random salts. A missing credential still runs one full verification and
+always rejects, even when its input equals the public dummy input.
+
+Native hash/verify jobs still run on `spawn_blocking`; Wasm still runs the same
+Argon2 job synchronously on its execution thread. Admission is bounded but does
+not make Wasm hashing nonblocking or promise an isolate CPU budget. See
+[`../password-performance.md`](../password-performance.md) for the reproducible
+local measurements and scope.
+
+## Unified migration histories
+
+Auth now packages backend-specific SQL under `migrations/postgres` and
+`migrations/d1`. Both adapters consume the portable `lenso-migration` history
+model. D1 uses the explicit `lenso-migration-d1` setup/upgrade/adoption operators;
+Ready only verifies. Existing v1 databases require explicit legacy adoption.
+See [storage migration operations](../storage-migrations.md) for package
+qualification, target ownership and the separate release/rollout requirements.

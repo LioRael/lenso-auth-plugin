@@ -1,4 +1,6 @@
 //! Phone OTP and phone-password authentication with private durable state.
+#[cfg(feature = "workers")]
+pub mod migration;
 #[cfg(feature = "postgres")]
 mod operator;
 #[cfg(feature = "postgres")]
@@ -53,7 +55,12 @@ use tokio::sync::Semaphore;
 use zeroize::Zeroizing;
 const TIMEOUT: StdDuration = StdDuration::from_secs(10);
 const MAX_PASSWORD_WORK_JOBS: usize = 4;
+#[cfg(test)]
 const DUMMY_PASSWORD_INPUT: &str = "lenso-auth-phone-password-dummy-input";
+// Public timing fixture, not a credential. Generated with Argon2::default() and
+// the public salt b"lenso-dummy-salt"; preparation validates its exact policy.
+const DUMMY_PASSWORD_HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$bGVuc28tZHVtbXktc2FsdA$l33f0kuN3AQQC7EhBF9pMoyNn8DjbZWKsV4kn/bt26Y";
+
 #[cfg(feature = "postgres")]
 const STALE_FAILURE_PRUNE_BATCH: i64 = 256;
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -159,19 +166,15 @@ struct PasswordWork {
 }
 
 impl PasswordWork {
-    async fn prepare() -> Result<Self, PasswordWorkError> {
-        Self::prepare_with_limit(MAX_PASSWORD_WORK_JOBS).await
+    fn prepare() -> Result<Self, PasswordWorkError> {
+        Self::prepare_with_limit(MAX_PASSWORD_WORK_JOBS)
     }
 
-    async fn prepare_with_limit(limit: usize) -> Result<Self, PasswordWorkError> {
-        let permits = Arc::new(Semaphore::new(limit));
-        let dummy_hash = run_password_job(Arc::clone(&permits), || {
-            hash_password_sync(DUMMY_PASSWORD_INPUT)
-        })
-        .await?;
+    fn prepare_with_limit(limit: usize) -> Result<Self, PasswordWorkError> {
+        validate_dummy_hash(DUMMY_PASSWORD_HASH)?;
         Ok(Self {
-            permits,
-            dummy_hash: Arc::from(dummy_hash),
+            permits: Arc::new(Semaphore::new(limit)),
+            dummy_hash: Arc::from(DUMMY_PASSWORD_HASH),
         })
     }
 
@@ -694,10 +697,9 @@ impl Lifecycle for PhoneAuthPlugin {
                     .filter(|binding| binding.name() == c.d1_binding)
                     .ok_or_else(|| failure("Phone D1 binding unavailable"))?
                     .clone();
-                let results=binding.run(vec![workers::statement("SELECT version FROM auth_phone_schema WHERE version=1 AND fingerprint='a43943ded1db550678ceed87ba38b8d24925bfe35b56bafdec2ecdd6ca428c3a'",vec![])]).await.map_err(|()|failure("Phone D1 schema unavailable"))?;
-                if results[0].results.len() != 1 {
-                    return Err(failure("Phone D1 schema mismatch"));
-                }
+                migration::verify(&binding)
+                    .await
+                    .map_err(|_| failure("D1 migration verification failed"))?;
                 storage::PhoneStore::D1(binding)
             }
             #[cfg(not(feature = "workers"))]
@@ -705,9 +707,8 @@ impl Lifecycle for PhoneAuthPlugin {
                 return Err(failure("Phone D1 support disabled"));
             }
         };
-        let password_work = PasswordWork::prepare()
-            .await
-            .map_err(|error| password_work_failure(&error))?;
+        let password_work =
+            PasswordWork::prepare().map_err(|error| password_work_failure(&error))?;
         let prepared = Prepared {
             store,
             otp_secret: Zeroizing::new(otp.as_bytes().to_vec()),
@@ -992,6 +993,30 @@ fn valid_name(v: &str) -> bool {
 fn valid_password(v: &str) -> bool {
     (8..=1024).contains(&v.len())
 }
+// Fail closed if a dependency update changes the actual hashing policy. Checking
+// the PHC metadata is cheap; verifying the public fixture is a real-Argon2 test.
+fn validate_dummy_hash(encoded: &str) -> Result<(), PhonePasswordError> {
+    let hash = PasswordHash::new(encoded).map_err(|_| PhonePasswordError::Hash)?;
+    let engine = Argon2::default();
+    let params = engine.params();
+    let expected = argon2::password_hash::ParamsString::try_from(params)
+        .map_err(|_| PhonePasswordError::Hash)?;
+    if hash.algorithm.as_str() != argon2::Algorithm::default().as_str()
+        || hash.version != Some(argon2::Version::default() as u32)
+        || hash.params != expected
+        || hash.salt.is_none()
+        || hash.hash.as_ref().map(argon2::password_hash::Output::len)
+            != Some(
+                params
+                    .output_len()
+                    .unwrap_or(argon2::Params::DEFAULT_OUTPUT_LEN),
+            )
+    {
+        return Err(PhonePasswordError::Hash);
+    }
+    Ok(())
+}
+
 fn hash_password_sync(v: &str) -> Result<String, PhonePasswordError> {
     let mut b = [0u8; 16];
     getrandom::fill(&mut b).map_err(|_| PhonePasswordError::Random)?;
@@ -1302,7 +1327,7 @@ mod tests {
 
     #[tokio::test]
     async fn password_work_rejects_overload_without_queueing() {
-        let worker = PasswordWork::prepare_with_limit(1).await.unwrap();
+        let worker = PasswordWork::prepare_with_limit(1).unwrap();
         let first_worker = worker.clone();
         let release = Arc::new(std::sync::Barrier::new(2));
         let release_worker = Arc::clone(&release);
@@ -1352,3 +1377,6 @@ fn valid_caller(value: &str) -> bool {
         |(package, instance)| valid_name(package) && valid_name(instance),
     )
 }
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod password_work_tests;

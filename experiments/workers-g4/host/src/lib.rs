@@ -379,3 +379,54 @@ impl lenso_auth_sdk::TypedActor for ProofActor {
         }
     }
 }
+
+/// Isolated deployment-test entry point. Never called by the application Ready gate.
+#[wasm_bindgen]
+pub async fn migrate(
+    owner: String,
+    action: String,
+    batch: js_sys::Function,
+) -> Result<(), JsValue> {
+    if let Some(version) = match owner.as_str() {
+        "fixture-v1" => Some(1),
+        "fixture-v2" => Some(2),
+        "fixture-failed-v3" => Some(3),
+        _ => None,
+    } {
+        let plan =
+            migration_fixture::plan(version).map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let binding = lenso_auth_account_plugin::workers::D1Binding::new("MIGRATION_DB", batch);
+        return match action.as_str() {
+            "setup" => plan.setup(&binding).await,
+            "verify" => plan.verify(&binding).await,
+            "upgrade" => plan.upgrade(&binding).await,
+            _ => return Err(JsValue::from_str("unknown fixture migration action")),
+        }
+        .map_err(|e| JsValue::from_str(&e.to_string()));
+    }
+    macro_rules! dispatch {
+        ($plugin:ident) => {{
+            let binding = $plugin::workers::D1Binding::new("MIGRATION_DB", batch);
+            match action.as_str() {
+                "setup" => $plugin::migration::setup(&binding).await,
+                "verify" => $plugin::migration::verify(&binding).await,
+                "upgrade" => $plugin::migration::upgrade(&binding).await,
+                "adopt-legacy" => $plugin::migration::adopt_legacy(&binding).await,
+                _ => return Err(JsValue::from_str("unknown migration action")),
+            }
+            .map_err(|error| JsValue::from_str(&error.to_string()))
+        }};
+    }
+    match owner.as_str() {
+        "account" => dispatch!(lenso_auth_account_plugin),
+        "oauth-flow" => dispatch!(lenso_auth_oauth_flow_plugin),
+        "password" => dispatch!(lenso_auth_password_plugin),
+        "phone" => dispatch!(lenso_auth_phone_plugin),
+        "device" => dispatch!(lenso_auth_device_plugin),
+        "api-token" => dispatch!(lenso_auth_api_token_plugin),
+        "oidc" => dispatch!(lenso_auth_oidc_plugin),
+        _ => Err(JsValue::from_str("unknown migration owner")),
+    }
+}
+
+mod migration_fixture;

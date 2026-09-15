@@ -713,8 +713,9 @@ impl Lifecycle for AccountAuthPlugin {
                     .filter(|b| b.name() == binding_name)
                     .ok_or_else(|| runtime("configured Account D1 binding is unavailable"))?
                     .clone();
-                binding.run(vec![workers::statement("SELECT version FROM auth_account_schema WHERE version=1 AND fingerprint='e2ab982504b77776e928387519fb612fcd4b0213007713ad5389d79910a1db12'", vec![])]).await.map_err(|()|runtime("Account D1 schema verification failed"))?
-                    .first().filter(|r|r.results.len()==1).ok_or_else(||runtime("Account D1 schema version mismatch"))?;
+                migration::verify(&binding)
+                    .await
+                    .map_err(|_| runtime("Account D1 migration verification failed"))?;
                 storage::AccountStore::D1(binding)
             }
             #[cfg(not(feature = "workers"))]
@@ -853,6 +854,8 @@ async fn resolve(
         })
 }
 
+#[cfg(feature = "workers")]
+pub mod migration;
 #[cfg(feature = "workers")]
 pub mod workers;
 

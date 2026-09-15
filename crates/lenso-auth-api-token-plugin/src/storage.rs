@@ -59,10 +59,9 @@ impl ApiTokenStore {
     pub(crate) async fn prepare_workers(
         binding: crate::workers::D1Binding,
     ) -> Result<Self, crate::AuthOperatorError> {
-        let results=binding.run(vec![crate::workers::statement("SELECT version FROM auth_api_token_schema WHERE version=1 AND fingerprint='d58aeed9f2569d8d24b83b2d81e5a7ecc33ad0fb7e6c2097be282e6f280e52db'",vec![])]).await.map_err(|()|crate::AuthOperatorError::Storage)?;
-        if results[0].results.len() != 1 {
-            return Err(crate::AuthOperatorError::Storage);
-        }
+        crate::migration::verify(&binding)
+            .await
+            .map_err(|_| crate::AuthOperatorError::Storage)?;
         Ok(Self::D1(binding))
     }
 }

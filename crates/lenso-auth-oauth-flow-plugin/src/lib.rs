@@ -254,7 +254,9 @@ impl Lifecycle for OAuthFlowPlugin {
                     .filter(|b| b.name() == name)
                     .ok_or_else(|| failure("configured OAuth D1 binding unavailable"))?
                     .clone();
-                binding.run(vec![workers::statement("SELECT version FROM auth_oauth_schema WHERE version=1 AND fingerprint='6c15b7330f8d7614265c3acc63d9eb58f21b74beb03a7a355a4c0fcb45fae2ba'",vec![])]).await.map_err(|()|failure("OAuth D1 schema verification failed"))?.first().filter(|r|r.results.len()==1).ok_or_else(||failure("OAuth D1 schema version mismatch"))?;
+                migration::verify(&binding)
+                    .await
+                    .map_err(|_| failure("OAuth D1 migration verification failed"))?;
                 storage::FlowStore::D1(binding)
             }
             #[cfg(not(feature = "workers"))]
@@ -334,6 +336,8 @@ fn db_error(error: impl fmt::Display) -> RuntimeFailure {
     failure(&format!("OAuth Flow storage operation failed: {error}"))
 }
 
+#[cfg(feature = "workers")]
+pub mod migration;
 #[cfg(feature = "workers")]
 pub mod workers;
 

@@ -2,3 +2,7 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+# Exact existing owner releases, integrity-pinned in pnpm-lock.yaml.
+minimumReleaseAgeExclude:
+  - '@lenso/http-egress-workers@0.1.0'
+  - '@lenso/workers-runtime@0.1.2'

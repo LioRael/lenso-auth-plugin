@@ -37,6 +37,8 @@ jobs:
           node-version: 24
       - name: Install released Runtime package
         run: npm ci --ignore-scripts --prefix workers
+      - name: Check generated private D1 bridges
+        run: node workers/generate-bridges.mjs --check
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check workspace
@@ -51,6 +53,10 @@ jobs:
           cargo check --locked -p lenso-capability-auth -p lenso-auth-sdk --target wasm32-wasip2
       - name: Check Workers Auth implementations
         run: cargo clippy --locked --target wasm32-unknown-unknown --no-default-features --features workers -p lenso-auth-account-plugin -p lenso-auth-oauth-flow-plugin -p lenso-auth-web-session-plugin -p lenso-auth-oidc-client-plugin -p lenso-auth-router-plugin -p lenso-auth-password-plugin -p lenso-auth-phone-plugin -p lenso-auth-device-plugin -p lenso-auth-api-token-plugin -p lenso-auth-oidc-plugin -- -D warnings
+      - name: Check generated D1 migration plans
+        run: |
+          python3 workers/generate-migrations.py --check
+          python3 workers/test-migration-generation.py
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
       - name: Check extracted Workers Auth packages

@@ -6,7 +6,7 @@
     "wrangler": "4.107.0"
   },
   "dependencies": {
-    "@lenso/workers-runtime": "0.1.0",
+    "@lenso/workers-runtime": "0.1.2",
     "@lenso/http-egress-workers": "0.1.0"
   }
 }

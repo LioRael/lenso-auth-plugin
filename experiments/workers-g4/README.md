@@ -77,3 +77,13 @@ See [qualification evidence](evidence/qualification.md) and
 [the backend ADR](../../docs/adr/0007-private-workers-auth-storage.md) for exact
 scope, results and limitations. Password, Phone, Device, API Token and OIDC Provider
 are separate unqualified slices; password parameters have not changed.
+
+## Unified migration qualification
+
+The updated owner Ready gates require common migration history. Existing proof
+databases must be explicitly adopted through the owner migration operator before
+running these older application suites; Wrangler alone does not establish that
+history. Do not run adoption against retained remote resources without a separate
+rollout decision. The local-only `migration-proof.mjs` verifies fresh and legacy
+paths using fifteen ephemeral D1 databases and the new packaged HTTP Host entry.
+See [migration operations](../../docs/storage-migrations.md).

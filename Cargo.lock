@@ -1112,6 +1112,8 @@ dependencies = [
  "lenso-capability-identity-directory",
  "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "serde",
@@ -1189,6 +1191,8 @@ dependencies = [
  "lenso-capability-auth",
  "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "lenso-runner",
@@ -1213,6 +1217,8 @@ dependencies = [
  "lenso-capability-device-auth",
  "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "serde",
@@ -1262,6 +1268,8 @@ dependencies = [
  "lenso-capability-oauth-flow",
  "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "serde",
@@ -1321,6 +1329,8 @@ dependencies = [
  "lenso-capability-oidc-provider",
  "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "serde",
@@ -1348,6 +1358,8 @@ dependencies = [
  "lenso-capability-password-auth",
  "lenso-capability-secrets",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "serde",
@@ -1377,6 +1389,8 @@ dependencies = [
  "lenso-capability-secrets",
  "lenso-capability-sms-delivery",
  "lenso-kernel",
+ "lenso-migration",
+ "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "serde",
@@ -1796,6 +1810,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-migration"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fd405f9f335ac2fdf5809dd293581f9fb4adcb14b56ba1c7f0963ae6d825ed5"
+dependencies = [
+ "hex",
+ "sha2 0.11.0",
+ "thiserror",
+]
+
+[[package]]
+name = "lenso-migration-d1"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92c8b802f87c26050c662dd95765df3d23d2307b7e9ec94ca4399850f4b88da8"
+dependencies = [
+ "futures",
+ "lenso-migration",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "lenso-native-adapter"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1833,12 +1871,11 @@ checksum = "8f24f444677f5b9857d4aa6f2ca90002243eb756a7f153bb721206f88abe6b07"
 
 [[package]]
 name = "lenso-postgres-kit"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7329f327440a4126e4a5223adfa81e5e920a7357e7af9a0b3bdbffc7a71fea93"
+checksum = "15b53833da7745e9d5236a8340ebb28c1d097b8635ffa4917c4ac91bca11d240"
 dependencies = [
- "hex",
- "sha2 0.11.0",
+ "lenso-migration",
  "sqlx",
  "thiserror",
 ]

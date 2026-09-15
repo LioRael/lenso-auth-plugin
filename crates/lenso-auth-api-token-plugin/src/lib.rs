@@ -1,5 +1,7 @@
 //! Opaque API-token Auth Plugin with privately owned persistence.
 
+#[cfg(feature = "workers")]
+pub mod migration;
 mod operator;
 #[cfg(feature = "postgres")]
 mod schema;
