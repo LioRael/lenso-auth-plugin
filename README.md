@@ -4,6 +4,10 @@ Portable Auth Capability contracts and assertion semantics for Lenso vNext.
 The default `main` branch is vNext-only. The final mixed v0.3 workspace is
 retained on the `v0.3` branch and by its existing package tags and releases.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for editor-independent fork handoff, focused validation, candidate CI, and normal-fast-forward landing.
+
 ## Workspace
 
 - `crates/lenso-auth-api-token-plugin` is the first concrete Provider. It owns
@@ -107,12 +111,14 @@ release.
 
 ## Development
 
-Run Cargo through the shared workspace wrapper when available:
+Run focused Cargo checks through the shared workspace wrapper when available.
+Candidate CI is the authoritative full workspace and Auth lifecycle proof; do
+not treat a partial local check as a substitute:
 
 ```sh
 cargo fmt --all -- --check
-cargo check --locked --workspace --all-targets
-cargo test --locked --workspace
+cargo check --locked -p <affected-crate>
+cargo test --locked -p <affected-crate>
 ```
 
 Database acceptance additionally uses a disposable PostgreSQL instance:

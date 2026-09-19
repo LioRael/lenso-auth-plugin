@@ -1,5 +1,7 @@
 # Release process
 
+Contribution and candidate-landing rules are in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
 The default branch contains five public vNext Rust crates:
 
 - `lenso-capability-auth`
@@ -11,10 +13,11 @@ The default branch contains five public vNext Rust crates:
 All other workspace members are private implementation crates and must keep
 `publish = false`.
 
-Release planning is automatic and publication is manual-only. A push to `main`
-refreshes the repository's Release-plz PR, which owns reviewed version and
-dependency changes. Merging that PR does not publish crates. The workflow also
-has a read-only dry-run mode and a separately gated live mode. It uses the
+Release planning is not automatic: this repository does not create Release-plz
+PRs and pushes do not trigger release workflows. Publication is manual-only and
+starts from an exact immutable SHA already on `main`, with an explicit approved
+`package@version` set. The workflow has a read-only dry-run mode and a
+separately gated live mode. It uses the
 explicit versions in the post-extraction workspace as the release baseline, so
 release-plz does not derive versions by traversing the imported pre-extraction
 history.
@@ -61,12 +64,15 @@ the exact reviewed `main` commit. The release tag format is
 
 ## Release gates
 
-Review the refreshed Release-plz PR first. Confirm that its versions and exact
-workspace dependency requirements form the intended publishable set, merge it,
-and wait for `main` CI to pass. Then run the workflow dry-run from `main`:
+A maintainer must first review the landed candidate, its exact dependency
+requirements, and the candidate `Check` run. Then run the workflow dry-run from
+`main`, supplying the full landed SHA and exact package set:
 
 ```sh
-gh workflow run release-plz.yml --ref main -f live=false
+gh workflow run release-plz.yml --ref main \
+  -f landed_sha=<40-character-main-sha> \
+  -f versions=lenso-capability-auth@0.1.0,lenso-auth-sdk@0.1.0 \
+  -f live=false
 ```
 
 Inspect the completed run and confirm that it identifies only the intended
@@ -74,7 +80,10 @@ unpublished versions. Live publication requires both the `main` ref and the
 literal confirmation value `publish`:
 
 ```sh
-gh workflow run release-plz.yml --ref main -f live=true -f confirm=publish
+gh workflow run release-plz.yml --ref main \
+  -f landed_sha=<40-character-main-sha> \
+  -f versions=<exact-package@version-set> \
+  -f live=true -f confirm=publish
 ```
 
 The live job obtains a short-lived crates.io credential through GitHub OIDC.
@@ -84,18 +93,15 @@ registry state is authoritative.
 The `v0.3` branch retains the old release-line source. Its packages, tags, and
 release procedure are not part of `main` and must not be recreated here.
 
-## Local checks
+## Qualification boundary
 
-```sh
-cargo fmt --all -- --check
-cargo check --locked --workspace --all-targets
-cargo test --locked --workspace
-cargo package --locked -p lenso-capability-auth --allow-dirty
-cargo package --locked -p lenso-auth-sdk --allow-dirty
-cargo package --locked -p lenso-capability-credential-issuer --allow-dirty
-cargo package --locked -p lenso-capability-identity-directory --allow-dirty
-cargo package --locked -p lenso-capability-password-auth --allow-dirty
-```
+Local checks are focused on the changed files; do not treat a full local suite as
+a substitute for candidate CI. The candidate `Check` job is the required
+lifecycle, session, credential, authorization, native, WASM, and database proof.
+The dry-run is still blocked until all five Trusted Publishers are configured,
+the three new crates have been bootstrapped, and the exact dependency and
+version set has been reviewed. No release or package publication is authorized
+by ordinary contribution or landing.
 
 Generated bindings must be fresh before packaging. Use the owning
 `lenso-contract-codegen` generator rather than editing generated output.

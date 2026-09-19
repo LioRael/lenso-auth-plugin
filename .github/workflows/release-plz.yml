@@ -1,76 +1,72 @@
 name: Release-plz
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
+      landed_sha:
+        description: Exact immutable SHA already landed on main
+        required: true
+        type: string
+      versions:
+        description: Comma-separated exact package@version set approved for this run
+        required: true
+        type: string
       live:
-        description: Publish unpublished crate versions and create their releases
+        description: Publish the approved set (normally false for qualification)
         required: true
         default: false
         type: boolean
       confirm:
-        description: Type publish when live is enabled
+        description: Type publish only when live is enabled
         required: false
         type: string
 
 permissions: {}
 
 concurrency:
-  group: auth-crates-release
+  group: auth-crates-release-${{ inputs.landed_sha }}
   cancel-in-progress: false
 
 jobs:
-  release-pr:
-    name: Release-plz PR
-    if: ${{ github.event_name == 'push' && github.repository_owner == 'LioRael' }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      pull-requests: write
-    concurrency:
-      group: auth-crates-release-pr-${{ github.ref }}
-      cancel-in-progress: false
-    env:
-      GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || github.token }}
-    steps:
-      - &checkout
-        name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - &install-rust
-        name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # stable
-        with:
-          toolchain: 1.94.0
-      - name: Create release PR
-        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
-        with:
-          command: release-pr
-
-  reject-unconfirmed-live-release:
-    name: Reject unconfirmed live release
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.live && (inputs.confirm != 'publish' || github.ref != 'refs/heads/main') }}
+  validate-input:
+    name: Validate landed release input
+    if: ${{ github.repository_owner == 'LioRael' }}
     runs-on: ubuntu-24.04
     steps:
-      - name: Explain the rejected release
+      - name: Validate immutable SHA and version set
+        env:
+          LANDED_SHA: ${{ inputs.landed_sha }}
+          VERSIONS: ${{ inputs.versions }}
         run: |
-          echo "Live publication requires confirm=publish and ref=main." >&2
-          exit 1
+          [[ "$LANDED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'landed_sha must be a full 40-character SHA' >&2; exit 1; }
+          [[ "$VERSIONS" =~ ^[a-zA-Z0-9_.-]+@[0-9]+\.[0-9]+\.[0-9]+([,][a-zA-Z0-9_.-]+@[0-9]+\.[0-9]+\.[0-9]+)*$ ]] || { echo 'versions must be an exact comma-separated package@version set' >&2; exit 1; }
 
   dry-run:
     name: Release dry-run
-    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.live && github.ref == 'refs/heads/main' }}
+    needs: validate-input
+    if: ${{ !inputs.live }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
     steps:
-      - *checkout
-      - *install-rust
+      - name: Checkout exact landed SHA
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.landed_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify SHA is the checked-out commit on main
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ inputs.landed_sha }}"
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "${{ inputs.landed_sha }}" origin/main
+      - name: Record approved exact version set
+        run: echo '${{ inputs.versions }}'
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # stable
+        with:
+          toolchain: 1.94.0
       - name: Validate the release without publishing
         uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
@@ -80,17 +76,33 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
-    name: Publish crates
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.live && inputs.confirm == 'publish' && github.ref == 'refs/heads/main' }}
+    name: Publish approved crates
+    needs: validate-input
+    if: ${{ inputs.live && inputs.confirm == 'publish' && github.repository_owner == 'LioRael' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
       pull-requests: read
       id-token: write
     steps:
-      - *checkout
-      - *install-rust
-      - name: Publish unpublished crates
+      - name: Checkout exact landed SHA
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ inputs.landed_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify SHA is the checked-out commit on main
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ inputs.landed_sha }}"
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor "${{ inputs.landed_sha }}" origin/main
+      - name: Record approved exact version set
+        run: echo '${{ inputs.versions }}'
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # stable
+        with:
+          toolchain: 1.94.0
+      - name: Publish approved crates
         uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
           command: release

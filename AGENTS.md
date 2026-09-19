@@ -3,6 +3,8 @@
 The default `main` branch is Lenso vNext-only. The `v0.3` branch and existing
 package tags retain the previous implementation and release history.
 
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before preparing or importing changes.
+
 Before architecture or implementation changes, read `CONTEXT.md`, the local
 ADRs under `docs/adr/`, and the normative Lenso ADRs linked from them. Before
 changing or executing a release, read `docs/release-process.md`.
@@ -25,5 +27,6 @@ then regenerate the Rust projection through `lenso-contract-codegen`. The
 supported Bun SDK owns and locks its independent TypeScript projection.
 
 Use a concise imperative Conventional Commit subject under 72 characters.
-Validate with the repository boundary check, locked format/check/test gates,
-and package dry-runs for changed public crates.
+Validate with focused checks for the changed files. Candidate CI is the
+authoritative full Auth lifecycle/session/credential/authorization/native/WASM/
+database proof; use package dry-runs only for changed public crates.

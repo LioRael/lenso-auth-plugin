@@ -1,9 +1,10 @@
 name: CI
 
 on:
-  pull_request:
   push:
-    branches: [main]
+    branches:
+      - 'delta/verify/**'
+  workflow_dispatch:
 
 jobs:
   check:
@@ -24,7 +25,7 @@ jobs:
     env:
       LENSO_POSTGRES_TEST_URL: postgres://postgres@localhost:5432/postgres
     steps:
-      - name: Checkout repository
+      - name: Checkout candidate
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # stable
@@ -43,11 +44,11 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check workspace
         run: cargo check --locked --workspace --all-targets
-      - name: Test workspace
+      - name: Test workspace lifecycle and authorization
         run: cargo test --locked --workspace -- --include-ignored --test-threads=1
       - name: Lint workspace
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      - name: Check portable targets
+      - name: Check portable Auth targets
         run: |
           cargo check --locked -p lenso-capability-auth -p lenso-auth-sdk --target wasm32-unknown-unknown
           cargo check --locked -p lenso-capability-auth -p lenso-auth-sdk --target wasm32-wasip2
@@ -62,9 +63,4 @@ jobs:
       - name: Check extracted Workers Auth packages
         run: python3 workers/check-packages.py
       - name: Package public crates
-        run: |
-          # Package this same-release edge together; live publishing keeps the dependency order.
-          cargo package --locked -p lenso-capability-auth -p lenso-auth-sdk
-          cargo package --locked -p lenso-capability-credential-issuer
-          cargo package --locked -p lenso-capability-identity-directory
-          cargo package --locked -p lenso-capability-password-auth
+        run: cargo package --locked -p lenso-capability-auth -p lenso-auth-sdk -p lenso-capability-credential-issuer -p lenso-capability-identity-directory -p lenso-capability-password-auth
