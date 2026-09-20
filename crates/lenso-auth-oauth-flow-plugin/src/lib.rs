@@ -508,7 +508,7 @@ pub mod migration;
 #[cfg(feature = "workers")]
 pub mod workers;
 
-/// Builds the native PostgreSQL Auth implementation without exposing its
+/// Builds the native `PostgreSQL` Auth implementation without exposing its
 /// private storage handle. The resolved Plan still supplies the database
 /// secret through the Secrets Capability; this factory exists so a Native Host
 /// can register the generated Plugin in an ordinary registry.

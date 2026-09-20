@@ -32,6 +32,10 @@ use lenso_native_adapter::{
     NativePluginFactory, NativePluginFactoryContext, NativePluginInstance, NativePluginRegistry,
 };
 use lenso_runner::TokioDriver;
+use lenso_test::{
+    ScenarioBoundary, ScenarioTerminal, ScenarioTransition, SimulatorFault, TestApp, TestEntropy,
+    TestSimulator,
+};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 const CALLER_PACKAGE_ID: &str = "test.oauth-flow-caller";
@@ -193,9 +197,140 @@ async fn durable_commit_before_response_is_reported_as_uncertain_without_replayi
         .await;
 }
 
+#[test]
+fn test_app_receipt_records_an_uncertain_consume_through_the_real_kernel_path() {
+    let initial = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
+    let clock = Rc::new(Cell::new(initial));
+    let simulator = TestSimulator::new();
+    let receipt = simulator.receipt();
+    let faults = simulator.faults();
+    let entropy = TestEntropy::seeded([11; 32]);
+    let simulation = simulation_with_test_sources(clock, entropy, faults.clone());
+    let app = start_test_app(simulator.clone(), simulation.clone());
+    let created = app.run(create(app.app(), initial + Duration::minutes(5)));
+
+    receipt
+        .transition(
+            "generation-1",
+            "oauth.consume-1",
+            ScenarioTransition::Started,
+        )
+        .unwrap();
+    simulator.advance(StdDuration::from_millis(5));
+    faults
+        .inject_at(
+            "oauth.consume",
+            ScenarioBoundary::AfterDurableCommit,
+            SimulatorFault::DroppedConnection,
+        )
+        .unwrap();
+
+    let first = app.run(consume(app.app(), &created.state));
+    assert!(matches!(first, Err(RuntimeFailure::PluginFailure { .. })));
+    receipt
+        .transition(
+            "generation-1",
+            "oauth.consume-1",
+            ScenarioTransition::DurableCommit,
+        )
+        .unwrap();
+    receipt
+        .fault(
+            "generation-1",
+            "oauth.consume-1",
+            ScenarioTransition::ResponseStarted,
+            SimulatorFault::DroppedConnection,
+        )
+        .unwrap();
+    receipt
+        .terminal(
+            "generation-1",
+            "oauth.consume-1",
+            ScenarioTerminal::Uncertain,
+        )
+        .unwrap();
+    assert_eq!(
+        app.shutdown(StdDuration::from_secs(1)),
+        ShutdownOutcome::Clean
+    );
+
+    let restarted = start_test_app(simulator.clone(), simulation);
+    assert!(matches!(
+        restarted.run(consume(restarted.app(), &created.state)),
+        Ok(Err(ConsumeError::AlreadyConsumed))
+    ));
+    receipt
+        .terminal(
+            "generation-2",
+            "oauth.consume-1",
+            ScenarioTerminal::Rejected,
+        )
+        .unwrap();
+    assert_eq!(
+        restarted.shutdown(StdDuration::from_secs(1)),
+        ShutdownOutcome::Clean
+    );
+
+    assert_eq!(receipt.events(), expected_uncertain_consume_receipt());
+}
+
+fn expected_uncertain_consume_receipt() -> Vec<lenso_test::ScenarioReceiptEvent> {
+    let committed = StdDuration::from_millis(5);
+    vec![
+        lenso_test::ScenarioReceiptEvent {
+            virtual_time: StdDuration::ZERO,
+            generation_id: "generation-1".to_owned(),
+            operation_id: "oauth.consume-1".to_owned(),
+            transition: ScenarioTransition::Started,
+            fault: None,
+            terminal: None,
+        },
+        lenso_test::ScenarioReceiptEvent {
+            virtual_time: committed,
+            generation_id: "generation-1".to_owned(),
+            operation_id: "oauth.consume-1".to_owned(),
+            transition: ScenarioTransition::DurableCommit,
+            fault: None,
+            terminal: None,
+        },
+        lenso_test::ScenarioReceiptEvent {
+            virtual_time: committed,
+            generation_id: "generation-1".to_owned(),
+            operation_id: "oauth.consume-1".to_owned(),
+            transition: ScenarioTransition::ResponseStarted,
+            fault: Some(SimulatorFault::DroppedConnection),
+            terminal: None,
+        },
+        lenso_test::ScenarioReceiptEvent {
+            virtual_time: committed,
+            generation_id: "generation-1".to_owned(),
+            operation_id: "oauth.consume-1".to_owned(),
+            transition: ScenarioTransition::ResponseStarted,
+            fault: None,
+            terminal: Some(ScenarioTerminal::Uncertain),
+        },
+        lenso_test::ScenarioReceiptEvent {
+            virtual_time: committed,
+            generation_id: "generation-2".to_owned(),
+            operation_id: "oauth.consume-1".to_owned(),
+            transition: ScenarioTransition::ResponseStarted,
+            fault: None,
+            terminal: Some(ScenarioTerminal::Rejected),
+        },
+    ]
+}
+
 async fn start(simulation: OAuthSimulation) -> NativeApp {
     Kernel::start_native(plan(), TokioDriver::new(), registry(simulation))
         .await
+        .unwrap()
+}
+
+fn start_test_app(simulator: TestSimulator, simulation: OAuthSimulation) -> TestApp {
+    TestApp::builder(plan())
+        .with_simulator(simulator)
+        .with_registry(registry(simulation))
+        .start()
         .unwrap()
 }
 
@@ -274,6 +409,31 @@ fn simulation(clock: Rc<Cell<OffsetDateTime>>) -> OAuthSimulation {
         },
         [7; 32],
     )
+}
+
+fn simulation_with_test_sources(
+    clock: Rc<Cell<OffsetDateTime>>,
+    entropy: TestEntropy,
+    faults: lenso_test::FaultInjector,
+) -> OAuthSimulation {
+    OAuthSimulation::new(
+        move || clock.get(),
+        move |output| entropy.fill(output),
+        [7; 32],
+    )
+    .with_fault_hook(move |boundary| {
+        if boundary != OAuthSimulationBoundary::AfterConsumeDurableCommit {
+            return None;
+        }
+        match faults
+            .check_at("oauth.consume", ScenarioBoundary::AfterDurableCommit)
+            .unwrap()
+        {
+            Ok(()) => None,
+            Err(SimulatorFault::DroppedConnection) => Some(OAuthSimulationFault::DroppedConnection),
+            Err(fault) => panic!("unexpected Auth simulator fault: {fault:?}"),
+        }
+    })
 }
 
 async fn create(app: &NativeApp, expiry: OffsetDateTime) -> flow::CreateResponse {

@@ -29,6 +29,15 @@ The test owns no production clock, entropy, database, Worker, or network
 resource. It is therefore repeatable and suitable for fault exploration, but
 is not a target-platform qualification.
 
+`test_app_receipt_records_an_uncertain_consume_through_the_real_kernel_path`
+uses Runtime's `TestApp` and `TestSimulator`, rather than a simulator-only
+provider call. It starts the resolved Plan through the native Adapter, invokes
+the OAuth Capability through Kernel routing, supplies explicit `TestEntropy`,
+injects a one-shot post-commit dropped-connection fault at the Auth-private
+boundary, restarts the App, and asserts the bounded `ScenarioReceipt`:
+virtual timestamp, generation, operation, durable transition, injected fault,
+and terminal result. The receipt contains no state value, secret, or payload.
+
 The exact Contract projection is locked by its authoring source:
 
 ```sh

@@ -44,6 +44,7 @@ zeroize.workspace=true
 [dev-dependencies]
 lenso-app-plan.workspace = true
 lenso-runner.workspace = true
+lenso-test.workspace = true
 tokio={version="1.52",features=["macros","rt"]}
 
 [[test]]

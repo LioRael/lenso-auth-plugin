@@ -1270,6 +1270,7 @@ dependencies = [
  "lenso-native-adapter",
  "lenso-postgres-kit",
  "lenso-runner",
+ "lenso-test",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1907,6 +1908,18 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
+]
+
+[[package]]
+name = "lenso-test"
+version = "0.1.1"
+dependencies = [
+ "futures",
+ "lenso-app-plan",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-plugin-authoring",
+ "sha2 0.10.9",
 ]
 
 [[package]]

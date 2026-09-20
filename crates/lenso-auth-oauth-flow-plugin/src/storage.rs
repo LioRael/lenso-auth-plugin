@@ -154,7 +154,7 @@ fn validate_revoke(
 }
 
 /// Test-support implementation of the same durable consume predicate used by
-/// PostgreSQL and D1. A `RefCell` critical section intentionally spans lookup,
+/// `PostgreSQL` and D1. A `RefCell` critical section intentionally spans lookup,
 /// validation, and the consumed transition without an `await`, so a second
 /// local operation cannot observe a read-before-write gap.
 #[cfg(any(test, feature = "simulator-test-support"))]
