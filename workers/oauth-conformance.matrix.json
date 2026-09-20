@@ -1,0 +1,133 @@
+{
+  "schema": "lenso.auth.oauth-flow-conformance-matrix@1",
+  "scenario": {
+    "id": "oauth-state-consume-once",
+    "title": "OAuth state may only be consumed once",
+    "business_invariants": [
+      {
+        "id": "success-count-is-one",
+        "assertion": "success_count == 1"
+      },
+      {
+        "id": "state-is-consumed",
+        "assertion": "state_consumed == true"
+      },
+      {
+        "id": "second-attempt-is-not-success",
+        "assertion": "second_attempt != success"
+      }
+    ]
+  },
+  "compositions": [
+    {
+      "id": "simulated-deterministic-store",
+      "environment": "simulated",
+      "infrastructure": "deterministic-private-store",
+      "business_invariant_ids": [
+        "success-count-is-one",
+        "state-is-consumed",
+        "second-attempt-is-not-success"
+      ],
+      "required_qualification_level": "local",
+      "qualification_requirements": [
+        "exact-ordering",
+        "virtual-time",
+        "fault-injection",
+        "deterministic-entropy"
+      ],
+      "local_command": {
+        "id": "simulated-reference",
+        "program": "cargo",
+        "args": [
+          "test",
+          "--locked",
+          "-p",
+          "lenso-auth-oauth-flow-plugin",
+          "--features",
+          "simulator-test-support",
+          "--test",
+          "simulated_reference"
+        ]
+      }
+    },
+    {
+      "id": "native-postgresql",
+      "environment": "native",
+      "infrastructure": "postgresql",
+      "business_invariant_ids": [
+        "success-count-is-one",
+        "state-is-consumed",
+        "second-attempt-is-not-success"
+      ],
+      "required_qualification_level": "target",
+      "qualification_requirements": [
+        "postgresql-transaction",
+        "native-connection",
+        "timeout",
+        "cancellation",
+        "restart-persistence"
+      ],
+      "local_command": {
+        "id": "local-native-postgresql",
+        "requires_environment": "LENSO_POSTGRES_TEST_URL",
+        "program": "cargo",
+        "args": [
+          "test",
+          "--locked",
+          "-p",
+          "lenso-auth-oauth-flow-plugin",
+          "--test",
+          "native_postgres_reference",
+          "--",
+          "--ignored",
+          "--test-threads=1"
+        ]
+      }
+    },
+    {
+      "id": "workers-d1",
+      "environment": "cloudflare-workers",
+      "infrastructure": "cloudflare-d1",
+      "business_invariant_ids": [
+        "success-count-is-one",
+        "state-is-consumed",
+        "second-attempt-is-not-success"
+      ],
+      "required_qualification_level": "target",
+      "qualification_requirements": [
+        "d1-semantics",
+        "fetch",
+        "worker-lifecycle",
+        "wasm-lifecycle",
+        "failure-recovery"
+      ]
+    },
+    {
+      "id": "workers-hyperdrive-postgresql",
+      "environment": "cloudflare-workers",
+      "infrastructure": "postgresql-via-hyperdrive",
+      "business_invariant_ids": [
+        "success-count-is-one",
+        "state-is-consumed",
+        "second-attempt-is-not-success"
+      ],
+      "required_qualification_level": "target",
+      "qualification_requirements": [
+        "hyperdrive-connection",
+        "postgresql-transaction",
+        "transient-network-failure",
+        "timeout",
+        "cancellation",
+        "uncertain-commit"
+      ],
+      "local_command": {
+        "id": "workers-postgresql-local-workerd-cohort",
+        "program": "node",
+        "args": [
+          "experiments/workers-g4/qualify-oauth-postgres-workerd.mjs"
+        ],
+        "receipt_prefix": "AUTH_POSTGRES_COHORT_EVIDENCE "
+      }
+    }
+  ]
+}

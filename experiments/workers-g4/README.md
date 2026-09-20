@@ -23,6 +23,26 @@ bash experiments/workers-g4/profile.sh
 See [the D01 protocol and current status](../../docs/workers-g4-d01.md) for pinned
 tools, cold/warm definitions, the completed matrix and machine-readable evidence.
 
+## OAuth PostgreSQL transport callback cohort
+
+This local `workerd test` builds the generated G4 Rust/Wasm Host and invokes
+OAuth through `workers_postgres_factory(execute)`. It covers create,
+consume-once, revoke, expiry, fresh-App persistence, a dropped callback response
+after its fixture's durable transition, and rejection of a conflicting D1/direct
+secret configuration.
+
+```sh
+pnpm install --frozen-lockfile
+node qualify-oauth-postgres-workerd.mjs
+```
+
+The emitted `AUTH_POSTGRES_COHORT_EVIDENCE` is intentionally credential-free
+and can be passed to the Runtime target-cohort wrapper. The callback fixture is
+an in-memory Host stand-in: this command proves the real generated Workers/Auth
+composition and private callback contract under local workerd, but does **not**
+qualify a real PostgreSQL server, Hyperdrive, a deployed Worker, client
+disconnect behavior, or production operations.
+
 ## Build and run
 
 The workspace intentionally uses the reviewed Runtime and Web owner worktrees

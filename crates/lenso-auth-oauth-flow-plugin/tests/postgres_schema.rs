@@ -15,6 +15,7 @@ async fn external_sql_schema_setup_and_upgrade() {
     OAuthFlowOperator::upgrade(&url, &schema).await.unwrap();
     assert!(table_exists(&pool, &schema, "oauth_flows").await);
     assert!(column_exists(&pool, &schema, "oauth_flows", "oidc_nonce").await);
+    assert!(column_exists(&pool, &schema, "oauth_flows", "revoked_at").await);
     cleanup(&pool, &schema).await;
 }
 

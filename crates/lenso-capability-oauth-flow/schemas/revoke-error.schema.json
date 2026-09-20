@@ -5,6 +5,6 @@
     { "const": "expired" },
     { "const": "provider_mismatch" },
     { "const": "already_consumed" },
-    { "const": "revoked" }
+    { "const": "already_revoked" }
   ]
 }

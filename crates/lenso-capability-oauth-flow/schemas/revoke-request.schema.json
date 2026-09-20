@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["provider", "state"],
+  "properties": {
+    "provider": {
+      "type": "string"
+    },
+    "state": {
+      "type": "string",
+      "x-lenso-sensitive": true
+    }
+  },
+  "additionalProperties": false,
+  "description": "Cancels an unconsumed OAuth state before the authorization callback can\nexchange it. The state value is sensitive for the same reason as consume.",
+  "title": "RevokeRequest"
+}

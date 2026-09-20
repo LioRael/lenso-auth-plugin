@@ -5,6 +5,12 @@
   "type": "module",
   "exports": {".": "./d1-binding.mjs"},
   "files": ["d1-binding.mjs"],
-  "scripts": {"generate": "node generate-bridges.mjs", "check:generated": "node generate-bridges.mjs --check", "test": "node --test d1-binding.test.mjs"},
+  "scripts": {
+    "generate": "node generate-bridges.mjs",
+    "check:generated": "node generate-bridges.mjs --check",
+    "test": "node --test d1-binding.test.mjs oauth-conformance.test.mjs",
+    "test:oauth-conformance": "node --test oauth-conformance.test.mjs",
+    "oauth-conformance": "node oauth-conformance.mjs"
+  },
   "devDependencies": {"@lenso/workers-runtime": "0.1.2"}
 }

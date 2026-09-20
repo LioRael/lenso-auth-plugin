@@ -1,8 +1,12 @@
 //! Single-use OAuth state and PKCE secret custody.
 #[cfg(feature = "postgres")]
 mod operator;
+#[cfg(feature = "workers")]
+mod postgres_transport;
 #[cfg(feature = "postgres")]
 mod schema;
+#[cfg(feature = "simulator-test-support")]
+pub mod simulated;
 mod storage;
 use aes_gcm::{
     Aes256Gcm, Nonce,
@@ -14,7 +18,8 @@ use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
 use lenso_capability_oauth_flow as oauth_flow;
 use lenso_capability_oauth_flow::{
     ConsumeError, ConsumeRequest, ConsumeResponse, CreateError, CreateRequest, CreateResponse,
-    OauthFlowConsume, OauthFlowCreate, OauthFlowProvider,
+    OauthFlowConsume, OauthFlowCreate, OauthFlowProvider, OauthFlowRevoke, RevokeError,
+    RevokeRequest, RevokeResponse,
 };
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
@@ -62,8 +67,10 @@ fn validate_config(config: &OAuthFlowConfig) -> Result<(), RuntimeFailure> {
     {
         return Err(failure("invalid OAuth D1 binding"));
     }
+    // An empty database secret is valid only for a Host-injected private
+    // PostgreSQL transport (for example a Workers Host backed by Hyperdrive).
+    // Native activation still rejects the absence of its direct secret below.
     if config.database_url_secret == config.encryption_key_secret
-        || (config.database_url_secret.is_empty() && config.d1_binding.is_empty())
         || config.encryption_key_secret.is_empty()
     {
         return Err(RuntimeFailure::InvalidResolvedPlan {
@@ -76,12 +83,72 @@ fn validate_config(config: &OAuthFlowConfig) -> Result<(), RuntimeFailure> {
 struct Prepared {
     store: storage::FlowStore,
     key: Zeroizing<Vec<u8>>,
+    sources: OAuthSources,
 }
 impl fmt::Debug for Prepared {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Prepared")
             .field("storage", &self.store)
             .finish_non_exhaustive()
+    }
+}
+
+/// The production sources remain the only default. A deterministic source can
+/// exist only when a test Host enables and injects every simulation input.
+#[derive(Clone, Debug)]
+enum OAuthSources {
+    Secure,
+    #[cfg(feature = "simulator-test-support")]
+    Simulated(simulated::OAuthSimulation),
+}
+
+impl OAuthSources {
+    fn now(&self) -> OffsetDateTime {
+        match self {
+            Self::Secure => OffsetDateTime::now_utc(),
+            #[cfg(feature = "simulator-test-support")]
+            Self::Simulated(simulation) => simulation.now(),
+        }
+    }
+
+    fn fill(&self, output: &mut [u8]) -> Result<(), RuntimeFailure> {
+        match self {
+            Self::Secure => {
+                getrandom::fill(output).map_err(|_| failure("random source unavailable"))
+            }
+            #[cfg(feature = "simulator-test-support")]
+            Self::Simulated(simulation) => {
+                simulation.fill(output);
+                Ok(())
+            }
+        }
+    }
+
+    #[cfg(feature = "simulator-test-support")]
+    fn simulated_fault(
+        &self,
+        boundary: simulated::OAuthSimulationBoundary,
+    ) -> Result<(), RuntimeFailure> {
+        let Self::Simulated(simulation) = self else {
+            return Ok(());
+        };
+        let Some(fault) = simulation.fault(boundary) else {
+            return Ok(());
+        };
+        let detail = match fault {
+            simulated::OAuthSimulationFault::Timeout => "simulated OAuth deadline elapsed",
+            simulated::OAuthSimulationFault::Cancellation => {
+                "simulated OAuth operation was cancelled"
+            }
+            simulated::OAuthSimulationFault::DroppedConnection => {
+                "simulated OAuth caller disconnected after an uncertain result"
+            }
+            simulated::OAuthSimulationFault::CleanupFailure => "simulated OAuth cleanup failed",
+            simulated::OAuthSimulationFault::ResourceUnavailable => {
+                "simulated OAuth resource unavailable"
+            }
+        };
+        Err(failure(detail))
     }
 }
 #[lenso::plugin(lifecycle, validate = validate_config)]
@@ -93,6 +160,8 @@ struct OAuthFlowPlugin {
     state: Rc<RefCell<Option<Prepared>>>,
     #[cfg_attr(not(feature = "workers"), allow(dead_code))]
     d1: EventStorageBinding,
+    #[cfg_attr(not(feature = "workers"), allow(dead_code))]
+    postgres: EventPostgresBinding,
 }
 impl fmt::Debug for OAuthFlowPlugin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -119,6 +188,10 @@ impl OauthFlowProvider for OAuthFlowPlugin {
         let prepared = self.prepared();
         Box::pin(async move {
             let prepared = prepared?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::BeforeCreate)?;
             if !valid_name(&request.provider) {
                 return Ok(Err(CreateError::InvalidProvider));
             }
@@ -130,16 +203,16 @@ impl OauthFlowProvider for OAuthFlowPlugin {
                     capability: lenso_capability_oauth_flow::CAPABILITY_ID,
                 }
             })?;
-            if expiry <= OffsetDateTime::now_utc() {
+            if expiry <= prepared.sources.now() {
                 return Ok(Err(CreateError::InvalidExpiry));
             }
-            let state = random(32)?;
-            let verifier = random(32)?;
-            let oidc_nonce = random(32)?;
+            let state = random(&prepared.sources, 32)?;
+            let verifier = random(&prepared.sources, 32)?;
+            let oidc_nonce = random(&prepared.sources, 32)?;
             let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
             let digest = digest(&prepared.key, &state)?;
             let mut cipher_nonce = [0u8; 12];
-            getrandom::fill(&mut cipher_nonce).map_err(|_| failure("random source unavailable"))?;
+            prepared.sources.fill(&mut cipher_nonce)?;
             let cipher = Aes256Gcm::new_from_slice(&prepared.key)
                 .map_err(|_| failure("invalid OAuth encryption key"))?;
             let encrypted = cipher
@@ -158,6 +231,14 @@ impl OauthFlowProvider for OAuthFlowPlugin {
                 },
             )
             .await?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::AfterCreateDurableCommit)?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::BeforeCreateResponse)?;
             Ok(Ok(CreateResponse {
                 state,
                 code_verifier: verifier,
@@ -175,6 +256,10 @@ impl OauthFlowProvider for OAuthFlowPlugin {
         let prepared = self.prepared();
         Box::pin(async move {
             let prepared = prepared?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::BeforeConsume)?;
             if !valid_name(&request.provider) || request.state.len() > 256 {
                 return Ok(Err(ConsumeError::InvalidState));
             }
@@ -183,6 +268,10 @@ impl OauthFlowProvider for OAuthFlowPlugin {
                 Ok(row) => row,
                 Err(error) => return Ok(Err(error)),
             };
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::AfterConsumeDurableCommit)?;
             let nonce = row.nonce;
             let encrypted = row.encrypted;
             let expiry = row.expiry;
@@ -196,6 +285,10 @@ impl OauthFlowProvider for OAuthFlowPlugin {
                 .map_err(|_| failure("OAuth verifier decryption failed"))?;
             let verifier = String::from_utf8(verifier)
                 .map_err(|_| failure("invalid stored OAuth verifier"))?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::BeforeConsumeResponse)?;
             Ok(Ok(ConsumeResponse {
                 code_verifier: verifier,
                 nonce: row.oidc_nonce.map(Some),
@@ -206,13 +299,53 @@ impl OauthFlowProvider for OAuthFlowPlugin {
             }))
         })
     }
+
+    fn revoke(
+        &self,
+        _: InvocationContext,
+        request: RevokeRequest,
+    ) -> NativeRequestFuture<OauthFlowRevoke> {
+        let prepared = self.prepared();
+        Box::pin(async move {
+            let prepared = prepared?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::BeforeRevoke)?;
+            if !valid_name(&request.provider) || request.state.len() > 256 {
+                return Ok(Err(RevokeError::InvalidState));
+            }
+            let digest = digest(&prepared.key, &request.state)?;
+            match storage::revoke(&prepared.store, &digest, &request.provider).await? {
+                Ok(()) => {}
+                Err(error) => return Ok(Err(error)),
+            }
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::AfterRevokeDurableCommit)?;
+            #[cfg(feature = "simulator-test-support")]
+            prepared
+                .sources
+                .simulated_fault(simulated::OAuthSimulationBoundary::BeforeRevokeResponse)?;
+            Ok(Ok(RevokeResponse {}))
+        })
+    }
 }
 impl Lifecycle for OAuthFlowPlugin {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one lifecycle transaction keeps target-specific private store admission and cleanup atomic"
+    )]
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
         let dependencies = context.dependencies().clone();
         let cancellation = context.cancellation();
         let state = self.state.clone();
+        #[cfg(feature = "simulator-test-support")]
+        if state.borrow().is_some() {
+            return Ok(());
+        }
         let key = resolve(
             &self.secrets,
             &dependencies,
@@ -225,33 +358,44 @@ impl Lifecycle for OAuthFlowPlugin {
                 "OAuth encryption key must contain exactly 32 bytes",
             ));
         }
-        let store = if config.d1_binding.is_empty() {
-            #[cfg(feature = "postgres")]
-            {
-                let db = resolve(
-                    &self.secrets,
-                    &dependencies,
-                    context.cancellation(),
-                    &config.database_url_secret,
-                )
-                .await?;
-                let pg = OwnedPostgres::prepare(&db, schema_plan(config.schema).map_err(db_error)?)
-                    .await
-                    .map_err(db_error)?;
-                storage::FlowStore::Postgres(pg)
-            }
-            #[cfg(not(feature = "postgres"))]
-            {
-                return Err(failure("OAuth PostgreSQL implementation not enabled"));
-            }
-        } else {
-            let name = &config.d1_binding;
+        let store = {
             #[cfg(feature = "workers")]
-            {
+            if let Some(binding) = self.postgres.as_ref() {
+                if !config.d1_binding.is_empty() || !config.database_url_secret.is_empty() {
+                    return Err(RuntimeFailure::InvalidResolvedPlan {
+                        detail: "Host-injected OAuth PostgreSQL transport cannot be combined with D1 or a direct database secret".to_owned(),
+                    });
+                }
+                storage::FlowStore::PostgresTransport(binding.clone())
+            } else if config.d1_binding.is_empty() {
+                #[cfg(feature = "postgres")]
+                {
+                    if config.database_url_secret.is_empty() {
+                        return Err(failure("OAuth PostgreSQL transport unavailable"));
+                    }
+                    let db = resolve(
+                        &self.secrets,
+                        &dependencies,
+                        context.cancellation(),
+                        &config.database_url_secret,
+                    )
+                    .await?;
+                    let pg =
+                        OwnedPostgres::prepare(&db, schema_plan(config.schema).map_err(db_error)?)
+                            .await
+                            .map_err(db_error)?;
+                    storage::FlowStore::Postgres(pg)
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    return Err(failure("OAuth PostgreSQL transport unavailable"));
+                }
+            } else {
+                let name = &config.d1_binding;
                 let binding = self
                     .d1
                     .as_ref()
-                    .filter(|b| b.name() == name)
+                    .filter(|binding| binding.name() == name)
                     .ok_or_else(|| failure("configured OAuth D1 binding unavailable"))?
                     .clone();
                 migration::verify(&binding)
@@ -260,14 +404,37 @@ impl Lifecycle for OAuthFlowPlugin {
                 storage::FlowStore::D1(binding)
             }
             #[cfg(not(feature = "workers"))]
-            {
-                let _ = name;
+            if config.d1_binding.is_empty() {
+                #[cfg(feature = "postgres")]
+                {
+                    if config.database_url_secret.is_empty() {
+                        return Err(failure("OAuth PostgreSQL secret reference is required"));
+                    }
+                    let db = resolve(
+                        &self.secrets,
+                        &dependencies,
+                        context.cancellation(),
+                        &config.database_url_secret,
+                    )
+                    .await?;
+                    let pg =
+                        OwnedPostgres::prepare(&db, schema_plan(config.schema).map_err(db_error)?)
+                            .await
+                            .map_err(db_error)?;
+                    storage::FlowStore::Postgres(pg)
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    return Err(failure("OAuth PostgreSQL implementation not enabled"));
+                }
+            } else {
                 return Err(failure("OAuth D1 implementation not enabled"));
             }
         };
         state.replace(Some(Prepared {
             store,
             key: Zeroizing::new(key.as_bytes().to_vec()),
+            sources: OAuthSources::Secure,
         }));
         Ok(())
     }
@@ -301,9 +468,9 @@ async fn resolve(
             SecretsInvocationError::Runtime(error) => error,
         })
 }
-fn random(bytes: usize) -> Result<String, RuntimeFailure> {
+fn random(sources: &OAuthSources, bytes: usize) -> Result<String, RuntimeFailure> {
     let mut value = Zeroizing::new(vec![0u8; bytes]);
-    getrandom::fill(&mut value).map_err(|_| failure("random source unavailable"))?;
+    sources.fill(&mut value)?;
     Ok(URL_SAFE_NO_PAD.encode(value))
 }
 fn digest(key: &[u8], state: &str) -> Result<Vec<u8>, RuntimeFailure> {
@@ -341,6 +508,15 @@ pub mod migration;
 #[cfg(feature = "workers")]
 pub mod workers;
 
+/// Builds the native PostgreSQL Auth implementation without exposing its
+/// private storage handle. The resolved Plan still supplies the database
+/// secret through the Secrets Capability; this factory exists so a Native Host
+/// can register the generated Plugin in an ordinary registry.
+#[cfg(feature = "postgres")]
+pub fn native_postgres_factory() -> impl lenso_native_adapter::NativePluginFactory {
+    lenso_native_adapter::ConfiguredPluginFactory::<OAuthFlowPlugin, _>::new(|_| Ok(()))
+}
+
 /// Build the selected Auth implementation with a request-owned D1 binding.
 /// The caller must create a fresh registry/factory for each Workers event.
 #[cfg(feature = "workers")]
@@ -355,7 +531,53 @@ pub fn workers_factory(
                 detail: "Auth factory requires its exact configured D1 binding".to_owned(),
             });
         }
+        if !value.config.database_url_secret.is_empty() {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail: "Auth D1 factory cannot accept a direct PostgreSQL secret".to_owned(),
+            });
+        }
         value.d1 = Some(binding.clone());
+        Ok(())
+    })
+}
+
+/// Builds OAuth Flow for one Workers event with a Host-owned PostgreSQL
+/// transport. The Host may back the callback with Hyperdrive, but Auth receives
+/// neither binding identity nor connection material and has no retry authority.
+#[cfg(feature = "workers")]
+pub fn workers_postgres_factory(
+    execute: js_sys::Function,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    let binding = postgres_transport::PostgresBinding::new(execute);
+    lenso_native_adapter::ConfiguredPluginFactory::<OAuthFlowPlugin, _>::new(move |value| {
+        if !value.config.d1_binding.is_empty() || !value.config.database_url_secret.is_empty() {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail: "Auth PostgreSQL factory requires an empty D1 binding and no direct database secret".to_owned(),
+            });
+        }
+        value.postgres = Some(binding.clone());
+        Ok(())
+    })
+}
+
+/// Builds the exact OAuth Plugin with an explicitly supplied simulated world.
+///
+/// This exists only under `simulator-test-support`; it is intended for a real
+/// `TestApp`/Host composition and still boots the generated Plugin lifecycle,
+/// Capability endpoint, immutable Plan bindings, and Auth business rules.
+/// It never changes the public OAuth Capability or installs a production
+/// clock/entropy fallback.
+#[cfg(feature = "simulator-test-support")]
+pub fn simulated_factory(
+    simulation: simulated::OAuthSimulation,
+) -> impl lenso_native_adapter::NativePluginFactory {
+    lenso_native_adapter::ConfiguredPluginFactory::<OAuthFlowPlugin, _>::new(move |value| {
+        let sources = OAuthSources::Simulated(simulation.clone());
+        value.state.replace(Some(Prepared {
+            store: storage::FlowStore::Simulated(simulation.store()),
+            key: Zeroizing::new(simulation.encryption_key().to_vec()),
+            sources,
+        }));
         Ok(())
     })
 }
@@ -364,6 +586,10 @@ pub fn workers_factory(
 type EventStorageBinding = Option<workers::D1Binding>;
 #[cfg(not(feature = "workers"))]
 type EventStorageBinding = ();
+#[cfg(feature = "workers")]
+type EventPostgresBinding = Option<postgres_transport::PostgresBinding>;
+#[cfg(not(feature = "workers"))]
+type EventPostgresBinding = ();
 
 #[cfg(test)]
 mod tests {

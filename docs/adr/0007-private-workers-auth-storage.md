@@ -7,12 +7,15 @@
 ## Decision
 
 Keep Account, OAuth Flow, Router and Web Session Plugin identities and Capability
-operation schemas unchanged. Account owns identities, sessions, administration
+ownership boundaries unchanged. Account owns identities, sessions, administration
 and delegated sessions; OAuth Flow owns encrypted PKCE custody and single-use
 state. Private operation-oriented storage has PostgreSQL and D1 implementations.
 There is no public SQL Capability. Shared Rust retains token/HMAC/assertion logic,
 credential validation, caller authorization, grant scope and flow rejection policy.
 D1 conditional SQL enforces corresponding transaction predicates before writes.
+OAuth Flow's subsequent version 1.2 Contract and its Workers PostgreSQL
+transport are specified by ADR 0008; this ADR remains the D1 ownership and
+migration baseline.
 
 PostgreSQL is the default Cargo feature. Workers disables defaults and enables
 `workers`; SQLx, Postgres Kit and native operators remain behind `postgres`.

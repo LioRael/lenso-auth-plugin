@@ -88,12 +88,39 @@ pub enum ConsumeError {
     Expired,
     ProviderMismatch,
     AlreadyConsumed,
+    Revoked,
+}
+
+/// Cancels an unconsumed OAuth state before the authorization callback can
+/// exchange it. The state value is sensitive for the same reason as consume.
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct RevokeRequest {
+    pub provider: String,
+    #[schemars(extend("x-lenso-sensitive" = true))]
+    pub state: String,
+}
+
+/// Confirmation that the durable cancellation transition completed.
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct RevokeResponse {}
+
+#[derive(lenso::DomainError)]
+pub enum RevokeError {
+    InvalidState,
+    Expired,
+    ProviderMismatch,
+    AlreadyConsumed,
+    AlreadyRevoked,
 }
 
 #[lenso::capability(
     id = "lenso.auth.oauth-flow",
     major = 1,
-    version = "1.1.0",
+    version = "1.2.0",
     portable = true,
     cross_lane_transfer = true
 )]
@@ -108,4 +135,9 @@ pub trait OauthFlow {
         context: lenso::Ctx<'_>,
         request: ConsumeRequest,
     ) -> Result<ConsumeResponse, ConsumeError>;
+    async fn revoke(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: RevokeRequest,
+    ) -> Result<RevokeResponse, RevokeError>;
 }

@@ -89,6 +89,12 @@ The Account D1 history's v2 migration adds the compound
 pagination. Existing v1 databases must be explicitly upgraded after legacy
 adoption; the v1 SQL and fingerprint remain unchanged.
 
+OAuth Flow has a separate D1 v2 and PostgreSQL v3 `add-oauth-revocation`
+migration. It retains `revoked_at` so consume/revoke races and an App restart
+can report a terminal domain outcome rather than treating a revoked OAuth state
+as unknown. See [OAuth reference composition](oauth-reference-composition.md)
+for its Environment × Infrastructure qualification matrix.
+
 ## Recorded local verification
 
 - 52 native Auth tests passed, including real PostgreSQL acceptance tests for all

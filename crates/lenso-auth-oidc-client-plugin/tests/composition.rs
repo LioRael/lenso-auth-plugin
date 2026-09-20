@@ -29,7 +29,9 @@ use lenso_capability_identity_directory::{
 use lenso_capability_oauth_flow as flow;
 use lenso_capability_oauth_flow::{
     ConsumeError, ConsumeRequest, ConsumeResponse, CreateRequest, CreateResponse, OauthFlowConsume,
-    OauthFlowCreate, OauthFlowEndpoint, OauthFlowProvider,
+    OauthFlowCreate, OauthFlowEndpoint, OauthFlowProvider, OauthFlowRevoke,
+    RevokeError as OAuthFlowRevokeError, RevokeRequest as OAuthFlowRevokeRequest,
+    RevokeResponse as OAuthFlowRevokeResponse,
 };
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{
@@ -94,6 +96,7 @@ impl NativePluginFactory for DependenciesFactory {
     ) -> Result<NativePluginInstance, RuntimeFailure> {
         let dependencies = FakeDependencies {
             consumed: Rc::new(Cell::new(false)),
+            revoked: Rc::new(Cell::new(false)),
             token_nonce: self.token_nonce,
             signing_key: Rc::clone(&self.signing_key),
         };
@@ -110,6 +113,7 @@ impl NativePluginFactory for DependenciesFactory {
 #[derive(Clone, Debug)]
 struct FakeDependencies {
     consumed: Rc<Cell<bool>>,
+    revoked: Rc<Cell<bool>>,
     token_nonce: &'static str,
     signing_key: Rc<String>,
 }
@@ -162,6 +166,29 @@ impl OauthFlowProvider for FakeDependencies {
             return_to: "/after-login".to_owned(),
             expires_at: future_time(300),
         }))))
+    }
+
+    fn revoke(
+        &self,
+        _: InvocationContext,
+        request: OAuthFlowRevokeRequest,
+    ) -> NativeRequestFuture<OauthFlowRevoke> {
+        if request.provider != PROVIDER || request.state != STATE {
+            return Box::pin(std::future::ready(Ok(Err(
+                OAuthFlowRevokeError::InvalidState,
+            ))));
+        }
+        if self.consumed.get() {
+            return Box::pin(std::future::ready(Ok(Err(
+                OAuthFlowRevokeError::AlreadyConsumed,
+            ))));
+        }
+        if self.revoked.replace(true) {
+            return Box::pin(std::future::ready(Ok(Err(
+                OAuthFlowRevokeError::AlreadyRevoked,
+            ))));
+        }
+        Box::pin(std::future::ready(Ok(Ok(OAuthFlowRevokeResponse {}))))
     }
 }
 
@@ -450,7 +477,11 @@ fn plan() -> ResolvedAppPlan {
         .with_capability(CapabilityEndpointPlan::new(
             flow::CAPABILITY_ID,
             flow::DESCRIPTOR_VERSION,
-            [flow::CONSUME_OPERATION, flow::CREATE_OPERATION],
+            [
+                flow::CONSUME_OPERATION,
+                flow::CREATE_OPERATION,
+                flow::REVOKE_OPERATION,
+            ],
         ))
         .with_capability(CapabilityEndpointPlan::new(
             http::CAPABILITY_ID,

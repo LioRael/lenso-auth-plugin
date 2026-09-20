@@ -1,6 +1,6 @@
 use lenso_app_plan::{
-    CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan, PluginInstancePlan,
-    ResolvedAppPlan,
+    AppComposition, CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan,
+    PluginInstancePlan, ResolvedAppPlan,
 };
 use lenso_capability_account_admin as admin;
 use lenso_capability_auth as auth;
@@ -11,7 +11,7 @@ use lenso_capability_oauth_flow as flow;
 use lenso_capability_secrets as secrets;
 use lenso_kernel::{
     CancellationToken, InvocationContext, Kernel, NativeRequestFuture, RuntimeFailure,
-    ShutdownOutcome,
+    RuntimeFailureKind, ShutdownOutcome,
 };
 use lenso_native_adapter::{
     NativePluginFactory, NativePluginFactoryContext, NativePluginInstance, NativePluginRegistry,
@@ -224,7 +224,11 @@ fn plan_parts(
         .with_capability(CapabilityEndpointPlan::new(
             flow::CAPABILITY_ID,
             flow::DESCRIPTOR_VERSION,
-            [flow::CONSUME_OPERATION, flow::CREATE_OPERATION],
+            [
+                flow::CONSUME_OPERATION,
+                flow::CREATE_OPERATION,
+                flow::REVOKE_OPERATION,
+            ],
         ));
     caller = caller.with_requirement(CapabilityRequirementPlan::one(
         flow::CAPABILITY_ID,
@@ -257,6 +261,65 @@ fn plan_parts(
         http_host::extend_plan(&mut instances, &mut bindings, origin);
     }
     (instances, bindings)
+}
+
+/// The deliberately small Auth-only plan used by the local workerd PostgreSQL
+/// transport cohort. It proves that the generated OAuth Plugin runs through a
+/// real Workers event and Host callback without smuggling a D1 binding or a
+/// direct PostgreSQL secret into the Plugin.
+fn postgres_plan(factory_conflict: bool) -> Result<ResolvedAppPlan, JsValue> {
+    let caller = PluginInstancePlan::new("caller", "proof.caller").with_requirement(
+        CapabilityRequirementPlan::one(flow::CAPABILITY_ID, flow::DESCRIPTOR_VERSION),
+    );
+    let oauth = PluginInstancePlan::new("oauth", lenso_auth_oauth_flow_plugin::PACKAGE_ID)
+        .with_configuration(
+            json!({
+                "schema": "oauth",
+                "database_url_secret": if factory_conflict { "must-not-be-used" } else { "" },
+                "d1_binding": if factory_conflict { "MUST_NOT_BE_USED" } else { "" },
+                "encryption_key_secret": "oauth",
+            })
+            .to_string(),
+        )
+        .with_requirement(CapabilityRequirementPlan::one(
+            secrets::CAPABILITY_ID,
+            secrets::DESCRIPTOR_VERSION,
+        ))
+        .with_capability(CapabilityEndpointPlan::new(
+            flow::CAPABILITY_ID,
+            flow::DESCRIPTOR_VERSION,
+            [
+                flow::CONSUME_OPERATION,
+                flow::CREATE_OPERATION,
+                flow::REVOKE_OPERATION,
+            ],
+        ));
+    let secrets = PluginInstancePlan::new("secrets", "proof.secrets").with_capability(
+        CapabilityEndpointPlan::new(
+            secrets::CAPABILITY_ID,
+            secrets::DESCRIPTOR_VERSION,
+            [secrets::RESOLVE_OPERATION],
+        ),
+    );
+    AppComposition::new(
+        vec![caller, oauth, secrets],
+        vec![
+            CapabilityBinding::new(
+                "caller",
+                flow::CAPABILITY_ID,
+                flow::DESCRIPTOR_VERSION,
+                "oauth",
+            ),
+            CapabilityBinding::new(
+                "oauth",
+                secrets::CAPABILITY_ID,
+                secrets::DESCRIPTOR_VERSION,
+                "secrets",
+            ),
+        ],
+    )
+    .resolve()
+    .map_err(err)
 }
 #[derive(Deserialize)]
 struct Input {
@@ -367,6 +430,75 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
         return Err(err("unclean shutdown"));
     }
     Ok(json!({"outcome":result?,"ready":ready,"shutdown":"clean"}).to_string())
+}
+
+#[derive(Deserialize)]
+struct PostgresInput {
+    operation: String,
+    request: Value,
+    #[serde(default)]
+    factory_conflict: bool,
+}
+
+/// Executes Auth through the real generated Workers Plugin factory and one
+/// event-owned PostgreSQL transport callback. The callback remains opaque to
+/// Auth: this fixture can stand in for a Host's Hyperdrive-backed resource but
+/// does not itself claim a Hyperdrive or deployed PostgreSQL qualification.
+#[wasm_bindgen]
+pub async fn oauth_postgres_invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
+    let input: PostgresInput = serde_json::from_str(&input).map_err(err)?;
+    let oauth = text(&scope, "oauth")?;
+    let postgres: js_sys::Function = property(&scope, "oauthPostgres")?.dyn_into().map_err(err)?;
+    lenso_auth_oauth_flow_plugin::link_plugin();
+    let registry = NativePluginRegistry::new()
+        .with_factory_override(lenso_auth_oauth_flow_plugin::workers_postgres_factory(postgres))
+        .map_err(err)?
+        .with_linked_factories()
+        .with_factory(Caller)
+        .with_factory(Secrets(BTreeMap::from([("oauth".into(), oauth)])));
+    let driver = WorkersDriver::new();
+    let _event = EventGuard(driver.clone());
+    let cancellation = CancellationToken::new();
+    let _cancel = CancellationGuard::new(scope.clone(), cancellation.clone());
+    let app = Kernel::start_native(postgres_plan(input.factory_conflict)?, driver, registry)
+        .await
+        .map_err(|failure| JsValue::from_str(&format!("startup: {failure:?}")))?;
+    macro_rules! call {
+        ($ty:ty, $operation:expr) => {{
+            let request = serde_json::from_value(input.request).map_err(err)?;
+            match app
+                .invoke_with_context::<$ty>(
+                    "caller",
+                    $operation,
+                    app.invocation_context_after(Duration::from_secs(10), cancellation.clone()),
+                    request,
+                )
+                .await
+            {
+                Ok(value) => serde_json::to_value(value).map_err(err),
+                Err(error) => {
+                    let failure = match &error {
+                        RuntimeFailure::Unavailable { capability } => {
+                            format!("Unavailable:{capability}")
+                        }
+                        _ => format!("{:?}", RuntimeFailureKind::from(&error)),
+                    };
+                    Ok(json!({"RuntimeFailure": failure}))
+                }
+            }
+        }};
+    }
+    let outcome = match input.operation.as_str() {
+        "create" => call!(flow::OauthFlowCreate, flow::CREATE_OPERATION),
+        "consume" => call!(flow::OauthFlowConsume, flow::CONSUME_OPERATION),
+        "revoke" => call!(flow::OauthFlowRevoke, flow::REVOKE_OPERATION),
+        _ => Err(err("unknown OAuth PostgreSQL cohort operation")),
+    }?;
+    let shutdown = app.shutdown(Duration::from_secs(2)).await;
+    if shutdown != ShutdownOutcome::Clean {
+        return Err(err("unclean OAuth PostgreSQL cohort shutdown"));
+    }
+    Ok(json!({"outcome": outcome, "ready": app.is_ready(), "shutdown": "clean"}).to_string())
 }
 
 mod catalog_plan;

@@ -4,15 +4,28 @@ use crate::workers::D1Binding;
 use lenso_migration::Migration;
 use lenso_migration_d1::{Error, LegacySchema, Plan, SqlMigration, Statement, Transport};
 
-const MIGRATIONS: &[Migration] = &[Migration::new(
-    1,
-    "oauth-flows",
-    include_str!("../migrations/d1/001_oauth_flows.sql"),
-)];
-const SQL: &[SqlMigration] = &[SqlMigration {
-    migration: MIGRATIONS[0],
-    statement_ends: &[104, 435, 544],
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration::new(
+        1,
+        "oauth-flows",
+        include_str!("../migrations/d1/001_oauth_flows.sql"),
+    ),
+    Migration::new(
+        2,
+        "add-oauth-revocation",
+        include_str!("../migrations/d1/002_add_oauth_revocation.sql"),
+    ),
+];
+const SQL: &[SqlMigration] = &[
+    SqlMigration {
+        migration: MIGRATIONS[0],
+        statement_ends: &[104, 435, 544],
+    },
+    SqlMigration {
+        migration: MIGRATIONS[1],
+        statement_ends: &[56],
+    },
+];
 pub fn plan() -> Result<Plan, Error> {
     Plan::new(
         "lenso.auth.oauth-flow",

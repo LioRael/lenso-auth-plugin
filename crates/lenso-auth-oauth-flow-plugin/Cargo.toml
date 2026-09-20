@@ -13,6 +13,9 @@ root-slot = "oauth-flows"
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:lenso-postgres-kit"]
 workers = ["dep:lenso-migration", "dep:lenso-migration-d1", "dep:getrandom02", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "getrandom/wasm_js", "time/wasm-bindgen"]
+# Explicit test-support only. This never participates in the default Auth
+# security path and requires a Host to supply every simulated source.
+simulator-test-support = []
 
 [dependencies]
 lenso-migration = { workspace = true, optional = true }
@@ -39,6 +42,21 @@ time.workspace=true
 thiserror.workspace=true
 zeroize.workspace=true
 [dev-dependencies]
+lenso-app-plan.workspace = true
+lenso-runner.workspace = true
 tokio={version="1.52",features=["macros","rt"]}
+
+[[test]]
+name = "postgres_schema"
+required-features = ["postgres"]
+
+[[test]]
+name = "native_postgres_reference"
+required-features = ["postgres"]
+
+[[test]]
+name = "simulated_reference"
+required-features = ["simulator-test-support"]
+
 [lints]
 workspace=true

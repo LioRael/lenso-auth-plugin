@@ -5,8 +5,8 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.oauth-flow@1";
-pub const DESCRIPTOR_VERSION: &str = "1.1.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:a55935c93c9606330562a9d375997a9c3ee5258957cb7c6f9c44e7b852d2f5ba";
+pub const DESCRIPTOR_VERSION: &str = "1.2.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:3779ac240188e676de02fa16e205097aa2101cf8458160a76d2eb698c8597f6e";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const OAUTH_FLOW_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,30 +16,31 @@ pub const OAUTH_FLOW_CONTRACT: CapabilityReference<OauthFlowClient> = Capability
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_oauth_flow { () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"consume\",\"create\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_oauth_flow { () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.2.0\",\"operations\":[\"consume\",\"create\",\"revoke\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_oauth_flow_client {
-    () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.2.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.2.0\",\"cardinality\":\"one\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_optional_oauth_flow_client {
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.2.0\",\"cardinality\":\"optional\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_many_oauth_flow_client {
-    () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.2.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.oauth-flow@1\",\"descriptor_version\":\"1.2.0\",\"cardinality\":\"many\"}") };
 }
 
 pub const CONSUME_OPERATION: &str = "consume";
 pub const CREATE_OPERATION: &str = "create";
+pub const REVOKE_OPERATION: &str = "revoke";
 
 pub use lenso_contract_runtime::{OptionalValue, Timestamp, UnknownDomainError};
 use lenso_contract_runtime::{decode_portable_json, encode_portable_json};
@@ -100,6 +101,7 @@ pub enum ConsumeError {
     Expired,
     InvalidState,
     ProviderMismatch,
+    Revoked,
     Unknown(UnknownDomainError),
 }
 
@@ -158,6 +160,41 @@ pub enum CreateError {
     Unknown(UnknownDomainError),
 }
 
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RevokeRequest {
+    #[serde(rename = "provider")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub provider: String,
+    #[serde(rename = "state")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub state: String,
+}
+
+impl fmt::Debug for RevokeRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RevokeRequest")
+            .field("provider", &self.provider)
+            .field("state", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RevokeResponse {
+
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RevokeError {
+    AlreadyConsumed,
+    AlreadyRevoked,
+    Expired,
+    InvalidState,
+    ProviderMismatch,
+    Unknown(UnknownDomainError),
+}
+
 #[derive(Debug)]
 pub struct OauthFlowConsume;
 impl RequestCapability for OauthFlowConsume {
@@ -204,6 +241,29 @@ impl RequestCapability for OauthFlowCreate {
     }
 }
 
+#[derive(Debug)]
+pub struct OauthFlowRevoke;
+impl RequestCapability for OauthFlowRevoke {
+    type Request = RevokeRequest;
+    type Response = RevokeResponse;
+    type DomainError = RevokeError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != REVOKE_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<OauthFlowRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).revoke(context, request)
+    }
+}
+
 impl serde::Serialize for ConsumeError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -215,6 +275,7 @@ impl serde::Serialize for ConsumeError {
             Self::Expired => serializer.serialize_str("expired"),
             Self::InvalidState => serializer.serialize_str("invalid_state"),
             Self::ProviderMismatch => serializer.serialize_str("provider_mismatch"),
+            Self::Revoked => serializer.serialize_str("revoked"),
             Self::Unknown(value) => {
                 let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
                 map.serialize_entry("code", &value.code)?;
@@ -242,6 +303,7 @@ impl<'de> serde::Deserialize<'de> for ConsumeError {
                 "expired" => Ok(Self::Expired),
                 "invalid_state" => Ok(Self::InvalidState),
                 "provider_mismatch" => Ok(Self::ProviderMismatch),
+                "revoked" => Ok(Self::Revoked),
                 _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
             },
             serde_json::Value::Object(mut object) => {
@@ -308,6 +370,61 @@ impl<'de> serde::Deserialize<'de> for CreateError {
     }
 }
 
+impl serde::Serialize for RevokeError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::AlreadyConsumed => serializer.serialize_str("already_consumed"),
+            Self::AlreadyRevoked => serializer.serialize_str("already_revoked"),
+            Self::Expired => serializer.serialize_str("expired"),
+            Self::InvalidState => serializer.serialize_str("invalid_state"),
+            Self::ProviderMismatch => serializer.serialize_str("provider_mismatch"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for RevokeError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "already_consumed" => Ok(Self::AlreadyConsumed),
+                "already_revoked" => Ok(Self::AlreadyRevoked),
+                "expired" => Ok(Self::Expired),
+                "invalid_state" => Ok(Self::InvalidState),
+                "provider_mismatch" => Ok(Self::ProviderMismatch),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
 pub fn encode_consume_request(value: &ConsumeRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_consume_request(wire: &str) -> Result<ConsumeRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_consume_response(value: &ConsumeResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
@@ -321,6 +438,13 @@ pub fn encode_create_response(value: &CreateResponse) -> Result<String, serde_js
 pub fn decode_create_response(wire: &str) -> Result<CreateResponse, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_create_error(value: &CreateError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_create_error(wire: &str) -> Result<CreateError, serde_json::Error> { decode_portable_json(wire) }
+
+pub fn encode_revoke_request(value: &RevokeRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_revoke_request(wire: &str) -> Result<RevokeRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_revoke_response(value: &RevokeResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_revoke_response(wire: &str) -> Result<RevokeResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_revoke_error(value: &RevokeError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_revoke_error(wire: &str) -> Result<RevokeError, serde_json::Error> { decode_portable_json(wire) }
 
 #[doc(hidden)]
 pub trait __LensoIntoOauthFlowConsumeResult {
@@ -380,9 +504,39 @@ impl __LensoIntoOauthFlowCreateResult for Result<CreateResponse, OauthFlowCreate
     }
 }
 
+#[doc(hidden)]
+pub trait __LensoIntoOauthFlowRevokeResult {
+    fn __lenso_into_result(self) -> Result<Result<RevokeResponse, RevokeError>, RuntimeFailure>;
+}
+impl __LensoIntoOauthFlowRevokeResult for Result<RevokeResponse, RevokeError> {
+    fn __lenso_into_result(self) -> Result<Result<RevokeResponse, RevokeError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoOauthFlowRevokeResult for Result<Result<RevokeResponse, RevokeError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<RevokeResponse, RevokeError>, RuntimeFailure> { self }
+}
+impl __LensoIntoOauthFlowRevokeResult for Result<RevokeResponse, lenso_plugin_authoring::PluginError<RevokeError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<RevokeResponse, RevokeError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoOauthFlowRevokeResult for Result<RevokeResponse, OauthFlowRevokeInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<RevokeResponse, RevokeError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(OauthFlowRevokeInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OauthFlowRevokeInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
 pub trait OauthFlowProvider: fmt::Debug + 'static {
     fn consume(&self, context: InvocationContext, request: ConsumeRequest) -> NativeRequestFuture<OauthFlowConsume>;
     fn create(&self, context: InvocationContext, request: CreateRequest) -> NativeRequestFuture<OauthFlowCreate>;
+    fn revoke(&self, context: InvocationContext, request: RevokeRequest) -> NativeRequestFuture<OauthFlowRevoke>;
 }
 
 #[doc(hidden)]
@@ -403,6 +557,13 @@ macro_rules! __lenso_native_lower_oauth_flow {
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::create(&plugin, context, request).await;
                 $crate::__LensoIntoOauthFlowCreateResult::__lenso_into_result(result)
+            })
+        }
+        fn revoke(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowRevoke> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::revoke(&plugin, context, request).await;
+                $crate::__LensoIntoOauthFlowRevokeResult::__lenso_into_result(result)
             })
         }
         }
@@ -431,6 +592,14 @@ macro_rules! __lenso_native_lower_object_oauth_flow {
                 $crate::__LensoIntoOauthFlowCreateResult::__lenso_into_result(result)
             })
         }
+        fn revoke(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowRevoke> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::revoke(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOauthFlowRevokeResult::__lenso_into_result(result)
+            })
+        }
         }
     };
 }
@@ -453,6 +622,13 @@ macro_rules! __lenso_native_lower_trait_object_oauth_flow {
             ::std::boxed::Box::pin(async move {
                 let plugin = object.get()?;
                 <$plugin as $crate::OauthFlowProvider>::create(plugin.as_ref(), context, request).await
+            })
+        }
+        fn revoke(&self, context: __LensoNativeSupportOauthFlow::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportOauthFlow::NativeRequestFuture<$crate::OauthFlowRevoke> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OauthFlowProvider>::revoke(plugin.as_ref(), context, request).await
             })
         }
         }
@@ -478,6 +654,7 @@ impl<P: OauthFlowProvider> NativeRequestEndpoint for OauthFlowEndpoint<P> {
     fn operations(&self) -> &'static [&'static str] { &[
         CONSUME_OPERATION,
         CREATE_OPERATION,
+        REVOKE_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
     fn invoke(&self, operation: &str, request: Box<dyn std::any::Any>, context: InvocationContext) -> LocalBoxFuture<'static, Result<Result<Box<dyn std::any::Any>, Box<dyn std::any::Any>>, RuntimeFailure>> {
@@ -500,6 +677,19 @@ impl<P: OauthFlowProvider> NativeRequestEndpoint for OauthFlowEndpoint<P> {
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).create(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            REVOKE_OPERATION => {
+                let Ok(request) = request.downcast::<RevokeRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).revoke(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -547,6 +737,7 @@ macro_rules! __lenso_native_provide_oauth_flow {
 pub struct OauthFlowClient {
     consume: NativeRequestHandle<OauthFlowConsume>,
     create: NativeRequestHandle<OauthFlowCreate>,
+    revoke: NativeRequestHandle<OauthFlowRevoke>,
 }
 impl OauthFlowClient {
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
@@ -583,6 +774,18 @@ impl OauthFlowClient {
             .map_err(OauthFlowCreateInvocationError::Runtime)?
             .map_err(OauthFlowCreateInvocationError::Domain)
     }
+
+    pub async fn revoke(&self, request: RevokeRequest) -> Result<RevokeResponse, OauthFlowRevokeInvocationError> {
+        self.revoke.invoke(REVOKE_OPERATION, request).await
+            .map_err(OauthFlowRevokeInvocationError::Runtime)?
+            .map_err(OauthFlowRevokeInvocationError::Domain)
+    }
+
+    pub async fn revoke_with_context(&self, context: InvocationContext, request: RevokeRequest) -> Result<RevokeResponse, OauthFlowRevokeInvocationError> {
+        self.revoke.invoke_with_context(REVOKE_OPERATION, context, request).await
+            .map_err(OauthFlowRevokeInvocationError::Runtime)?
+            .map_err(OauthFlowRevokeInvocationError::Domain)
+    }
 }
 
 impl CapabilityClient for OauthFlowClient {
@@ -596,6 +799,7 @@ impl CapabilityClient for OauthFlowClient {
         Ok(Self {
             consume: dependencies.one::<OauthFlowConsume>()?,
             create: dependencies.one::<OauthFlowCreate>()?,
+            revoke: dependencies.one::<OauthFlowRevoke>()?,
         })
     }
 
@@ -628,6 +832,7 @@ impl CapabilityClientMany for OauthFlowClient {
                     Self {
                     consume: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OauthFlowConsume>()?,
                     create: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OauthFlowCreate>()?,
+                    revoke: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OauthFlowRevoke>()?,
                     },
                 ))
             })
@@ -651,5 +856,10 @@ pub enum OauthFlowConsumeInvocationError {
 #[derive(Clone, Debug, PartialEq)]
 pub enum OauthFlowCreateInvocationError {
     Domain(CreateError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum OauthFlowRevokeInvocationError {
+    Domain(RevokeError),
     Runtime(RuntimeFailure),
 }

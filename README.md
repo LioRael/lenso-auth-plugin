@@ -58,6 +58,12 @@ canonical subject and opaque session from bound Directory and Credential
 Issuer providers. It is separate from `lenso-auth-oidc-plugin`, which makes a
 Lenso App an OIDC issuer.
 
+OAuth Flow descriptor 1.2 adds an explicit `revoke` transition alongside
+single-use `create`/`consume`. Its native PostgreSQL, Workers+D1,
+Workers+PostgreSQL-transport, and deterministic simulator compositions share
+the same Contract but retain their own target qualification gates. See
+[OAuth reference composition](docs/oauth-reference-composition.md).
+
 `lenso-auth-web-session-plugin` is the removable browser Adapter over a bound
 Federated provider. It owns fixed OIDC start/callback/logout HTTP routes,
 revalidates App-local return targets, emits `Secure`, `HttpOnly`,
@@ -134,7 +140,7 @@ source. Its build script rejects stale locked Descriptor, Schema, and Rust
 projection artifacts. For an intentional contract change, update the Rust
 source, run the package once with `LENSO_UPDATE_CONTRACT_SNAPSHOT=1`, review
 the locked snapshot diff, and regenerate `src/generated.rs` with
-`lenso-contract-codegen 0.6.3`. Bun consumers import the matching TypeScript
+`lenso-contract-codegen 0.9.0`. Bun consumers import the matching TypeScript
 projection from `@lenso/bun`, which locks the source revision independently.
 
 Native Auth Plugins use `#[lenso::plugin]`; package identity, linked Factory,
