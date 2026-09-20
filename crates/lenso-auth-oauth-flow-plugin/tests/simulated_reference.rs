@@ -5,7 +5,11 @@
 //! Kernel routing. The simulated world supplies only time, entropy, faults,
 //! and its durable private store.
 
-use std::{cell::Cell, rc::Rc, time::Duration as StdDuration};
+use std::{
+    cell::Cell,
+    rc::Rc,
+    time::{Duration as StdDuration, SystemTime},
+};
 
 use lenso_app_plan::{
     AppComposition, CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan,
@@ -34,7 +38,7 @@ use lenso_native_adapter::{
 use lenso_runner::TokioDriver;
 use lenso_test::{
     ScenarioBoundary, ScenarioTerminal, ScenarioTransition, SimulatorFault, TestApp, TestEntropy,
-    TestSimulator,
+    TestSimulator, TestWallClock,
 };
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -199,9 +203,10 @@ async fn durable_commit_before_response_is_reported_as_uncertain_without_replayi
 
 #[test]
 fn test_app_receipt_records_an_uncertain_consume_through_the_real_kernel_path() {
-    let initial = OffsetDateTime::from_unix_timestamp(1_700_000_000).unwrap();
-    let clock = Rc::new(Cell::new(initial));
     let simulator = TestSimulator::new();
+    let clock =
+        simulator.wall_clock(SystemTime::UNIX_EPOCH + StdDuration::from_secs(1_700_000_000));
+    let initial = OffsetDateTime::from(clock.now().unwrap());
     let receipt = simulator.receipt();
     let faults = simulator.faults();
     let entropy = TestEntropy::seeded([11; 32]);
@@ -412,12 +417,12 @@ fn simulation(clock: Rc<Cell<OffsetDateTime>>) -> OAuthSimulation {
 }
 
 fn simulation_with_test_sources(
-    clock: Rc<Cell<OffsetDateTime>>,
+    clock: TestWallClock,
     entropy: TestEntropy,
     faults: lenso_test::FaultInjector,
 ) -> OAuthSimulation {
     OAuthSimulation::new(
-        move || clock.get(),
+        move || OffsetDateTime::from(clock.now().expect("scenario clock stays in range")),
         move |output| entropy.fill(output),
         [7; 32],
     )
