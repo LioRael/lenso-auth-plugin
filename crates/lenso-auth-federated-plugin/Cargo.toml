@@ -1,6 +1,6 @@
 [package]
 name="lenso-auth-federated-plugin"
-version="0.1.0"
+version="0.2.0"
 edition.workspace=true
 license.workspace=true
 publish=false
@@ -17,7 +17,7 @@ lenso-capability-credential-issuer={path="../lenso-capability-credential-issuer"
 lenso-capability-federated-auth={path="../lenso-capability-federated-auth"}
 lenso-capability-http-client.workspace = true
 lenso-capability-identity-directory={path="../lenso-capability-identity-directory"}
-lenso-capability-oauth-flow={path="../lenso-capability-oauth-flow"}
+lenso-capability-oauth-flow={path="../lenso-capability-oauth-flow",version="0.2.0"}
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true

@@ -1045,9 +1045,7 @@ dependencies = [
 
 [[package]]
 name = "lenso"
-version = "0.5.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24bdf2bfc63312aa92beaa9fb5c50d599f61684b614eb645b475e3112b79ab58"
+version = "0.5.24"
 dependencies = [
  "futures",
  "lenso-kernel",
@@ -1059,9 +1057,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-app-plan"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e04794ca68019a2506cafd82de0dbea7c1048f7cc61c0356edfc6ee62081bfba"
+version = "0.4.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -1234,7 +1230,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-auth-federated-plugin"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64",
  "futures",
@@ -1256,7 +1252,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-auth-oauth-flow-plugin"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1288,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-auth-oidc-client-plugin"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "getrandom 0.2.17",
  "hmac 0.12.1",
@@ -1644,7 +1640,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-oauth-flow"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "futures",
  "lenso-contract-authoring",
@@ -1803,9 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-kernel"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c536ea88ba9579dfd31d7074b8758b8a4d90e760cfecf4db22dea2c85425147"
+version = "0.3.10"
 dependencies = [
  "futures",
  "lenso-app-plan",
@@ -1838,8 +1832,6 @@ dependencies = [
 [[package]]
 name = "lenso-native-adapter"
 version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a16bb1fd1e5da236fb6361b026b79ac11d0674254ef1ff4dfda811aa75c0e8c"
 dependencies = [
  "futures",
  "inventory",
@@ -1854,8 +1846,6 @@ dependencies = [
 [[package]]
 name = "lenso-native-adapter-macros"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7eb0843f6fa2e7fc23f7d326e82f2603af47b4f0be15a54dec8b06d40d6e6f1c"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1884,9 +1874,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-runner"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e25b4052b47914ba397871b244eed58d68316c883a5b4f8d5d50e7c971d07a6c"
+version = "0.2.16"
 dependencies = [
  "cpu-time",
  "futures",
@@ -1914,8 +1902,6 @@ dependencies = [
 [[package]]
 name = "lenso-runtime-codec"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1890cbb0b2cd544d4d412fc1330ad6a0760bb2b16b6ac46e26a50f6a98c910b7"
 dependencies = [
  "futures",
  "hex",

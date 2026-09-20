@@ -4,7 +4,8 @@ This experiment exercises the actual Account, OAuth Flow, Router, Web Session an
 OIDC Client Plugins, with Web's event ingress/egress and the shared Workers Driver.
 Every event resolves owner-generated Descriptors through HostCatalog and Plugin
 Root, creates its own graph and D1 bindings, reaches Ready, invokes typed operations,
-and shuts down. Native PostgreSQL remains the production default.
+and shuts down. Native PostgreSQL is a separate composition with its own evidence;
+this experiment does not make a production-default or production-support claim.
 
 The controlled OIDC fixture uses actual HTTP token/JWKS exchange, PKCE and RS256.
 It represents a synthetic qualification identity, not a verified external provider

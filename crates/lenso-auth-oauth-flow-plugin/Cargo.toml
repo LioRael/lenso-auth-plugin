@@ -1,6 +1,6 @@
 [package]
 name="lenso-auth-oauth-flow-plugin"
-version="0.1.0"
+version="0.2.0"
 edition.workspace=true
 license.workspace=true
 publish=false
@@ -29,7 +29,7 @@ aes-gcm.workspace=true
 base64.workspace=true
 getrandom.workspace=true
 hmac.workspace=true
-lenso-capability-oauth-flow={path="../lenso-capability-oauth-flow",version="0.1.0"}
+lenso-capability-oauth-flow={path="../lenso-capability-oauth-flow",version="0.2.0"}
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
