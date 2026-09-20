@@ -1,11 +1,12 @@
 // Executes actual owner Rust migrations through workerd's primary D1 binding.
 import assert from 'node:assert/strict';
-import { readdir, rm } from 'node:fs/promises';
+import { readdir, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { captureWorktreeSnapshot } from '../../workers/oauth-conformance.mjs';
 
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve('wrangler/package.json'));
@@ -13,6 +14,14 @@ const { Miniflare } = wranglerRequire('miniflare');
 const { build } = wranglerRequire('esbuild');
 const root = fileURLToPath(new URL('.', import.meta.url));
 const output = `${root}migration-proof.bundle.mjs`;
+const outputIndex = process.argv.indexOf('--output');
+if (outputIndex !== -1 && (outputIndex !== process.argv.length - 2 || !process.argv[outputIndex + 1])) {
+  throw new Error('Usage: node migration-proof.mjs [--output <receipt-path>]');
+}
+const receiptOutput = outputIndex === -1 ? null : process.argv[outputIndex + 1];
+// Capture before the temporary esbuild module exists, so the receipt describes
+// the candidate source rather than a test-generated untracked bundle.
+const source = captureWorktreeSnapshot(fileURLToPath(new URL('../../', import.meta.url)));
 const owners = ['account', 'oauth-flow', 'password', 'phone', 'device', 'api-token', 'oidc'];
 await build({
   entryPoints: [`${root}migration-proof-worker.mjs`], outfile: output, bundle: true,
@@ -102,7 +111,16 @@ try {
   assert.equal(await upgrade('fixture-v2', 'verify'), true);
   assert.equal((await upgradeDb.prepare("SELECT name FROM sqlite_master WHERE name='rollback_marker'").all()).results.length, 0);
   receipts.push({ owner: 'test-only-upgrade', mode: 'pending-and-rollback', passed: true });
-  console.log(JSON.stringify({ runtime: 'local workerd with actual D1 bindings', wasm_sha256: createHash('sha256').update(await readFile(new URL('./pkg/lenso_workers_g4_host_bg.wasm', import.meta.url))).digest('hex'), compositions: receipts.length, receipts }, null, 2));
+  const receipt = {
+    schema: 'lenso.auth.d1-migration-upgrade-receipt@1',
+    source,
+    runtime: 'local workerd with actual D1 bindings',
+    wasm_sha256: `sha256:${createHash('sha256').update(await readFile(new URL('./pkg/lenso_workers_g4_host_bg.wasm', import.meta.url))).digest('hex')}`,
+    compositions: receipts.length,
+    receipts,
+  };
+  if (receiptOutput) await writeFile(receiptOutput, `${JSON.stringify(receipt, null, 2)}\n`);
+  console.log(JSON.stringify(receipt, null, 2));
 } finally {
   await mf.dispose();
   await rm(output, { force: true });
