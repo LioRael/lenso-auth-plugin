@@ -34,27 +34,55 @@ try {
       const db = await mf.getD1Database(binding);
       const call = async action => {
         const response = await mf.dispatchFetch(`http://local/?owner=${owner}&binding=${binding}&action=${action}`);
-        const result = response.ok ? await response.json() : { ok: false, status: response.status };
+        const body = await response.text();
+        const result = response.ok
+          ? JSON.parse(body)
+          : { ok: false, status: response.status, body };
         return result;
       };
       assert.equal((await call('verify')).ok, false, `${owner}: missing history must fail`);
       if (mode === 'legacy') {
         const directory = new URL(`../../crates/lenso-auth-${owner}-plugin/migrations/d1/`, import.meta.url);
-        const initial = (await readdir(directory)).sort()[0];
+        const migrations = (await readdir(directory)).sort();
+        const initial = migrations[0];
         const statements = JSON.parse(execFileSync('python3', [fileURLToPath(new URL('../../workers/generate-migrations.py', import.meta.url)), '--statements', fileURLToPath(new URL(initial, directory))], { encoding: 'utf8' }));
         await db.batch(statements.map(sql => db.prepare(sql)));
         assert.equal((await call('setup')).ok, false, `${owner}: legacy needs explicit adoption`);
         assert.equal((await call('adopt-legacy')).ok, true, `${owner}: adopt`);
+        if (migrations.length > 1) {
+          // Adoption records only the known legacy v1 schema. A later authored
+          // migration must remain an explicit operator upgrade rather than an
+          // implicit Ready-time write.
+          assert.equal((await call('verify')).ok, false, `${owner}: legacy upgrade remains pending`);
+          assert.equal((await call('upgrade')).ok, true, `${owner}: upgrade adopted legacy`);
+        }
       } else {
         assert.equal((await call('setup')).ok, true, `${owner}: setup`);
       }
-      assert.equal((await call('verify')).ok, true, `${owner}: verify`);
+      const verified = await call('verify');
+      assert.equal(verified.ok, true, `${owner}: verify ${JSON.stringify(verified)}`);
       const before = await db.prepare('SELECT * FROM _lenso_migrations').all();
       assert.equal((await call('upgrade')).ok, true, `${owner}: current upgrade`);
       assert.deepEqual((await db.prepare('SELECT * FROM _lenso_migrations').all()).results, before.results);
       await db.prepare("UPDATE _lenso_migrations SET checksum='drift'").run();
       assert.equal((await call('verify')).ok, false, `${owner}: checksum drift`);
-      await db.prepare('UPDATE _lenso_migrations SET checksum=?1').bind(before.results[0].checksum).run();
+      // Owners with more than one migration retain a checksum row per version.
+      // Restore the complete pre-fault ledger, not just the first row, so this
+      // exercises checksum recovery rather than leaving a later migration
+      // deliberately corrupted.
+      for (const migration of before.results) {
+        await db
+          .prepare(
+            "UPDATE _lenso_migrations SET checksum=?1 WHERE owner=?2 AND backend=?3 AND version=?4",
+          )
+          .bind(
+            migration.checksum,
+            migration.owner,
+            migration.backend,
+            migration.version,
+          )
+          .run();
+      }
       assert.equal((await call('verify')).ok, true, `${owner}: restore exact history`);
       receipts.push({ owner, mode, passed: true });
     }
