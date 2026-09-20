@@ -451,7 +451,9 @@ pub async fn oauth_postgres_invoke(input: String, scope: JsValue) -> Result<Stri
     let postgres: js_sys::Function = property(&scope, "oauthPostgres")?.dyn_into().map_err(err)?;
     lenso_auth_oauth_flow_plugin::link_plugin();
     let registry = NativePluginRegistry::new()
-        .with_factory_override(lenso_auth_oauth_flow_plugin::workers_postgres_factory(postgres))
+        .with_factory_override(lenso_auth_oauth_flow_plugin::workers_postgres_factory(
+            postgres,
+        ))
         .map_err(err)?
         .with_linked_factories()
         .with_factory(Caller)

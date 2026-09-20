@@ -20,7 +20,7 @@ js-sys.workspace=true
 lenso-capability-secrets="0.1.4"
 time={version="0.3",features=["formatting","parsing","wasm-bindgen"]}
 lenso-auth-account-plugin={path="../../../crates/lenso-auth-account-plugin",default-features=false,features=["workers"]}
-lenso-auth-oauth-flow-plugin={path="../../../crates/lenso-auth-oauth-flow-plugin",version="0.2.0",default-features=false,features=["workers"]}
+lenso-auth-oauth-flow-plugin={path="../../../crates/lenso-auth-oauth-flow-plugin",version="0.2.1",default-features=false,features=["workers"]}
 lenso-auth-web-session-plugin={path="../../../crates/lenso-auth-web-session-plugin",default-features=false,features=["workers"]}
 lenso-auth-oidc-client-plugin={path="../../../crates/lenso-auth-oidc-client-plugin",version="0.2.0",default-features=false,features=["workers"]}
 lenso-auth-router-plugin={path="../../../crates/lenso-auth-router-plugin"}
@@ -40,7 +40,7 @@ lenso-auth-sdk={path="../../../crates/lenso-auth-sdk"}
 lenso-web-ingress-plugin={version="0.4.3",default-features=false}
 lenso-http-egress-plugin={version="0.3.2",default-features=false,features=["workers"]}
 
-lenso-workers-driver="=0.1.0"
+lenso-workers-driver="=0.1.1"
 lenso-auth-password-plugin={path="../../../crates/lenso-auth-password-plugin",default-features=false,features=["workers"]}
 lenso-auth-phone-plugin={path="../../../crates/lenso-auth-phone-plugin",default-features=false,features=["workers"]}
 lenso-auth-device-plugin={path="../../../crates/lenso-auth-device-plugin",default-features=false,features=["workers"]}

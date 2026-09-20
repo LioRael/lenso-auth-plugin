@@ -830,7 +830,7 @@ dependencies = [
 
 [[package]]
 name = "lenso"
-version = "0.5.24"
+version = "0.5.25"
 dependencies = [
  "futures",
  "lenso-kernel",
@@ -842,7 +842,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-app-plan"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "serde",
  "serde_json",
@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-auth-oauth-flow-plugin"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1441,7 +1441,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-kernel"
-version = "0.3.10"
+version = "0.3.11"
 dependencies = [
  "futures",
  "lenso-app-plan",
@@ -1473,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-native-adapter"
-version = "0.3.14"
+version = "0.3.15"
 dependencies = [
  "futures",
  "inventory",
@@ -1503,7 +1503,7 @@ version = "0.2.0"
 
 [[package]]
 name = "lenso-runtime-codec"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "futures",
  "hex",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-workers-driver"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "lenso-kernel",
@@ -2688,3 +2688,11 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[patch.unused]]
+name = "lenso-runner"
+version = "0.2.17"
+
+[[patch.unused]]
+name = "lenso-test"
+version = "0.1.2"
