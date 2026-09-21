@@ -106,6 +106,10 @@ for its Environment × Infrastructure qualification matrix.
 - [Local workerd receipts](storage-migration-workerd.json) record all 15 successful
   compositions and the tested Wasm hash. These are local runtime results, not a
   production deployment or external identity/SMS vendor qualification.
+- The exact candidate [local D1 migration receipt](evidence/d1-migration-a5687bc.local.json)
+  records fifteen fresh, legacy, and rollback migration compositions for Auth
+  `a5687bcbe4be06ca3ff84e3839c17303805683db`. It is a local `workerd` result,
+  not a deployed Worker or production D1 qualification.
 - [Password preparation measurements](password-performance.md) separately record
   native setup/hash/verification costs. Wasm password hashing remains synchronous;
   no Workers throughput or end-to-end latency claim is made.

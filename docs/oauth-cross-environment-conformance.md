@@ -75,6 +75,13 @@ PostgreSQL 18 run can therefore be retained as `local-native-postgresql`
 evidence for its exact worktree snapshot, but must not be reused as a target,
 release, or production claim.
 
+The checked-in [local PostgreSQL receipt](evidence/oauth-conformance-a5687bc.local.json)
+records the disposable PostgreSQL 18 run for clean Auth candidate
+`a5687bcbe4be06ca3ff84e3839c17303805683db`. It passes the shared OAuth
+consume-once invariants and records only local command digests; its native
+target requirements remain pending, so it is not a Native target, Workers D1,
+Hyperdrive, release, or production claim.
+
 Set `LENSO_CARGO` to an executable path when a repository-specific Cargo
 wrapper is required. It is deliberately an executable path, not a shell
 fragment, so the receipt runner never evaluates arbitrary shell text.

@@ -1,0 +1,135 @@
+{
+  "schema": "lenso.auth.oauth-flow-conformance-receipt@1",
+  "matrix_schema": "lenso.auth.oauth-flow-conformance-matrix@1",
+  "matrix_digest": "sha256:eab53b83bf9e760bfd57cdb93f672e35a8f656056582a09b7a5704b465a90536",
+  "scenario_id": "oauth-state-consume-once",
+  "source": {
+    "base_revision": "a5687bcbe4be06ca3ff84e3839c17303805683db",
+    "worktree_snapshot": {
+      "schema": "lenso.git-worktree-snapshot@1",
+      "state": "clean",
+      "sha256": "sha256:8d84dd9ba0fbf6024d5aa33c2b3510138e28bc18ab9e9c5aedeead2897f3847e",
+      "tracked_diff_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked_file_count": 0,
+      "untracked_content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "runs": [
+    {
+      "composition_id": "simulated-deterministic-store",
+      "business_invariants": {
+        "success-count-is-one": "passed",
+        "state-is-consumed": "passed",
+        "second-attempt-is-not-success": "passed"
+      },
+      "qualification": {
+        "level": "local",
+        "status": "passed",
+        "satisfied_requirement_ids": [
+          "exact-ordering",
+          "virtual-time",
+          "fault-injection",
+          "deterministic-entropy"
+        ],
+        "pending_requirement_ids": []
+      },
+      "evidence": [
+        {
+          "kind": "command",
+          "scope": "local",
+          "reference": "simulated-reference",
+          "exit_code": 0,
+          "output_sha256": "sha256:f4c03161148adff1a68a9d26046d326a770a285429a10bde4bb9128b7ddd3d80"
+        }
+      ],
+      "note": "Passing simulated-reference covers the simulator requirements declared in the matrix."
+    },
+    {
+      "composition_id": "native-postgresql",
+      "business_invariants": {
+        "success-count-is-one": "passed",
+        "state-is-consumed": "passed",
+        "second-attempt-is-not-success": "passed"
+      },
+      "qualification": {
+        "level": "local",
+        "status": "passed",
+        "satisfied_requirement_ids": [],
+        "pending_requirement_ids": [
+          "postgresql-transaction",
+          "native-connection",
+          "timeout",
+          "cancellation",
+          "restart-persistence"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "command",
+          "scope": "local",
+          "reference": "local-native-postgresql",
+          "exit_code": 0,
+          "output_sha256": "sha256:e560847f613ee95f287cfcb9309c50842655574e6344b81f63ce102fe9300258"
+        }
+      ],
+      "note": "Passing local-native-postgresql is local composition evidence only; it does not qualify postgresql."
+    },
+    {
+      "composition_id": "workers-d1",
+      "business_invariants": {
+        "success-count-is-one": "not-run",
+        "state-is-consumed": "not-run",
+        "second-attempt-is-not-success": "not-run"
+      },
+      "qualification": {
+        "level": "not-run",
+        "status": "pending",
+        "satisfied_requirement_ids": [],
+        "pending_requirement_ids": [
+          "d1-semantics",
+          "fetch",
+          "worker-lifecycle",
+          "wasm-lifecycle",
+          "failure-recovery"
+        ]
+      },
+      "evidence": [],
+      "note": "No local command is declared; an actual-target receipt is required."
+    },
+    {
+      "composition_id": "workers-hyperdrive-postgresql",
+      "business_invariants": {
+        "success-count-is-one": "passed",
+        "state-is-consumed": "passed",
+        "second-attempt-is-not-success": "passed"
+      },
+      "qualification": {
+        "level": "local",
+        "status": "passed",
+        "satisfied_requirement_ids": [],
+        "pending_requirement_ids": [
+          "hyperdrive-connection",
+          "postgresql-transaction",
+          "transient-network-failure",
+          "timeout",
+          "cancellation",
+          "uncertain-commit"
+        ]
+      },
+      "evidence": [
+        {
+          "kind": "command",
+          "scope": "local",
+          "reference": "workers-postgresql-local-workerd-cohort",
+          "exit_code": 0,
+          "output_sha256": "sha256:b4c73cc281e03d6ad85446b3205d634c16ff7b3c3763ace63046f8a2d10dcd30"
+        }
+      ],
+      "note": "Passing workers-postgresql-local-workerd-cohort is local composition evidence only; it does not qualify postgresql-via-hyperdrive."
+    }
+  ],
+  "summary": {
+    "business_conformance": "incomplete",
+    "qualification": "incomplete"
+  }
+}

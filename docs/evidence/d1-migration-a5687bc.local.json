@@ -1,0 +1,94 @@
+{
+  "schema": "lenso.auth.d1-migration-upgrade-receipt@1",
+  "source": {
+    "base_revision": "a5687bcbe4be06ca3ff84e3839c17303805683db",
+    "worktree_snapshot": {
+      "schema": "lenso.git-worktree-snapshot@1",
+      "state": "clean",
+      "sha256": "sha256:8d84dd9ba0fbf6024d5aa33c2b3510138e28bc18ab9e9c5aedeead2897f3847e",
+      "tracked_diff_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "untracked_file_count": 0,
+      "untracked_content_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "runtime": "local workerd with actual D1 bindings",
+  "wasm_sha256": "sha256:c8d85307a6191897e3d310a6c2f42d9eaba7e58306a1466e1aaf5b96440d813a",
+  "compositions": 15,
+  "receipts": [
+    {
+      "owner": "account",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "account",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "oauth-flow",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "oauth-flow",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "password",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "password",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "phone",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "phone",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "device",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "device",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "api-token",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "api-token",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "oidc",
+      "mode": "fresh",
+      "passed": true
+    },
+    {
+      "owner": "oidc",
+      "mode": "legacy",
+      "passed": true
+    },
+    {
+      "owner": "test-only-upgrade",
+      "mode": "pending-and-rollback",
+      "passed": true
+    }
+  ]
+}
