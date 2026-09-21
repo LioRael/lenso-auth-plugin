@@ -99,6 +99,7 @@ try {
         SIGNING_KEY: "local-proof-signing-key",
         TOKEN_PEPPER: "local-proof-token-pepper",
         OAUTH_KEY: "0123456789abcdef0123456789abcdef",
+        OIDC_SECRET: "local-proof-oidc-secret",
         OTP_SECRET: "local-proof-otp",
         PROVIDER_SIGNING_KEY: "local-proof-provider-signing",
         PROVIDER_JWKS: "{}",

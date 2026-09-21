@@ -75,6 +75,7 @@ export default createWorkersHttpHost({
         signing: env.SIGNING_KEY,
         pepper: env.TOKEN_PEPPER,
         oauth: env.OAUTH_KEY,
+        oidc: env.OIDC_SECRET,
         otp: env.OTP_SECRET,
         providerSigning: env.PROVIDER_SIGNING_KEY,
         providerJwks: env.PROVIDER_JWKS,
