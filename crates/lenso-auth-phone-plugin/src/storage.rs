@@ -21,7 +21,10 @@ impl PhoneStore {
             reason = "Native storage shutdown is asynchronous"
         )
     )]
-    #[cfg_attr(not(feature = "postgres"), allow(clippy::unused_async, clippy::unused_async_trait_impl))]
+    #[cfg_attr(
+        not(feature = "postgres"),
+        allow(clippy::unused_async, clippy::unused_async_trait_impl)
+    )]
     pub(crate) async fn close(&self) {
         match self {
             #[cfg(feature = "postgres")]

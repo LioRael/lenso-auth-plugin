@@ -56,7 +56,10 @@ pub(crate) enum AccountStore {
 }
 impl AccountStore {
     #[cfg_attr(not(feature = "postgres"), allow(clippy::unused_async))]
-    #[cfg_attr(not(feature = "postgres"), allow(clippy::unused_async, clippy::unused_async_trait_impl))]
+    #[cfg_attr(
+        not(feature = "postgres"),
+        allow(clippy::unused_async, clippy::unused_async_trait_impl)
+    )]
     pub(crate) async fn close(&self) {
         match self {
             #[cfg(feature = "postgres")]
