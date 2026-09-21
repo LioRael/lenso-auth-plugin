@@ -12,9 +12,9 @@ pub(crate) enum FlowStore {
     Postgres(lenso_postgres_kit::OwnedPostgres),
     #[cfg(feature = "workers")]
     D1(crate::workers::D1Binding),
-    /// A Host-injected PostgreSQL transport. The Auth Plugin only owns the
+    /// A Host-injected `PostgreSQL` transport. The Auth Plugin only owns the
     /// OAuth persistence protocol; a Workers Host may implement this through
-    /// Hyperdrive or another target-owned PostgreSQL transport.
+    /// Hyperdrive or another target-owned `PostgreSQL` transport.
     #[cfg(feature = "workers")]
     PostgresTransport(crate::postgres_transport::PostgresBinding),
     #[cfg(any(test, feature = "simulator-test-support"))]

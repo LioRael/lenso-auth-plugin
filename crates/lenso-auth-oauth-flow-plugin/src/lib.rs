@@ -541,7 +541,7 @@ pub fn workers_factory(
     })
 }
 
-/// Builds OAuth Flow for one Workers event with a Host-owned PostgreSQL
+/// Builds OAuth Flow for one Workers event with a Host-owned `PostgreSQL`
 /// transport. The Host may back the callback with Hyperdrive, but Auth receives
 /// neither binding identity nor connection material and has no retry authority.
 #[cfg(feature = "workers")]

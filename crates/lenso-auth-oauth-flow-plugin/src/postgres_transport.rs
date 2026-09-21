@@ -1,6 +1,6 @@
 //! Private Host-to-PostgreSQL bridge for Workers Auth composition.
 //!
-//! This module deliberately names PostgreSQL semantics, not Cloudflare or a
+//! This module deliberately names `PostgreSQL` semantics, not Cloudflare or a
 //! Hyperdrive binding. A Workers Host owns its transport/resource choice and
 //! injects one event-owned callback. The callback must preserve the two Auth
 //! operations' exact durable semantics, especially one transactional `consume`
@@ -12,7 +12,7 @@ use wasm_bindgen::JsValue;
 
 use crate::{ConsumeError, RevokeError, RuntimeFailure, failure, storage::EncryptedFlow};
 
-/// An event-owned private PostgreSQL persistence bridge supplied by the Host.
+/// An event-owned private `PostgreSQL` persistence bridge supplied by the Host.
 #[derive(Clone)]
 pub struct PostgresBinding {
     execute: js_sys::Function,
@@ -27,7 +27,7 @@ impl std::fmt::Debug for PostgresBinding {
 }
 
 impl PostgresBinding {
-    /// `execute` accepts canonical Auth PostgreSQL operation JSON and returns a
+    /// `execute` accepts canonical Auth `PostgreSQL` operation JSON and returns a
     /// Promise resolving to one canonical outcome JSON string.
     pub fn new(execute: js_sys::Function) -> Self {
         Self { execute }
