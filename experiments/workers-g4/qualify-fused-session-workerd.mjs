@@ -182,7 +182,10 @@ try {
     // Browser navigation is dispatched to the separate local workerd service
     // directly. Only the generated OIDC token/JWKS exchange uses the main
     // Worker's HTTP Egress service binding below the Host boundary.
-    const authorized = await idpWorker.fetch(authorizeUrl, { redirect: "manual" });
+    const authorized = await idpWorker.fetch(authorizeUrl, {
+      headers: { "x-proof-key": proofKey },
+      redirect: "manual",
+    });
     assert.equal(authorized.status, 302, "controlled fixture authorization status");
     callbackUrl = authorized.headers.get("location");
     assert.ok(callbackUrl?.startsWith(`${baseUrl}/auth/oidc/callback?`), "fixture must issue a same-origin callback");
