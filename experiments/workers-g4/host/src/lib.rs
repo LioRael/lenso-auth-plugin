@@ -421,6 +421,7 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
   "grant"=>call!(delegation::Delegation,delegation::GRANT_OPERATION),
   "create"=>call!(flow::OauthFlowCreate,flow::CREATE_OPERATION),
   "consume"=>call!(flow::OauthFlowConsume,flow::CONSUME_OPERATION),
+  "revoke_oauth"=>call!(flow::OauthFlowRevoke,flow::REVOKE_OPERATION),
   operation if methods::selected(operation).is_some()=>methods::invoke(&app,caller,operation,input.request,&scope,cancellation.clone()).await,
  _=>Err(err("unknown proof operation")),
  }}.await;

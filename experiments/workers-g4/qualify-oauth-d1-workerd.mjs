@@ -96,8 +96,8 @@ try {
       },
       d1Persist: persistenceDirectory,
       bindings: {
-        SIGNING_KEY: "local-proof-signing-key",
-        TOKEN_PEPPER: "local-proof-token-pepper",
+        SIGNING_KEY: "0123456789abcdef0123456789abcdef",
+        TOKEN_PEPPER: "fedcba9876543210fedcba9876543210",
         OAUTH_KEY: "0123456789abcdef0123456789abcdef",
         OIDC_SECRET: "local-proof-oidc-secret",
         OTP_SECRET: "local-proof-otp",
@@ -213,7 +213,7 @@ try {
 
   await run("revocation-survives-fresh-workerd-and-kernel-app", async () => {
     const state = await create();
-    const revoked = await invoke("revoke", { provider: "github", state });
+    const revoked = await invoke("revoke_oauth", { provider: "github", state });
     checkOutcome(revoked, (outcome) => outcome?.Ok !== undefined, "revoke");
     await recreateWorkerd();
     const restarted = await consume(state);
@@ -231,13 +231,18 @@ try {
     checkOutcome(expired, (outcome) => outcome?.Err === "expired", "expired consume");
   });
 
+  const wasmSha256 = sha256(await readFile(resolve(root, "pkg/lenso_workers_g4_host_bg.wasm")));
+  // The esbuild bundle is deliberately untracked while the cohort runs. Remove
+  // it before verifying source identity so the receipt proves the candidate,
+  // not a transient harness artifact.
+  await rm(output, { force: true });
   const sourceAfter = captureWorktreeSnapshot(repositoryRoot);
   assert.deepEqual(sourceAfter, source, "OAuth D1 cohort must leave the candidate source unchanged");
   const receipt = {
     schema: "lenso.auth.oauth-flow-local-d1-cohort@1",
     source,
     runtime: "local workerd via Miniflare with actual event-owned D1 bindings",
-    wasm_sha256: sha256(await readFile(resolve(root, "pkg/lenso_workers_g4_host_bg.wasm"))),
+    wasm_sha256: wasmSha256,
     passed: cases.length === 6 && cases.every((entry) => entry.passed),
     cases,
     assertion:
