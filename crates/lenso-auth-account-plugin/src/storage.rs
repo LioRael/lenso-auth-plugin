@@ -55,10 +55,9 @@ pub(crate) enum AccountStore {
     D1(crate::workers::D1Binding),
 }
 impl AccountStore {
-    #[cfg_attr(not(feature = "postgres"), allow(clippy::unused_async))]
     #[cfg_attr(
         not(feature = "postgres"),
-        allow(clippy::unused_async, clippy::unused_async_trait_impl)
+        allow(unknown_lints, clippy::unused_async, clippy::unused_async_trait_impl)
     )]
     pub(crate) async fn close(&self) {
         match self {
