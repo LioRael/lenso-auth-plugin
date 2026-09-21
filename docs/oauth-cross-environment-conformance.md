@@ -24,7 +24,7 @@ does not become an infrastructure claim merely because it has the same API.
 | --- | --- | --- |
 | Simulated + deterministic private store | `tests/simulated_reference.rs` | exact ordering, virtual time, fault injection, deterministic entropy |
 | Native + PostgreSQL | `local-native-postgresql`: `tests/native_postgres_reference.rs` against an explicitly supplied disposable URL | PostgreSQL transaction, native connection, timeout, cancellation, restart persistence |
-| Workers + D1 | actual Worker/D1 target receipt only | D1 semantics, Fetch, Worker lifecycle, Wasm lifecycle, failure recovery |
+| Workers + D1 | `experiments/workers-g4/qualify-oauth-d1-workerd.mjs` is a local workerd/actual-D1-binding cohort | D1 semantics, Fetch, Worker lifecycle, Wasm lifecycle, failure recovery |
 | Workers + Hyperdrive + PostgreSQL | `experiments/workers-g4/qualify-oauth-postgres-workerd.mjs` is a local composition cohort | Hyperdrive connection, PostgreSQL transaction, transient network failure, timeout, cancellation, uncertain commit |
 
 The Worker/PostgreSQL cohort executes real local `workerd`, generated Auth
@@ -32,6 +32,19 @@ Wasm, a fresh Kernel App per operation, and an event-owned Host callback. Its
 store is intentionally an in-memory Host stand-in. Therefore it can establish
 the shared scenario for the local composition, but it cannot establish
 Hyperdrive, a live PostgreSQL transaction, deployment, or production behavior.
+
+The Worker/D1 cohort executes the generated Auth Wasm through the real Kernel,
+OAuth Capability, Workers factory, and an event-owned `createD1Binding` over
+Miniflare's local workerd D1 implementation. It applies the actual owner
+migrations before issuing OAuth operations. This proves a bounded local
+composition only: it does not claim deployed Cloudflare D1 semantics, a target
+qualification, release, or production behavior.
+
+The cohort's response-loss case is a deliberately local proof-host fault: it
+runs generated `consume`, suppresses only its application response after the
+durable result returns, and verifies a retry sees `already_consumed` through
+the same D1 binding. It is not an external client-disconnect or target failure
+recovery result.
 
 ## Produce a local candidate receipt
 
@@ -42,12 +55,19 @@ node workers/oauth-conformance.mjs run-local --output /tmp/oauth-conformance.loc
 node workers/oauth-conformance.mjs validate --receipt /tmp/oauth-conformance.local.json
 ```
 
-The default runner executes only the existing deterministic reference test and
-the local `workerd` cohort. It leaves Native PostgreSQL opt-in and Workers D1
-not run. Therefore both the all-cell `business_conformance` and
-`qualification` summaries are normally `"incomplete"`: the local cells passed,
-but the matrix has no evidence for the unrun cells. That is the truthful
-result, not a failed target qualification.
+The default runner executes the deterministic reference plus both local
+`workerd` cohorts. It leaves Native PostgreSQL opt-in. Without that deliberately
+selected Native resource, all-cell `business_conformance` remains
+`"incomplete"`; and `qualification` remains `"incomplete"` even when every
+local command passes, because the target-required cells still need their
+actual-target evidence. That is the truthful result, not a failed target
+qualification.
+
+The D1 local run records
+`runs[].evidence[].reference = "workers-d1-local-workerd-cohort"`. Its
+credential-free cohort line contains the exact source snapshot, generated Wasm
+digest, migrations, and scenario names; the outer conformance receipt keeps
+only the command and output digest. Its target requirements remain pending.
 
 To exercise a deliberately selected disposable Native PostgreSQL target,
 provide the URL through the existing test interface and opt in explicitly:

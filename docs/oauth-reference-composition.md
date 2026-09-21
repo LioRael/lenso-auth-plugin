@@ -51,7 +51,7 @@ lenso-contract-codegen check crates/lenso-capability-oauth-flow/capability.json 
 | Composition | Required additional evidence | Current local command |
 | --- | --- | --- |
 | Native + PostgreSQL | real migration, transaction, timeout/cancellation and restart behavior against disposable PostgreSQL | `LENSO_POSTGRES_TEST_URL=... cargo test --locked --workspace -- --include-ignored --test-threads=1` |
-| Workers + D1 | workerd lifecycle, D1 batch outcomes, event abandonment and owner migration readiness | `bash experiments/workers-g4/build.sh` followed by its focused qualification harness |
+| Workers + D1 | workerd lifecycle, D1 batch outcomes, event abandonment and owner migration readiness | `node experiments/workers-g4/qualify-oauth-d1-workerd.mjs` for bounded local evidence; an operator target receipt for promotion |
 | Workers + PostgreSQL transport | event-owned callback, PostgreSQL transaction, transient failure, timeout, cancellation and uncertain commit | Workers Host qualification harness with an explicit target-owned PostgreSQL/Hyperdrive resource |
 
 The last two rows do not become passing merely because the Rust Workers target
@@ -86,3 +86,30 @@ composition only**. It is not PostgreSQL, Hyperdrive, deployed Worker, client
 disconnect, or production qualification. A target-owned Host must separately
 run the same contract against its actual Hyperdrive/PostgreSQL resource and
 attach that receipt before the combination is promoted.
+
+## Local workerd D1 cohort
+
+The D1 cohort uses the same generated G4 Rust/Wasm Host and real Kernel
+Capability invocation path, but injects two ephemeral Miniflare/workerd D1
+bindings through the Auth-owned `createD1Binding` boundary. It first applies
+the Account and OAuth owner migrations through the generated migration entry,
+then checks create persistence, concurrent consume-once, revocation across a
+fresh workerd and Kernel App, expiry, and a test-only post-durable application
+response loss followed by a terminal-state retry:
+
+```sh
+pnpm --dir experiments/workers-g4 install --frozen-lockfile
+node experiments/workers-g4/qualify-oauth-d1-workerd.mjs
+```
+
+When an exact local source-closure configuration is required, pass its
+credential-free Cargo configuration path through `LENSO_CARGO_CONFIG`; the
+cohort forwards it only to the locked Wasm build and never records its path or
+contents in the receipt.
+
+It emits `AUTH_D1_COHORT_EVIDENCE` with source and Wasm digests, case names,
+and no credentials or OAuth payloads. This remains **local workerd evidence**:
+it does not satisfy the Workers+D1 target requirements or make a deployed,
+release, or production claim. In particular, deployed D1 behavior, external
+client disconnect, long-session lifecycle, and target failure recovery require
+their own exact candidate receipt.

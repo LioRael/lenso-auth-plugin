@@ -151,6 +151,15 @@ test("the opt-in PostgreSQL reference is labelled as local evidence", () => {
   assert.equal(nativePostgresql.required_qualification_level, "target");
 });
 
+test("the local workerd D1 cohort remains local evidence", () => {
+  const workersD1 = matrix.compositions.find(
+    (composition) => composition.id === "workers-d1",
+  );
+  assert.equal(workersD1.local_command.id, "workers-d1-local-workerd-cohort");
+  assert.equal(workersD1.local_command.receipt_prefix, "AUTH_D1_COHORT_EVIDENCE ");
+  assert.equal(workersD1.required_qualification_level, "target");
+});
+
 test("worktree snapshot distinguishes a clean base from tracked and untracked changes", () => {
   const repository = mkdtempSync(join(tmpdir(), "lenso-oauth-conformance-"));
   try {

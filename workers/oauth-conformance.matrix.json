@@ -100,7 +100,15 @@
         "worker-lifecycle",
         "wasm-lifecycle",
         "failure-recovery"
-      ]
+      ],
+      "local_command": {
+        "id": "workers-d1-local-workerd-cohort",
+        "program": "node",
+        "args": [
+          "experiments/workers-g4/qualify-oauth-d1-workerd.mjs"
+        ],
+        "receipt_prefix": "AUTH_D1_COHORT_EVIDENCE "
+      }
     },
     {
       "id": "workers-hyperdrive-postgresql",
