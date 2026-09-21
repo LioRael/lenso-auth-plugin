@@ -1,6 +1,6 @@
 [workspace]
-release = true
+# Publishing is entered only through the dispatch-only workflow after a landed
+# SHA, exact candidate CI evidence, and an explicit release set pass its gate.
 release_always = true
-pr_labels = ["release"]
 changelog_update = false
 git_tag_name = "{{ package }}@{{ version }}"

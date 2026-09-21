@@ -16,16 +16,9 @@ All other workspace members are private implementation crates and must keep
 Release planning is not automatic: this repository does not create Release-plz
 PRs and pushes do not trigger release workflows. Publication is manual-only and
 starts from an exact immutable SHA already on `main`, with an explicit approved
-`package@version` set. The workflow has a read-only dry-run mode and a
-separately gated live mode. It uses the
-explicit versions in the post-extraction workspace as the release baseline, so
-release-plz does not derive versions by traversing the imported pre-extraction
-history.
-
-The release PR uses `RELEASE_PLZ_TOKEN` when configured, or the repository
-GitHub token otherwise. That credential is only for GitHub branch and pull
-request operations. Crates.io publication never receives it and has no Cargo
-registry token fallback.
+JSON `release_set`. The dispatch-only workflow has a read-only `dry-run` mode
+and a separately gated `publish` mode. Crates.io publication receives no
+long-lived Cargo registry token fallback.
 
 ## Trusted publishing and first releases
 
@@ -70,9 +63,9 @@ requirements, and the candidate `Check` run. Then run the workflow dry-run from
 
 ```sh
 gh workflow run release-plz.yml --ref main \
-  -f landed_sha=<40-character-main-sha> \
-  -f versions=lenso-capability-auth@0.1.0,lenso-auth-sdk@0.1.0 \
-  -f live=false
+  -f source_sha=<40-character-main-sha> \
+  -f release_set='[{"package_name":"lenso-capability-auth","version":"0.1.0"}]' \
+  -f mode=dry-run
 ```
 
 Inspect the completed run and confirm that it identifies only the intended
@@ -81,9 +74,9 @@ literal confirmation value `publish`:
 
 ```sh
 gh workflow run release-plz.yml --ref main \
-  -f landed_sha=<40-character-main-sha> \
-  -f versions=<exact-package@version-set> \
-  -f live=true -f confirm=publish
+  -f source_sha=<40-character-main-sha> \
+  -f release_set='<exact-package_name/version JSON array>' \
+  -f mode=publish -f confirmation=publish
 ```
 
 The live job obtains a short-lived crates.io credential through GitHub OIDC.
