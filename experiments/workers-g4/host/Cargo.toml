@@ -33,12 +33,12 @@ lenso-capability-oauth-flow={path="../../../crates/lenso-capability-oauth-flow",
 
 http="1"
 bytes="1"
-lenso-capability-http-endpoint="0.3.1"
-lenso-capability-http-client="0.3.0"
+lenso-capability-http-endpoint="=0.3.4"
+lenso-capability-http-client="=0.3.1"
 lenso-capability-federated-auth={path="../../../crates/lenso-capability-federated-auth"}
 lenso-auth-sdk={path="../../../crates/lenso-auth-sdk"}
-lenso-web-ingress-plugin={version="0.4.3",default-features=false}
-lenso-http-egress-plugin={version="0.3.2",default-features=false,features=["workers"]}
+lenso-web-ingress-plugin={version="=0.4.7",default-features=false}
+lenso-http-egress-plugin={version="=0.3.5",default-features=false,features=["workers"]}
 
 lenso-workers-driver="=0.1.1"
 lenso-auth-password-plugin={path="../../../crates/lenso-auth-password-plugin",default-features=false,features=["workers"]}
