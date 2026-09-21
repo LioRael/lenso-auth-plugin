@@ -1582,6 +1582,8 @@ dependencies = [
 [[package]]
 name = "lenso-capability-http-client"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e26cdf78f283ff7c2e1e6a913d5abc867831d46f1bebb11eb705879883bb5c0e"
 dependencies = [
  "futures",
  "lenso-contract-codegen 0.9.0",
@@ -3595,7 +3597,3 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[patch.unused]]
-name = "lenso-workers-driver"
-version = "0.1.1"
