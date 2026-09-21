@@ -44,6 +44,31 @@ composition and private callback contract under local workerd, but does **not**
 qualify a real PostgreSQL server, Hyperdrive, a deployed Worker, client
 disconnect behavior, or production operations.
 
+## Fused business session cohort
+
+`qualify-fused-session-workerd.mjs` closes the local session branch of the
+real-business-composition slice in one source-pinned G4 HTTP plan. It starts
+the generated Host through Miniflare/workerd, applies Account and OAuth owner
+migrations through event-owned D1 bindings, and routes real HTTP ingress to a
+separate generated `proof.business` Plugin whose typed Auth Port accepts only
+the Router-selected App session. Browser navigation reaches a separate local
+workerd IdP service directly; the generated HTTP Egress capability uses its
+service binding for the OIDC token/JWKS exchange, rather than any direct Auth
+or business handler call.
+
+```sh
+LENSO_CARGO_CONFIG=/private/source-closure.toml CARGO_NET_OFFLINE=true \
+  node qualify-fused-session-workerd.mjs --output /private/fused-session.local.json
+```
+
+The credential-free receipt covers unauthenticated rejection, OIDC session
+recovery, fresh-workerd D1 recovery, callback replay rejection, CSRF rejection,
+and logout cleanup. It proves the **session** branch only: it does not qualify
+long-lived streams/WebSockets, deployment, target D1, external identity
+providers, or production behavior. See
+[`docs/workers-g4-fused-business-session.md`](../../docs/workers-g4-fused-business-session.md)
+for the exact composition boundary.
+
 ## Build and run
 
 The workspace intentionally uses the reviewed Runtime and Web owner worktrees

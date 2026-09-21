@@ -3,6 +3,9 @@ name="lenso-workers-g4-host"
 version="0.1.0"
 edition="2024"
 publish=false
+[package.metadata.lenso]
+plugin-id="proof.business"
+root-slot="business"
 [lib]
 crate-type=["cdylib"]
 [dependencies]
@@ -10,6 +13,7 @@ lenso-migration="0.1.0"
 lenso-migration-d1="0.1.0"
 lenso-kernel.workspace=true
 lenso-app-plan.workspace=true
+lenso.workspace=true
 lenso-native-adapter.workspace=true
 futures.workspace=true
 serde.workspace=true

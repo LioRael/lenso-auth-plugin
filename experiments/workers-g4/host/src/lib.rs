@@ -258,6 +258,26 @@ fn plan_parts(
         methods::extend_plan(&mut instances, &mut bindings, method, signing, jwks);
     }
     if let Some(origin) = origin {
+        let business = PluginInstancePlan::new("business", business::PACKAGE_ID)
+            .with_requirement(CapabilityRequirementPlan::one(
+                auth::CAPABILITY_ID,
+                auth::DESCRIPTOR_VERSION,
+            ))
+            .with_capability(CapabilityEndpointPlan::new(
+                lenso_capability_http_endpoint::CAPABILITY_ID,
+                lenso_capability_http_endpoint::DESCRIPTOR_VERSION,
+                [
+                    lenso_capability_http_endpoint::DESCRIBE_OPERATION,
+                    lenso_capability_http_endpoint::HANDLE_OPERATION,
+                ],
+            ));
+        bindings.push(CapabilityBinding::new(
+            "business",
+            auth::CAPABILITY_ID,
+            auth::DESCRIPTOR_VERSION,
+            "router",
+        ));
+        instances.push(business);
         http_host::extend_plan(&mut instances, &mut bindings, origin);
     }
     (instances, bindings)
@@ -504,6 +524,7 @@ pub async fn oauth_postgres_invoke(input: String, scope: JsValue) -> Result<Stri
     Ok(json!({"outcome": outcome, "ready": app.is_ready(), "shutdown": "clean"}).to_string())
 }
 
+mod business;
 mod catalog_plan;
 mod http_host;
 mod methods;

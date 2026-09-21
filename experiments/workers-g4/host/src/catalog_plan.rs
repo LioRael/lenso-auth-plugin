@@ -22,6 +22,9 @@ pub(super) fn resolve(
     let mut slots = BTreeMap::<String, usize>::new();
     for i in &instances {
         let descriptor: PluginDescriptor = match i.package_id() {
+            package if package == business::PACKAGE_ID => {
+                serde_json::from_str(business::PLUGIN_DESCRIPTOR_JSON).map_err(|e| e.to_string())?
+            }
             lenso_auth_account_plugin::PACKAGE_ID => {
                 serde_json::from_str(lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON)
                     .map_err(|e| e.to_string())?

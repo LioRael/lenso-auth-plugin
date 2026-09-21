@@ -1555,6 +1555,7 @@ dependencies = [
  "futures",
  "http",
  "js-sys",
+ "lenso",
  "lenso-app-plan",
  "lenso-auth-account-plugin",
  "lenso-auth-api-token-plugin",

@@ -4,6 +4,7 @@ members=["host"]
 [workspace.dependencies]
 lenso-kernel="=0.3.11"
 lenso-app-plan="=0.4.5"
+lenso="=0.5.25"
 lenso-native-adapter="=0.3.15"
 futures="0.3"
 serde={version="1",features=["derive"]}

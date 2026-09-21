@@ -86,6 +86,12 @@ pub(super) fn extend_plan(
             "web-session",
         ),
         (
+            "ingress",
+            endpoint::CAPABILITY_ID,
+            endpoint::DESCRIPTOR_VERSION,
+            "business",
+        ),
+        (
             "web-session",
             federated::CAPABILITY_ID,
             federated::DESCRIPTOR_VERSION,
@@ -128,6 +134,7 @@ pub async fn handle_http(input: String, scope: JsValue) -> Result<String, JsValu
     lenso_auth_router_plugin::link_plugin();
     lenso_auth_web_session_plugin::link_plugin();
     lenso_auth_oidc_client_plugin::link_plugin();
+    business::link_plugin();
     let ingress = WebIngressEventFactory::new();
     lenso_auth_account_plugin::link_plugin();
     lenso_auth_oauth_flow_plugin::link_plugin();
