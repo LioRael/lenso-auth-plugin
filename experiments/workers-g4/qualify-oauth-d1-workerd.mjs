@@ -46,6 +46,12 @@ function checkOutcome(result, predicate, message) {
   assert.ok(predicate(result.outcome), `${message}: ${JSON.stringify(result.outcome)}`);
 }
 
+async function requireResponseStatus(response, expected, label) {
+  if (response.status !== expected) {
+    assert.fail(`${label}: ${await response.text()}`);
+  }
+}
+
 const source = captureWorktreeSnapshot(repositoryRoot);
 const cases = [];
 const persistenceDirectory = await mkdtemp(join(tmpdir(), "lenso-auth-oauth-d1-"));
@@ -105,7 +111,7 @@ try {
     const response = await mf.dispatchFetch(
       `http://local/migration?owner=${owner}&binding=${binding}&action=setup`,
     );
-    assert.equal(response.status, 200, `${owner} migration status: ${await response.text()}`);
+    await requireResponseStatus(response, 200, `${owner} migration status`);
     assert.deepEqual(await response.json(), { ok: true }, `${owner} migration response`);
   };
   const invoke = async (operation, request, options = {}) => {
@@ -119,11 +125,7 @@ try {
       body: JSON.stringify({ operation, request }),
     });
     if (options.dropResponseAfterConsume) {
-      assert.equal(
-        response.status,
-        503,
-        `post-consume response loss status: ${await response.text()}`,
-      );
+      await requireResponseStatus(response, 503, "post-consume response loss status");
       assert.deepEqual(
         await response.json(),
         { error: "host_unavailable" },
@@ -131,7 +133,7 @@ try {
       );
       return { response_lost_after_durable_consume: true };
     }
-    assert.equal(response.status, 200, `${operation} status: ${await response.text()}`);
+    await requireResponseStatus(response, 200, `${operation} status`);
     return response.json();
   };
   const create = async () => {
