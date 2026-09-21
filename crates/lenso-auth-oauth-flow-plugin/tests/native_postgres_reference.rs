@@ -1,9 +1,9 @@
-//! Opt-in Native + PostgreSQL qualification for the OAuth reference flow.
+//! Opt-in Native + `PostgreSQL` qualification for the OAuth reference flow.
 //!
 //! This is intentionally ignored in ordinary local runs: a passing unit test
-//! cannot prove a selected production PostgreSQL target. A qualified Host
+//! cannot prove a selected production `PostgreSQL` target. A qualified Host
 //! supplies `LENSO_POSTGRES_TEST_URL`, and this test then crosses the real
-//! Kernel, generated Factory, Capability endpoint, lifecycle-owned PostgreSQL
+//! Kernel, generated Factory, Capability endpoint, lifecycle-owned `PostgreSQL`
 //! store, and a fresh Kernel restart. It is not a direct storage test.
 
 use std::{
