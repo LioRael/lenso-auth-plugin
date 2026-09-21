@@ -62,7 +62,10 @@ lenso-postgres-kit = "0.1.1"
 lenso-migration = "0.1.0"
 lenso-migration-d1 = "0.1.0"
 lenso-runner = "=0.2.17"
-lenso-test = "=0.1.2"
+# Test-only harness; the Runtime workspace deliberately keeps it unpublished.
+# Pin its exact released Runtime source rather than resolving a nonexistent
+# crates.io package in clean candidate CI.
+lenso-test = { git = "https://github.com/LioRael/lenso-runtime-rust.git", rev = "28d8638ea5a03e8e28ccf3d15c7b321ca83c48d4" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
