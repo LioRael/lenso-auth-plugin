@@ -6,6 +6,8 @@ on:
       - 'candidate/**'
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   check:
     name: Check
