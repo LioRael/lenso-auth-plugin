@@ -38,6 +38,20 @@ the database URL, signing key, and token pepper through one explicitly bound
 Secrets Capability and only verifies the existing schema. It never creates or
 migrates state during App boot.
 
+For local App composition, the API Token package also ships a narrow operator
+command. Database and credential material are accepted only through environment
+variables, never command-line arguments:
+
+```sh
+LENSO_AUTH_DATABASE_URL=postgresql://... \
+  cargo run -p lenso-auth-api-token-plugin --example api-token-operator -- setup auth_api
+LENSO_AUTH_SIGNING_SECRET=... \
+  cargo run -p lenso-auth-api-token-plugin --example api-token-operator -- public-key
+LENSO_AUTH_DATABASE_URL=postgresql://... LENSO_AUTH_TOKEN_PEPPER=... \
+  cargo run -p lenso-auth-api-token-plugin --example api-token-operator -- \
+  issue auth_api user-123 lenso.reference.knowledge-base@1:access
+```
+
 Organization/RBAC policy, Console UI, and cross-Plugin database access are not
 part of these Plugins. Apart from the explicitly named Web Session Adapter,
 Auth Plugins remain wire-neutral and behind explicit Capabilities; they must
