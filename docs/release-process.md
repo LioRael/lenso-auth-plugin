@@ -109,10 +109,11 @@ release procedure are not part of `main` and must not be recreated here.
 Local checks are focused on the changed files; do not treat a full local suite as
 a substitute for candidate CI. The candidate `Check` job is the required
 lifecycle, session, credential, authorization, native, WASM, and database proof.
-The dry-run is still blocked until all five Trusted Publishers are configured,
-the three new crates have been bootstrapped, and the exact dependency and
-version set has been reviewed. No release or package publication is authorized
-by ordinary contribution or landing.
+A release-plz dry-run for future versions remains blocked until the API Token
+crate has been bootstrapped, all six public crates have Trusted Publishers
+configured, and the exact dependency and version set has been reviewed. No
+release or package publication is authorized by ordinary contribution or
+landing.
 
 Generated bindings must be fresh before packaging. Use the owning
 `lenso-contract-codegen` generator rather than editing generated output.
