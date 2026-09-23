@@ -58,8 +58,8 @@ git cat-file -e "$source_sha^{commit}" ||
   fail "source_sha is not a commit available to the checkout"
 git cat-file -e "$main_sha^{commit}" ||
   fail "remote main SHA is not a commit available to the checkout"
-git merge-base --is-ancestor "$source_sha" "$main_sha" ||
-  fail "source_sha is not reachable from the current origin/main"
+[[ "$source_sha" == "$main_sha" ]] ||
+  fail "source_sha is not the current origin/main; rerun review and release planning"
 
 metadata="$(cargo metadata --locked --no-deps --format-version 1)" ||
   fail "cargo metadata failed for source_sha"

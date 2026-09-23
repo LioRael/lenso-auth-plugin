@@ -94,6 +94,13 @@ run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" \
   RELEASE_SET='[{"package_name":"lenso-auth-api-token-plugin","version":"0.1.0"}]' \
   PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
   MOCK_UNPUBLISHED_PACKAGE=lenso-auth-api-token-plugin MOCK_UNPUBLISHED_VERSION=0.1.0
+git -C "$test_repo" -c user.name='Release gate fixture' -c user.email='fixture@example.invalid' \
+  commit --allow-empty -m 'Advance main after candidate review' >/dev/null
+advanced_sha="$(git -C "$test_repo" rev-parse HEAD)"
+git -C "$test_repo" push origin HEAD:refs/heads/main >/dev/null
+git -C "$test_repo" switch --detach "$current_sha" >/dev/null
+expect_failure "advanced main" "source_sha is not the current origin/main" \
+  run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$advanced_sha"
 env EXPECTED_RELEASE_SET='[]' ACTUAL_RELEASES=null bash "$PLAN"
 expect_failure "dry-run record mismatch" "unexpected release set" \
   env EXPECTED_RELEASE_SET='[]' ACTUAL_RELEASES='[{"package_name":"lenso-auth-sdk","version":"0.2.3"}]' bash "$PLAN"

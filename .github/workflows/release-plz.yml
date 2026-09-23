@@ -112,6 +112,7 @@ jobs:
           needs.release_plan.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
       pull-requests: read
       id-token: write
@@ -120,6 +121,9 @@ jobs:
       cancel-in-progress: false
     env:
       RELEASE_SHA: ${{ inputs.source_sha }}
+      RELEASE_SET: ${{ inputs.release_set }}
+      RELEASE_MODE: ${{ inputs.mode }}
+      RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout requested source
@@ -130,6 +134,8 @@ jobs:
           persist-credentials: false
       - name: Verify checkout identity
         run: test "$(git rev-parse HEAD)" = "${RELEASE_SHA,,}"
+      - name: Reverify release inputs immediately before publication
+        run: bash .github/scripts/release-gate.sh
       - name: Prepare release-plz branch identity
         run: |
           git fetch origin main --no-tags

@@ -87,8 +87,12 @@ gh workflow run release-plz.yml --ref main \
 ```
 
 Inspect the completed run and confirm that it identifies only the intended
-unpublished versions. Live publication requires both the `main` ref and the
-literal confirmation value `publish`:
+unpublished versions against crates.io and the approved source metadata; an
+empty release-plz dry-run `releases` output alone does not prove that nothing
+will publish. The supplied SHA must still equal the current remote `main` when
+the live job rechecks it immediately before publication. If `main` advances,
+repeat review and planning for the new SHA. Live publication requires both the
+`main` ref and the literal confirmation value `publish`:
 
 ```sh
 gh workflow run release-plz.yml --ref main \
