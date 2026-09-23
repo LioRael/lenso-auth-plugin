@@ -147,8 +147,16 @@ jobs:
         with:
           toolchain: 1.94.0
       - name: Publish approved release set
+        id: release_plz
         uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
           command: release
           config: release-plz.toml
           version: 0.3.160
+      - name: Reconcile published packages and tags
+        if: ${{ !cancelled() && steps.release_plz.outcome != 'skipped' }}
+        env:
+          EXPECTED_RELEASE_SET: ${{ inputs.release_set }}
+          ACTUAL_RELEASES: ${{ steps.release_plz.outputs.releases }}
+          RELEASE_ACTION_OUTCOME: ${{ steps.release_plz.outcome }}
+        run: bash .github/scripts/release-postcondition.sh

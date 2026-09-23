@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 GATE="$ROOT/.github/scripts/release-gate.sh"
 PLAN="$ROOT/.github/scripts/release-plan.sh"
+POSTCONDITION="$ROOT/.github/scripts/release-postcondition.sh"
 current_sha="$(git -C "$ROOT" rev-parse HEAD)"
 mock_dir="$(mktemp -d)"
 test_dir="$(mktemp -d)"
@@ -29,6 +30,13 @@ run_gate() {
   (
     cd "$test_repo"
     env "$@" bash "$GATE"
+  )
+}
+
+run_postcondition() {
+  (
+    cd "$test_repo"
+    env "$@" bash "$POSTCONDITION"
   )
 }
 
@@ -59,6 +67,19 @@ if [[ "$args" == *"actions/workflows/ci.yml"* ]]; then
   printf '294726715\n'
 elif [[ "$args" == *"git/ref/heads/main"* ]]; then
   printf '%s\n' "$sha"
+elif [[ "$args" == *"git/ref/tags/"* ]]; then
+  if [[ "${MOCK_TAG_KIND:-annotated}" == lightweight ]]; then
+    printf '{"object":{"type":"commit","sha":"%s"}}\n' "${MOCK_TAG_TARGET_SHA:-$sha}"
+  else
+    printf '{"object":{"type":"tag","sha":"%s"}}\n' "$sha"
+  fi
+elif [[ "$args" == *"git/tags/"* ]]; then
+  printf '{"object":{"type":"commit","sha":"%s"}}\n' "${MOCK_TAG_TARGET_SHA:-$sha}"
+elif [[ "$args" == *"/releases/tags/"* ]]; then
+  tag="${args##*/}"
+  printf '{"tag_name":"%s","name":"%s","draft":%s,"prerelease":%s}\n' \
+    "${MOCK_RELEASE_TAG:-$tag}" "${MOCK_RELEASE_NAME:-Auth $tag}" \
+    "${MOCK_RELEASE_DRAFT:-false}" "${MOCK_RELEASE_PRERELEASE:-false}"
 elif [[ "$args" == *"/jobs?"* ]]; then
   printf '[{"jobs":[{"name":"Check","head_sha":"%s","run_attempt":1,"status":"completed","conclusion":"%s"}]}]\n' \
     "$sha" "$job_conclusion"
@@ -72,7 +93,8 @@ fi
 EOF
 cat >"$mock_dir/curl" <<'EOF'
 #!/usr/bin/env bash
-if [[ "$*" == *"/crates/${MOCK_UNPUBLISHED_PACKAGE:-none}/${MOCK_UNPUBLISHED_VERSION:-none}"* ]]; then
+url="${@: -1}"
+if [[ "$url" == "https://crates.io/api/v1/crates/${MOCK_UNPUBLISHED_PACKAGE:-none}/${MOCK_UNPUBLISHED_VERSION:-none}" ]]; then
   printf '404\n'
 else
   printf '%s\n' "${MOCK_CURL_STATUS:-200}"
@@ -90,10 +112,46 @@ expect_failure "obsolete candidate namespace" "no successful candidate push CI r
   run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" MOCK_HEAD_BRANCH=delta/verify/test/1
 
 run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha"
-run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" \
-  RELEASE_SET='[{"package_name":"lenso-auth-api-token-plugin","version":"0.1.0"}]' \
-  PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
-  MOCK_UNPUBLISHED_PACKAGE=lenso-auth-api-token-plugin MOCK_UNPUBLISHED_VERSION=0.1.0
+expect_failure "API token first bootstrap is manual" "requires separately approved manual bootstrap" \
+  run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" \
+    RELEASE_SET='[{"package_name":"lenso-auth-api-token-plugin","version":"0.1.0"}]' \
+    PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
+    MOCK_UNPUBLISHED_PACKAGE=lenso-auth-api-token-plugin MOCK_UNPUBLISHED_VERSION=0.1.0
+
+post_expected='[{"package_name":"lenso-auth-sdk","version":"0.2.3"},{"package_name":"lenso-capability-auth","version":"0.2.0"}]'
+post_actual='[{"package_name":"lenso-auth-sdk","version":"0.2.3","tag":"lenso-auth-sdk@0.2.3","prs":[]},{"package_name":"lenso-capability-auth","version":"0.2.0","tag":"lenso-capability-auth@0.2.0","prs":[]}]'
+post_env=(
+  "${base_env[@]}"
+  "RELEASE_SHA=$current_sha"
+  "EXPECTED_RELEASE_SET=$post_expected"
+  "RELEASE_MODE=publish"
+  "RELEASE_CONFIRMATION=publish"
+  "RELEASE_ACTION_OUTCOME=success"
+  "PATH=$mock_dir:$PATH"
+  "MOCK_SHA=$current_sha"
+)
+run_postcondition "${post_env[@]}" "ACTUAL_RELEASES=$post_actual"
+run_postcondition "${post_env[@]}" "ACTUAL_RELEASES=$post_actual" MOCK_TAG_KIND=lightweight
+expect_failure "partial live release" "does not match approved release_set" \
+  run_postcondition "${post_env[@]}" \
+    'ACTUAL_RELEASES=[{"package_name":"lenso-auth-sdk","version":"0.2.3","tag":"lenso-auth-sdk@0.2.3","prs":[]}]'
+expect_failure "empty live release" "does not match approved release_set" \
+  run_postcondition "${post_env[@]}" 'ACTUAL_RELEASES=[]'
+expect_failure "failed release action" "release-plz action did not succeed" \
+  run_postcondition "${post_env[@]}" 'RELEASE_ACTION_OUTCOME=failure' 'ACTUAL_RELEASES=[]'
+expect_failure "wrong tag target" "does not point to approved source_sha" \
+  run_postcondition "${post_env[@]}" "ACTUAL_RELEASES=$post_actual" \
+    'MOCK_TAG_TARGET_SHA=0000000000000000000000000000000000000000'
+expect_failure "missing registry version" "is not visible on crates.io" \
+  run_postcondition "${post_env[@]}" "ACTUAL_RELEASES=$post_actual" \
+    MOCK_UNPUBLISHED_PACKAGE=lenso-auth-sdk MOCK_UNPUBLISHED_VERSION=0.2.3
+expect_failure "draft GitHub Release" "is not a published, non-prerelease release" \
+  run_postcondition "${post_env[@]}" "ACTUAL_RELEASES=$post_actual" MOCK_RELEASE_DRAFT=true
+expect_failure "wrong GitHub Release tag" "is not a published, non-prerelease release" \
+  run_postcondition "${post_env[@]}" "ACTUAL_RELEASES=$post_actual" MOCK_RELEASE_TAG=wrong-tag
+expect_failure "unexpected release tag" "does not match approved tag" \
+  run_postcondition "${post_env[@]}" \
+    'ACTUAL_RELEASES=[{"package_name":"lenso-auth-sdk","version":"0.2.3","tag":"wrong-tag","prs":[]},{"package_name":"lenso-capability-auth","version":"0.2.0","tag":"lenso-capability-auth@0.2.0","prs":[]}]'
 git -C "$test_repo" -c user.name='Release gate fixture' -c user.email='fixture@example.invalid' \
   commit --allow-empty -m 'Advance main after candidate review' >/dev/null
 advanced_sha="$(git -C "$test_repo" rev-parse HEAD)"

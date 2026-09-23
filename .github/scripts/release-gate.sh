@@ -92,6 +92,21 @@ while IFS=$'\t' read -r package version manifest; do
   case "$registry_status" in
     200) ;;
     404)
+      if [[ "$package" == lenso-auth-api-token-plugin ]]; then
+        [[ "$version" != 0.1.0 ]] ||
+          fail "${package} requires separately approved manual bootstrap before workflow release"
+        bootstrap_status="$(
+          curl --silent --show-error --location --retry 2 \
+            --user-agent 'Lenso-release-gate/1.0 (https://github.com/LioRael/lenso-auth-plugin)' \
+            --output /dev/null --write-out '%{http_code}' \
+            "https://crates.io/api/v1/crates/${package}/0.1.0"
+        )" || fail "could not query crates.io bootstrap version for ${package}"
+        case "$bootstrap_status" in
+          200) ;;
+          404) fail "${package} requires separately approved manual bootstrap before workflow release" ;;
+          *) fail "unexpected crates.io response ${bootstrap_status} for ${package} bootstrap version" ;;
+        esac
+      fi
       registry_release_set="$(
         jq -c --arg package "$package" --arg version "$version" \
           '. + [{package_name: $package, version: $version}]' <<<"$registry_release_set"

@@ -41,10 +41,11 @@ publication, then revoke that token immediately. The historical bootstrap set wa
 The pending first release is `lenso-auth-api-token-plugin` version `0.1.0`.
 Its public dependencies have registry versions. Run
 `cargo package --locked -p lenso-auth-api-token-plugin` on the exact reviewed
-candidate; that local archive verification
-does not authorize publication or prove a registry upload. First allocate the
-new crate name from the exact reviewed `main` commit with the restricted
-bootstrap credential, then configure its Trusted Publisher before future
+candidate; that local archive verification does not authorize publication or
+prove a registry upload. The release workflow rejects an unbootstrapped API
+Token package. First allocate the new crate name from the exact reviewed
+`main` commit with the restricted bootstrap credential, then configure its
+Trusted Publisher before future
 workflow releases. The first upload is a separately approved manual bootstrap,
 not a release-plz workflow run. Later unpublished versions enter the exact
 `release_set` after candidate CI and landing.
@@ -100,6 +101,11 @@ gh workflow run release-plz.yml --ref main \
   -f release_set='<exact-package_name/version JSON array>' \
   -f mode=publish -f confirmation=publish
 ```
+
+The live job reconciles the action's reported package set with the approval,
+then reads each exact crates.io version, remote tag commit, and published GitHub
+Release. If the action fails or any receipt is missing, inspect the partial
+state before considering another run; never blindly retry publication.
 
 The live job obtains a short-lived crates.io credential through GitHub OIDC.
 It does not accept a Cargo registry token. Existing versions are immutable and
