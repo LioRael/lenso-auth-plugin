@@ -3,7 +3,7 @@ name = "lenso-auth-api-token-plugin"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-publish = false
+publish = true
 repository.workspace = true
 description = "PostgreSQL-backed opaque API token Auth Plugin for Lenso vNext."
 

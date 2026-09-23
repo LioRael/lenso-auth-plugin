@@ -121,7 +121,7 @@ ci_run="$(
           and .path == ".github/workflows/ci.yml"
           and .name == "CI"
           and .event == "push"
-          and ((.head_branch // "") | startswith("delta/verify/"))
+          and ((.head_branch // "") | startswith("candidate/"))
           and .head_sha == $sha
           and .status == "completed"
           and .conclusion == "success"

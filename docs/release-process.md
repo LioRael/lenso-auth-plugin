@@ -2,13 +2,14 @@
 
 Contribution and candidate-landing rules are in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-The default branch contains five public vNext Rust crates:
+The default branch contains six public vNext Rust crates:
 
 - `lenso-capability-auth`
 - `lenso-auth-sdk`
 - `lenso-capability-credential-issuer`
 - `lenso-capability-identity-directory`
 - `lenso-capability-password-auth`
+- `lenso-auth-api-token-plugin`
 
 All other workspace members are private implementation crates and must keep
 `publish = false`.
@@ -31,16 +32,27 @@ Configure a crates.io Trusted Publisher for every already-published crate with:
 Trusted Publishing cannot allocate a new crate name. Before invoking the live
 workflow, publish the first version of each new crate from a reviewed, clean
 `main` checkout with a temporary crates.io token restricted to new-package
-publication, then revoke that token immediately:
+publication, then revoke that token immediately. The historical bootstrap set was:
 
 - `lenso-capability-credential-issuer` version `0.1.0`
 - `lenso-capability-identity-directory` version `0.1.0`
 - `lenso-capability-password-auth` version `0.1.0`
 
+The pending first release is `lenso-auth-api-token-plugin` version `0.1.0`.
+Its public dependencies have registry versions. Run
+`cargo package --locked -p lenso-auth-api-token-plugin` on the exact reviewed
+candidate; that local archive verification
+does not authorize publication or prove a registry upload. First allocate the
+new crate name from the exact reviewed `main` commit with the restricted
+bootstrap credential, then configure its Trusted Publisher before future
+workflow releases. The first upload is a separately approved manual bootstrap,
+not a release-plz workflow run. Later unpublished versions enter the exact
+`release_set` after candidate CI and landing.
+
 Do not store that bootstrap token in Cargo credentials, repository secrets,
 workflow logs, or shell history. After the first release, configure the same
 Trusted Publisher for each new crate. Do not run the live workflow until all
-five Trusted Publishers match the repository and workflow above.
+six Trusted Publishers match the repository and workflow above.
 
 With the temporary token supplied by a credential helper, the bootstrap
 commands are:
@@ -50,6 +62,12 @@ cargo publish --locked -p lenso-capability-credential-issuer
 cargo publish --locked -p lenso-capability-identity-directory
 cargo publish --locked -p lenso-capability-password-auth
 ```
+
+For the separately approved API Token bootstrap, run
+`cargo publish --locked -p lenso-auth-api-token-plugin` from that exact clean
+`main` SHA only after its package and namespace review. Verify the uploaded
+registry version and exact archive bytes before preparing a signed linked
+Cargo Directory release.
 
 After crates.io confirms each upload, create its matching GitHub release from
 the exact reviewed `main` commit. The release tag format is

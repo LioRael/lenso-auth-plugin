@@ -29,7 +29,7 @@ candidate CI workflow from the imported immutable SHA.
 
 ## Candidate CI and landing
 
-The final candidate is pushed once to a unique `delta/verify/**` ref. The
+The final candidate is pushed once to a unique `candidate/**` ref. The
 candidate CI `Check` job is the authoritative repository proof; it covers the
 Auth lifecycle, session, credential, authorization, native, WASM, and database
 paths. Candidate CI does not run for ordinary `main` pushes or pull requests.
@@ -39,11 +39,8 @@ has advanced, rebase/integrate, review, and run a new candidate instead. A
 normal fast-forward is not a force-push and does not publish packages or create
 releases.
 
-Delta users may use the reviewed **Delta Land Changes** action or `/land` when
-that action is available. `/land` is a Delta operation, not a universal shell
-command, Git permission grant, or requirement for contributors. Other agents
-and plain Git users should follow the same candidate-ref, immutable-SHA, review,
-and normal-fast-forward procedure manually; no Delta account is required.
+Follow the candidate-ref, immutable-SHA, review, and normal-fast-forward
+procedure with plain Git. No separate development workspace is required.
 
 See [the land skill](.agents/skills/land/SKILL.md) for the concise maintainer
 checklist and [the release process](docs/release-process.md) for the separate,

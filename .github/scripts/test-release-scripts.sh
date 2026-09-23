@@ -63,8 +63,8 @@ elif [[ "$args" == *"/jobs?"* ]]; then
   printf '[{"jobs":[{"name":"Check","head_sha":"%s","run_attempt":1,"status":"completed","conclusion":"%s"}]}]\n' \
     "$sha" "$job_conclusion"
 elif [[ "$args" == *"actions/runs?head_sha="* ]]; then
-  printf '[{"workflow_runs":[{"id":999,"workflow_id":294726715,"name":"CI","path":".github/workflows/ci.yml","event":"push","status":"completed","conclusion":"%s","head_branch":"delta/verify/test/1","head_sha":"%s","run_attempt":1,"html_url":"https://example.invalid/run/999"}]}]\n' \
-    "$run_conclusion" "$sha"
+  printf '[{"workflow_runs":[{"id":999,"workflow_id":294726715,"name":"CI","path":".github/workflows/ci.yml","event":"push","status":"completed","conclusion":"%s","head_branch":"%s","head_sha":"%s","run_attempt":1,"html_url":"https://example.invalid/run/999"}]}]\n' \
+    "$run_conclusion" "${MOCK_HEAD_BRANCH:-candidate/test/1}" "$sha"
 else
   printf 'unexpected gh api request: %s\n' "$args" >&2
   exit 2
@@ -72,7 +72,11 @@ fi
 EOF
 cat >"$mock_dir/curl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "${MOCK_CURL_STATUS:-200}"
+if [[ "$*" == *"/crates/${MOCK_UNPUBLISHED_PACKAGE:-none}/${MOCK_UNPUBLISHED_VERSION:-none}"* ]]; then
+  printf '404\n'
+else
+  printf '%s\n' "${MOCK_CURL_STATUS:-200}"
+fi
 EOF
 chmod +x "$mock_dir/gh" "$mock_dir/curl"
 
@@ -82,8 +86,14 @@ expect_failure "unconfirmed publish" "requires confirmation text publish" \
   run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" RELEASE_MODE=publish RELEASE_SET='[{"package_name":"lenso-auth-sdk","version":"0.2.3"}]'
 expect_failure "missing candidate CI" "no successful candidate push CI run" \
   run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" MOCK_RUN_CONCLUSION=failure
+expect_failure "obsolete candidate namespace" "no successful candidate push CI run" \
+  run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" MOCK_HEAD_BRANCH=delta/verify/test/1
 
 run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha"
+run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" \
+  RELEASE_SET='[{"package_name":"lenso-auth-api-token-plugin","version":"0.1.0"}]' \
+  PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
+  MOCK_UNPUBLISHED_PACKAGE=lenso-auth-api-token-plugin MOCK_UNPUBLISHED_VERSION=0.1.0
 env EXPECTED_RELEASE_SET='[]' ACTUAL_RELEASES=null bash "$PLAN"
 expect_failure "dry-run record mismatch" "unexpected release set" \
   env EXPECTED_RELEASE_SET='[]' ACTUAL_RELEASES='[{"package_name":"lenso-auth-sdk","version":"0.2.3"}]' bash "$PLAN"
