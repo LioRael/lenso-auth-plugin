@@ -39,7 +39,11 @@ publication, then revoke that token immediately. The historical bootstrap set wa
 - `lenso-capability-password-auth` version `0.1.0`
 
 The pending first release is `lenso-auth-api-token-plugin` version `0.1.0`.
-Its public dependencies have registry versions. Run
+First publish and read back the exact Rust framework dependency cohort used by
+the Auth candidate, then run Auth candidate CI and package verification against
+those registry versions. A checksum-indexed, task-private directory source can
+validate candidate `.crate` bytes locally, but it does not satisfy the public
+registry gate or authorize the Auth bootstrap. Run
 `cargo package --locked -p lenso-auth-api-token-plugin` on the exact reviewed
 candidate; that local archive verification does not authorize publication or
 prove a registry upload. The release workflow rejects an unbootstrapped API

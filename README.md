@@ -132,15 +132,16 @@ operator.revoke_session(issued.session_id()).await?;
 ```
 
 This candidate declares an exact Core/Runtime compatibility cohort:
-`lenso` 0.5.25, `lenso-app-plan` 0.4.5, `lenso-kernel` 0.3.11,
-`lenso-native-adapter` 0.3.15, `lenso-runner` 0.2.17, and the deterministic
-`lenso-test` harness 0.1.2. The optional Runtime Host surface carries
-`lenso-plugin-control-plane` 0.4.24; Auth source does not enable that Host
-feature merely to test a Plugin. Local candidate validation may patch
-unpublished cohort sources temporarily, but that does not publish an Auth
-artifact or establish target or production qualification. Until the exact
-cohort artifacts are available from their registries, this remains a local
-candidate rather than a self-contained release closure.
+`lenso` 0.5.26, `lenso-app-plan` 0.4.6, `lenso-kernel` 0.3.11,
+`lenso-native-adapter` 0.3.16, `lenso-runner` 0.2.18, and the deterministic
+`lenso-test` harness 0.1.2. The optional Runtime Host surface has its own
+control-plane release closure; Auth source does not enable that Host feature
+merely to test a Plugin. Local candidate validation may use a task-private,
+checksum-indexed directory source built from exact versioned `.crate` bytes,
+but that does not publish an Auth artifact or establish target or production
+qualification. Until the exact cohort artifacts are available from their
+registries, this remains a local candidate rather than a self-contained
+release closure.
 
 OAuth Flow Capability, its Provider, and the OIDC/Federated consumers are
 versioned 0.2.0 because descriptor 1.2 adds the required `revoke` operation.
