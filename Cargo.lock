@@ -527,7 +527,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1045,9 +1045,9 @@ dependencies = [
 
 [[package]]
 name = "lenso"
-version = "0.5.25"
+version = "0.5.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbb49bd2e7010a6d1916336171a7f06d1af5201ddb42d2d33868cdfd45dfd870"
+checksum = "8420381be5d84eb33ef4a60b4f98a88c3bc652532053a3c15090e1d8255eb268"
 dependencies = [
  "futures",
  "lenso-kernel",
@@ -1600,17 +1600,19 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-http-endpoint"
-version = "0.3.1"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c711f97b34977521f0614ac45d5f831224a64de73bfc363365350ede56b2d09"
+checksum = "5739d8dfc836cb45d8338640c5559354383b1a5c9643d4feaebe44bb50e33767"
 dependencies = [
  "futures",
  "http",
  "lenso-capability-http-endpoint-macros",
+ "lenso-contract-authoring",
  "lenso-contract-codegen 0.9.0",
  "lenso-contract-runtime",
  "lenso-kernel",
  "lenso-plugin-authoring",
+ "schemars",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1618,9 +1620,9 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-http-endpoint-macros"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51ee4bb64f14f7364ee42fe573ae772e84daf6494de87b8efe5474d2dc082f2a"
+checksum = "9912f93def366a071e39bef44f249d40c05aa140f3e8a63efcdc98fed5575fb0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2458,7 +2460,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2997,7 +2999,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
