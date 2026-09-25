@@ -1177,7 +1177,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-auth-api-token-plugin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "futures",
@@ -1852,9 +1852,9 @@ dependencies = [
 
 [[package]]
 name = "lenso-native-adapter"
-version = "0.3.16"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae33f1f0c19b684776e0f1f81a35cddc2f1bc48f1ffb3c55cbba17fdc561081"
+checksum = "e1900d005d08152e209b6cabda0d330177f318b1c00b3474e512f52fee13527f"
 dependencies = [
  "futures",
  "inventory",
@@ -1868,9 +1868,9 @@ dependencies = [
 
 [[package]]
 name = "lenso-native-adapter-macros"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7eb0843f6fa2e7fc23f7d326e82f2603af47b4f0be15a54dec8b06d40d6e6f1c"
+checksum = "97dc0bfdeb2e7cd3340746f1efab0750b3edf29133d1645ebb8dd5c01a90fdcc"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
