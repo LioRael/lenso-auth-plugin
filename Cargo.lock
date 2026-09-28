@@ -1047,7 +1047,7 @@ dependencies = [
 name = "lenso"
 version = "0.5.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df65f1e5a00ad89e0608c9e6c1d695eb67ca00e9e39ae787f77c5b418e9c9b41"
+checksum = "46620d37d1c40f62f33f26b28a209fbcbffb2dd9cbefb5e5ab269ce964c52876"
 dependencies = [
  "futures",
  "lenso-kernel",
@@ -1590,7 +1590,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32f8ddf0f44732dc7fafa007669e204c07977aa6bc063c2cf7ece768f055431e"
 dependencies = [
  "futures",
- "lenso-contract-codegen 0.9.0",
+ "lenso-contract-codegen 0.10.0",
  "lenso-contract-runtime",
  "lenso-guest-sdk 0.5.1",
  "lenso-kernel",
@@ -1604,13 +1604,13 @@ dependencies = [
 name = "lenso-capability-http-endpoint"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92541a190723aee1332bd5109df22aa87077d98ce55a0a4f844e38b6dc20bbb9"
+checksum = "ce9404bfa280787037923f68307c09e2b5133361c166059da625c4a5545d5ff8"
 dependencies = [
  "futures",
  "http",
  "lenso-capability-http-endpoint-macros",
  "lenso-contract-authoring",
- "lenso-contract-codegen 0.9.0",
+ "lenso-contract-codegen 0.10.0",
  "lenso-contract-runtime",
  "lenso-guest-sdk 0.5.1",
  "lenso-kernel",
@@ -1778,6 +1778,19 @@ name = "lenso-contract-codegen"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7722d17cb261dfd8f75b6e417973c9a8580e2310e7a7bf0c3126b09d7b7e5035"
+dependencies = [
+ "lenso-contract-authoring",
+ "regex",
+ "semver",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "lenso-contract-codegen"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc88556667bb6bb3d9b96402085448891699d0760ded6adc65a8e320d63230d8"
 dependencies = [
  "lenso-contract-authoring",
  "regex",
