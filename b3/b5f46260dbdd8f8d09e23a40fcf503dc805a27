@@ -1,0 +1,19 @@
+Cargo.lock
+  s_b7530148ddb6ab::t_34a6ea3c1834cd 1590,1859,1906,1951
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b3b5f46260dbdd8f8d09e23a40fcf503dc805a27",
+  "prompts": {},
+  "sessions": {
+    "s_b7530148ddb6ab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0e8f5-cb64-76a0-831c-c2128e0210ff",
+        "model": "unknown"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
