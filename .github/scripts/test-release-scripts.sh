@@ -114,9 +114,9 @@ expect_failure "obsolete candidate namespace" "no successful candidate push CI r
 run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha"
 expect_failure "API token first bootstrap is manual" "requires separately approved manual bootstrap" \
   run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" \
-    RELEASE_SET='[{"package_name":"lenso-auth-api-token-plugin","version":"0.1.0"}]' \
+    RELEASE_SET='[{"package_name":"lenso-auth-api-token-plugin","version":"0.1.2"}]' \
     PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
-    MOCK_UNPUBLISHED_PACKAGE=lenso-auth-api-token-plugin MOCK_UNPUBLISHED_VERSION=0.1.0
+    MOCK_UNPUBLISHED_PACKAGE=lenso-auth-api-token-plugin MOCK_UNPUBLISHED_VERSION=0.1.2
 
 post_expected='[{"package_name":"lenso-auth-sdk","version":"0.2.3"},{"package_name":"lenso-capability-auth","version":"0.2.0"}]'
 post_actual='[{"package_name":"lenso-auth-sdk","version":"0.2.3","tag":"lenso-auth-sdk@0.2.3","prs":[]},{"package_name":"lenso-capability-auth","version":"0.2.0","tag":"lenso-capability-auth@0.2.0","prs":[]}]'

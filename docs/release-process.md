@@ -38,7 +38,7 @@ publication, then revoke that token immediately. The historical bootstrap set wa
 - `lenso-capability-identity-directory` version `0.1.0`
 - `lenso-capability-password-auth` version `0.1.0`
 
-The pending first release is `lenso-auth-api-token-plugin` version `0.1.0`.
+The pending first release is `lenso-auth-api-token-plugin` version `0.1.2`.
 First publish and read back the exact Rust framework dependency cohort used by
 the Auth candidate, then run Auth candidate CI and package verification against
 those registry versions. A checksum-indexed, task-private directory source can

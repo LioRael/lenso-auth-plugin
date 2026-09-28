@@ -132,8 +132,8 @@ operator.revoke_session(issued.session_id()).await?;
 ```
 
 This candidate declares an exact Core/Runtime compatibility cohort:
-`lenso` 0.5.26, `lenso-app-plan` 0.4.6, `lenso-kernel` 0.3.11,
-`lenso-native-adapter` 0.3.16, `lenso-runner` 0.2.18, and the deterministic
+`lenso` 0.5.27, `lenso-app-plan` 0.4.6, `lenso-kernel` 0.3.11,
+`lenso-native-adapter` 0.3.18, `lenso-runner` 0.2.19, and the deterministic
 `lenso-test` harness 0.1.2. The optional Runtime Host surface has its own
 control-plane release closure; Auth source does not enable that Host feature
 merely to test a Plugin. Local candidate validation may use a task-private,
