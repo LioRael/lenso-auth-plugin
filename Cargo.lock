@@ -1587,7 +1587,7 @@ dependencies = [
 name = "lenso-capability-http-client"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49094a47be9eb55fb82dc0fb63f96f6e1c41f5d5424699e799468753c91b9c97"
+checksum = "32f8ddf0f44732dc7fafa007669e204c07977aa6bc063c2cf7ece768f055431e"
 dependencies = [
  "futures",
  "lenso-contract-codegen 0.9.0",
@@ -1856,7 +1856,7 @@ dependencies = [
 name = "lenso-native-adapter"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08b0bb08862057aff52502fd3af6508fbcb65b1066896d576f696add534c825b"
+checksum = "a74e740da05247c1e099883ff5b174f5761d8e21883641967b03793756238b1e"
 dependencies = [
  "futures",
  "inventory",
@@ -1903,7 +1903,7 @@ dependencies = [
 name = "lenso-runner"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6edd246064e863a4e2bf447ea8d164e3603bba3d3f148419b5cf4ba61cb14971"
+checksum = "e881f8aa5bdf5a687b4cc7b89651ba89dfc72de698ddc0af79fd4de520a45992"
 dependencies = [
  "cpu-time",
  "futures",
@@ -1948,7 +1948,7 @@ dependencies = [
 name = "lenso-test"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71959d4267be619b568206ffec92aba676166d4c2b17ec6c52f7cbe28039a967"
+checksum = "f63cac9623ec363655927f87debc137d0f30b65207e24c58e54c51eef543c7ca"
 dependencies = [
  "futures",
  "lenso-app-plan",
