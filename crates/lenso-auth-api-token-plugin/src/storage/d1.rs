@@ -123,3 +123,34 @@ pub(super) async fn attenuate_management_credential(
     let result=db.run(vec![statement("UPDATE auth_sessions SET claims=?1 WHERE session_id=?2 AND claims=?3 AND revoked_at IS NULL AND expires_at>?4 AND EXISTS(SELECT 1 FROM api_tokens WHERE token_id=?5 AND session_id=?2 AND revoked_at IS NULL AND expires_at>?4)",vec![json!(narrowed),json!(binding.session_id),json!(expected),timestamp(now),json!(binding.credential_id)])]).await.map_err(operator)?;
     Ok(result[0].meta.changes == 1)
 }
+
+pub(super) async fn list_management_credentials(
+    db: &D1Binding,
+    subject: &str,
+    deployment: &str,
+    limit: u32,
+    after: Option<&str>,
+) -> Result<Vec<crate::ApiTokenMetadata>, AuthOperatorError> {
+    let results=db.run(vec![statement(r#"SELECT t.token_id,t.session_id,s.subject,s.actor_kind,s.assurance,s.audience,MIN(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE s.subject=?1 AND json_extract(s.claims,'$."lenso.auth.management-ceiling".deployment')=?2 AND (?3 IS NULL OR t.token_id>?3) ORDER BY t.token_id LIMIT ?4"#,vec![json!(subject),json!(deployment),json!(after),json!(limit)])]).await.map_err(operator)?;
+    results[0]
+        .results
+        .iter()
+        .map(|row| {
+            let expires_at = decode_time(row, "expires_at").map_err(operator)?;
+            let revoked = field::<i64>(row, "revoked").map_err(operator)? != 0;
+            Ok(crate::ApiTokenMetadata {
+                credential_id: field(row, "token_id").map_err(operator)?,
+                session_id: field(row, "session_id").map_err(operator)?,
+                subject: field(row, "subject").map_err(operator)?,
+                actor_kind: field(row, "actor_kind").map_err(operator)?,
+                assurance: field(row, "assurance").map_err(operator)?,
+                audience: serde_json::from_str(
+                    &field::<String>(row, "audience").map_err(operator)?,
+                )
+                .map_err(|_| AuthOperatorError::Storage)?,
+                expires_at,
+                active: !revoked && expires_at > OffsetDateTime::now_utc(),
+            })
+        })
+        .collect()
+}

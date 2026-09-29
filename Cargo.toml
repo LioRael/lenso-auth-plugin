@@ -50,7 +50,7 @@ jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 lenso = "=0.5.27"
 lenso-app-plan = "=0.4.6"
 lenso-capability-agent-tool-provider = "=0.3.0"
-lenso-capability-http-client = "0.3.0"
+lenso-capability-http-client = "=0.3.2"
 lenso-capability-http-endpoint = "=0.3.4"
 lenso-capability-secrets = "=0.1.4"
 lenso-contract-authoring = "0.1.1"

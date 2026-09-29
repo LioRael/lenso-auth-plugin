@@ -182,6 +182,42 @@ async fn composed_auth_issues_publicly_verifiable_assertions_and_observes_revoca
         .await
         .unwrap();
     let token = issued.expose_secret().to_owned();
+    let metadata = operator
+        .list_management_credentials("user-123", "deployment-a", 1, None)
+        .await
+        .unwrap();
+    assert_eq!(metadata.len(), 1);
+    assert_eq!(metadata[0].credential_id, issued.token_id());
+    assert!(metadata[0].active);
+    assert!(!format!("{metadata:?}").contains(&token));
+    assert!(
+        operator
+            .list_management_credentials("user-123", "deployment-b", 1, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        operator
+            .list_management_credentials("another-user", "deployment-a", 1, None)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        operator
+            .list_management_credentials("user-123", "deployment-a", 1, Some(issued.token_id()))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        operator
+            .list_management_credentials("user-123", "deployment-a", 0, None)
+            .await
+            .is_err()
+    );
+
     assert!(!format!("{issued:?}").contains(&token));
 
     let local = tokio::task::LocalSet::new();

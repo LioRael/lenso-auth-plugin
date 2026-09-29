@@ -3,9 +3,9 @@ resolver="2"
 members=["host"]
 [workspace.dependencies]
 lenso-kernel="=0.3.11"
-lenso-app-plan="=0.4.5"
-lenso="=0.5.25"
-lenso-native-adapter="=0.3.15"
+lenso-app-plan="=0.4.6"
+lenso="=0.5.27"
+lenso-native-adapter="=0.3.18"
 futures="0.3"
 serde={version="1",features=["derive"]}
 serde_json="1"

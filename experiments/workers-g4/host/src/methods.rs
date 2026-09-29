@@ -1,5 +1,6 @@
 //! Qualification composition: real method Plugins, controlled SMS delivery only.
 use super::*;
+use lenso_capability_credential_state as credential_state;
 use lenso_capability_device_auth as device;
 use lenso_capability_oidc_provider as oidc;
 use lenso_capability_password_auth as password;
@@ -83,7 +84,7 @@ pub(super) fn extend_plan(
             auth::CAPABILITY_ID,
             auth::DESCRIPTOR_VERSION,
             vec![auth::AUTHENTICATE_OPERATION],
-            json!({"schema":"api","d1_binding":"API_TOKEN_DB","issuer":"api-proof","assertion_public_key":lenso_auth_api_token_plugin::assertion_public_key(signing),"assertion_signing_key_secret":"signing","token_pepper_secret":"pepper","assertion_ttl_seconds":30}),
+            json!({"schema":"api","d1_binding":"API_TOKEN_DB","issuer":"api-proof","assertion_public_key":lenso_auth_api_token_plugin::assertion_public_key(signing),"assertion_signing_key_secret":"signing","token_pepper_secret":"pepper","assertion_ttl_seconds":30,"credential_state_callers":["proof.caller/caller"]}),
         ),
         "oidc" => (
             lenso_auth_oidc_plugin::PACKAGE_ID,
@@ -143,6 +144,29 @@ pub(super) fn extend_plan(
         ));
     }
     if method == "api" {
+        plugin = plugin.with_capability(CapabilityEndpointPlan::new(
+            credential_state::CAPABILITY_ID,
+            credential_state::DESCRIPTOR_VERSION,
+            [credential_state::INSPECT_OPERATION],
+        ));
+        for name in ["caller", "denied"] {
+            let caller = instances
+                .iter_mut()
+                .find(|i| i.instance_key() == name)
+                .unwrap();
+            *caller = caller
+                .clone()
+                .with_requirement(CapabilityRequirementPlan::one(
+                    credential_state::CAPABILITY_ID,
+                    credential_state::DESCRIPTOR_VERSION,
+                ));
+            bindings.push(CapabilityBinding::new(
+                name,
+                credential_state::CAPABILITY_ID,
+                credential_state::DESCRIPTOR_VERSION,
+                "api",
+            ));
+        }
         let router = instances
             .iter_mut()
             .find(|i| i.instance_key() == "router")
@@ -261,6 +285,10 @@ pub(super) async fn invoke(
         "oidc.exchange" => call!(oidc::OidcProviderExchange, oidc::EXCHANGE_OPERATION),
         "oidc.metadata" => call!(oidc::OidcProviderMetadata, oidc::METADATA_OPERATION),
         "oidc.jwks" => call!(oidc::OidcProviderJwks, oidc::JWKS_OPERATION),
+        "api.inspect" => call!(
+            credential_state::CredentialState,
+            credential_state::INSPECT_OPERATION
+        ),
         "api.authenticate" => call!(auth::Auth, auth::AUTHENTICATE_OPERATION),
         "api.verify_target" => {
             use lenso_auth_sdk::{
@@ -290,7 +318,8 @@ pub(super) async fn invoke(
                 json!({"valid":verifier.project_context::<ProofService>(&context,"proof.resource@1","read",&clock).is_ok(),"wrong_audience_rejected":verifier.project_context::<ProofService>(&context,"outside@1","read",&clock).is_err()}),
             )
         }
-        "api.issue" | "api.revoke_token" | "api.revoke_session" => {
+        "api.issue" | "api.revoke_token" | "api.revoke_session" | "api.attenuate"
+        | "api.metadata" => {
             use lenso_auth_api_token_plugin::{
                 ApiTokenAuthOperator, IssueApiToken, workers::D1Binding,
             };
@@ -301,6 +330,40 @@ pub(super) async fn invoke(
             let operator = ApiTokenAuthOperator::connect_workers(binding)
                 .await
                 .map_err(err)?;
+            if operation == "api.metadata" {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Query {
+                    subject: String,
+                    deployment: String,
+                    limit: u32,
+                    after: Option<String>,
+                }
+                let q: Query = serde_json::from_value(request).map_err(err)?;
+                let values = operator
+                    .list_management_credentials(
+                        &q.subject,
+                        &q.deployment,
+                        q.limit,
+                        q.after.as_deref(),
+                    )
+                    .await
+                    .map_err(err)?;
+                let metadata=values.into_iter().map(|m|json!({"credential_id":m.credential_id,"session_id":m.session_id,"subject":m.subject,"active":m.active})).collect::<Vec<_>>();
+                return Ok(json!({"Ok":{"credentials":metadata}}));
+            }
+            if operation == "api.attenuate" {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Attenuation {
+                    binding: lenso_auth_sdk::credential::CredentialBinding,
+                    ceiling: lenso_auth_sdk::credential::ManagementCredentialCeiling,
+                }
+                let q: Attenuation = serde_json::from_value(request).map_err(err)?;
+                return Ok(
+                    json!({"Ok":{"changed":operator.attenuate_management_credential(&q.binding,&q.ceiling).await.map_err(err)?}}),
+                );
+            }
             if operation == "api.issue" {
                 #[derive(Deserialize)]
                 struct Spec {

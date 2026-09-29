@@ -29,7 +29,9 @@ use thiserror::Error;
 use time::{Duration, OffsetDateTime};
 use zeroize::Zeroizing;
 
-pub use operator::{ApiTokenAuthOperator, AuthOperatorError, IssueApiToken, IssuedApiToken};
+pub use operator::{
+    ApiTokenAuthOperator, ApiTokenMetadata, AuthOperatorError, IssueApiToken, IssuedApiToken,
+};
 
 #[cfg(feature = "postgres")]
 use crate::schema::schema_plan;

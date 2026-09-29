@@ -1,0 +1,93 @@
+// Local workerd and D1 qualification of the owner credential-state adapter.
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { captureWorktreeSnapshot } from "../../workers/oauth-conformance.mjs";
+
+const root=fileURLToPath(new URL(".",import.meta.url));
+const repository=fileURLToPath(new URL("../../",import.meta.url));
+const require=createRequire(import.meta.url);
+const wranglerRequire=createRequire(require.resolve("wrangler/package.json"));
+const {Miniflare}=wranglerRequire("miniflare");
+const {build}=wranglerRequire("esbuild");
+const output=resolve(root,".credential-state-proof.bundle.mjs");
+const receiptPath=process.argv[2];
+if(process.argv.length>3)throw new Error("Usage: node qualify-credential-state-d1-workerd.mjs [receipt-path]");
+if(receiptPath && resolve(receiptPath).startsWith(repository))throw new Error("Receipt must be outside source worktree");
+const persistence=await mkdtemp(join(tmpdir(),"lenso-credential-state-d1-"));
+const cases=[];
+let mf;
+try {
+  const args=["build.sh"];
+  if(process.env.LENSO_CARGO_CONFIG)args.push("--config",process.env.LENSO_CARGO_CONFIG);
+  execFileSync("bash",args,{cwd:root,stdio:"inherit"});
+  await build({entryPoints:[resolve(root,"credential-state-proof-worker.mjs")],outfile:output,bundle:true,format:"esm",platform:"browser",target:"es2022",plugins:[{name:"wasm",setup(b){b.onResolve({filter:/\.wasm$/},a=>({path:a.path,external:true}));}}]});
+  const start=()=>new Miniflare({modules:true,scriptPath:output,modulesRoot:root,modulesRules:[{type:"CompiledWasm",include:["**/*.wasm"]}],compatibilityDate:"2026-07-08",d1Databases:{ACCOUNT_DB:"credential-account",OAUTH_DB:"credential-oauth",API_TOKEN_DB:"credential-token"},d1Persist:persistence,bindings:{SIGNING_KEY:"0123456789abcdef0123456789abcdef",TOKEN_PEPPER:"fedcba9876543210fedcba9876543210",OAUTH_KEY:"0123456789abcdef0123456789abcdef",OIDC_SECRET:"local-oidc-secret",OTP_SECRET:"local-otp-secret",PROVIDER_SIGNING_KEY:"local-provider-signing",PROVIDER_JWKS:"{}"}});
+  mf=start();
+  for(const [owner,binding] of [["account","ACCOUNT_DB"],["oauth-flow","OAUTH_DB"],["api-token","API_TOKEN_DB"]]) {
+    const response=await mf.dispatchFetch(`http://local/migration?owner=${owner}&binding=${binding}&action=setup`);
+    assert.equal(response.status,200);
+  }
+  const raw=(operation,request,denied=false)=>mf.dispatchFetch("http://local/",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({operation,request,denied})});
+  const call=async(operation,request,denied=false)=>{
+    const response=await raw(operation,request,denied);
+    assert.equal(response.status,200,`${operation} transport failed`);
+    const result=await response.json();
+    assert.equal(result.ready,true); assert.equal(result.shutdown,"clean"); return result.outcome;
+  };
+  const ok=async(operation,request)=>{const result=await call(operation,request);assert.ok(result.Ok,`${operation} failed`);return result.Ok;};
+  const ceiling={deployment:"deployment-a",permissions:["auth.subject.read","auth.session.revoke"],resource_scopes:[{kind:"management-deployment",id:"deployment-a"}]};
+  const spec={subject:"operator-subject",actor_kind:"user",assurance:"api-token",audience:["proof.resource@1:read"],claims:{"lenso.auth.management-ceiling":ceiling},expires_at:new Date(Date.now()+3600000).toISOString()};
+  const issued=await ok("api.issue",spec);
+  const auth=await ok("api.authenticate",{credential:{scheme:"bearer",value:issued.credential}});
+  const refs=auth.assertion.claims["lenso.auth.credential"];
+  assert.deepEqual(refs,{credential_id:issued.token_id,session_id:issued.session_id});
+  cases.push("Owner-signed references bind the opaque token and session");
+  let current=await ok("api.inspect",refs);
+  assert.equal(current.active,true);assert.equal(current.subject,spec.subject);
+  assert.deepEqual(current.claims["lenso.auth.management-ceiling"],ceiling);
+  assert.ok(!JSON.stringify(current).includes(issued.credential));
+  assert.deepEqual(await call("api.inspect",refs,true),{Err:"permission_denied"});
+  assert.deepEqual(await call("api.inspect",{...refs,session_id:"ses_other"}),{Err:"not_found"});
+  cases.push("Exact caller and bound references gate secret-free live metadata");
+  const metadata=await ok("api.metadata",{subject:spec.subject,deployment:"deployment-a",limit:1,after:null});
+  assert.equal(metadata.credentials.length,1);assert.equal(metadata.credentials[0].credential_id,issued.token_id);
+  assert.ok(!JSON.stringify(metadata).includes(issued.credential));
+  assert.equal((await ok("api.metadata",{subject:spec.subject,deployment:"deployment-b",limit:1,after:null})).credentials.length,0);
+  assert.equal((await ok("api.metadata",{subject:spec.subject,deployment:"deployment-a",limit:1,after:issued.token_id})).credentials.length,0);
+  cases.push("Human operator metadata is deployment scoped, paged and secret free");
+  const narrower={...ceiling,permissions:["auth.subject.read"]};
+  assert.equal((await ok("api.attenuate",{binding:refs,ceiling:narrower})).changed,true);
+  current=await ok("api.inspect",refs);
+  assert.deepEqual(current.claims["lenso.auth.management-ceiling"],narrower);
+  assert.deepEqual(auth.assertion.claims["lenso.auth.management-ceiling"],ceiling);
+  assert.ok((await raw("api.attenuate",{binding:refs,ceiling})).status>=400);
+  cases.push("Current D1 ceiling narrows while the old assertion cannot restore authority");
+  assert.equal((await ok("api.revoke_token",{id:issued.token_id})).changed,true);
+  assert.equal((await ok("api.inspect",refs)).active,false);
+  assert.deepEqual(await call("api.authenticate",{credential:{scheme:"bearer",value:issued.credential}}),{Err:"revoked"});
+  assert.equal((await ok("api.attenuate",{binding:refs,ceiling:narrower})).changed,false);
+  cases.push("Revoked token cannot authenticate or alter the current ceiling");
+  await mf.dispose();mf=start();
+  assert.equal((await ok("api.inspect",refs)).active,false);
+  cases.push("Workerd restart preserves revocation and inspection metadata");
+  const second=await ok("api.issue",spec);
+  const secondRefs={credential_id:second.token_id,session_id:second.session_id};
+  assert.equal((await ok("api.revoke_session",{id:second.session_id})).changed,true);
+  assert.equal((await ok("api.inspect",secondRefs)).active,false);
+  cases.push("Session revocation is visible at the same owner port");
+  assert.ok((await raw("api.issue",{...spec,claims:{"lenso.auth.credential":refs}})).status>=400);
+  assert.ok((await raw("api.issue",{...spec,claims:{"lenso.auth.management-ceiling":{...ceiling,resource_scopes:[]}}})).status>=400);
+  cases.push("Issuance rejects forged owner references and an empty management scope");
+  const receipt={schema:"lenso.auth.credential-state-local-d1@1",target:"local-workerd-actual-d1",source:captureWorktreeSnapshot(repository),backend:"D1",cloudResourcesCreated:false,passed:true,cases,wasmBytes:(await readFile(resolve(root,"pkg/lenso_workers_g4_host_bg.wasm"))).length};
+  if(receiptPath)await writeFile(receiptPath,JSON.stringify(receipt,null,2)+"\n");
+  console.log(JSON.stringify(receipt,null,2));
+} finally {
+  if(mf)await mf.dispose();
+  await rm(output,{force:true});
+  await rm(persistence,{recursive:true,force:true});
+}

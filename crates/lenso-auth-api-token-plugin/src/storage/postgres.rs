@@ -111,3 +111,34 @@ pub(super) async fn attenuate_management_credential(
     transaction.commit().await.map_err(database)?;
     Ok(changed)
 }
+
+pub(super) async fn list_management_credentials(
+    postgres: &OwnedPostgres,
+    subject: &str,
+    deployment: &str,
+    limit: u32,
+    after: Option<&str>,
+) -> Result<Vec<crate::ApiTokenMetadata>, crate::AuthOperatorError> {
+    let database = |source| crate::AuthOperatorError::Database {
+        operation: "list management credential metadata",
+        source,
+    };
+    let rows=sqlx::query("SELECT t.token_id,t.session_id,s.subject,s.actor_kind,s.assurance,s.audience,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE s.subject=$1 AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$2 AND ($3::text IS NULL OR t.token_id>$3) ORDER BY t.token_id LIMIT $4")
+        .bind(subject).bind(deployment).bind(after).bind(i64::from(limit)).fetch_all(postgres.pool()).await.map_err(database)?;
+    rows.iter()
+        .map(|row| {
+            let expires_at: time::OffsetDateTime = row.try_get("expires_at").map_err(database)?;
+            let revoked: bool = row.try_get("revoked").map_err(database)?;
+            Ok(crate::ApiTokenMetadata {
+                credential_id: row.try_get("token_id").map_err(database)?,
+                session_id: row.try_get("session_id").map_err(database)?,
+                subject: row.try_get("subject").map_err(database)?,
+                actor_kind: row.try_get("actor_kind").map_err(database)?,
+                assurance: row.try_get("assurance").map_err(database)?,
+                audience: row.try_get("audience").map_err(database)?,
+                expires_at,
+                active: !revoked && expires_at > time::OffsetDateTime::now_utc(),
+            })
+        })
+        .collect()
+}

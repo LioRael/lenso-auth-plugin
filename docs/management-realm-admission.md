@@ -82,3 +82,19 @@ unexpired. Worker compilation checks the same private operation adapter; real
 D1 vectors require the separately recorded local/remote backend receipt. MFA,
 browser idle timeout and browser credential administration remain their own
 qualification items and cannot be inferred from this primitive.
+
+`ApiTokenAuthOperator::list_management_credentials(subject, deployment, limit,
+after_credential_id)` exposes secret-free, exact deployment/subject metadata
+with bounded keyset pagination for a controlled human CLI. Tokens without an
+explicit management ceiling do not enter this projection. It does not reveal
+claims, digest, verifier or secret, and its existence does not grant a model or
+remote caller operator access. Creation stays a trusted human/operator action;
+secret handling is absent from model tool catalogs.
+
+The local backend command is
+`node experiments/workers-g4/qualify-credential-state-d1-workerd.mjs /tmp/receipt.json`.
+It uses Miniflare's actual workerd/D1 bindings, event-owned transports and the
+normal generated Rust Plugin/Capability path, with isolated temporary storage.
+The receipt separately identifies local D1 qualification; it is not remote D1
+or Hyperdrive deployment evidence. Hyperdrive qualification was deferred by the
+owner for this delivery.

@@ -121,3 +121,22 @@ pub(crate) async fn attenuate_management_credential(
         ApiTokenStore::D1(db) => d1::attenuate_management_credential(db, binding, ceiling).await,
     }
 }
+
+pub(crate) async fn list_management_credentials(
+    store: &ApiTokenStore,
+    subject: &str,
+    deployment: &str,
+    limit: u32,
+    after: Option<&str>,
+) -> Result<Vec<crate::ApiTokenMetadata>, crate::AuthOperatorError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        ApiTokenStore::Postgres(pg) => {
+            postgres::list_management_credentials(pg, subject, deployment, limit, after).await
+        }
+        #[cfg(feature = "workers")]
+        ApiTokenStore::D1(db) => {
+            d1::list_management_credentials(db, subject, deployment, limit, after).await
+        }
+    }
+}

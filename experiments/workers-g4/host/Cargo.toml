@@ -38,10 +38,10 @@ lenso-capability-oauth-flow={path="../../../crates/lenso-capability-oauth-flow",
 http="1"
 bytes="1"
 lenso-capability-http-endpoint="=0.3.4"
-lenso-capability-http-client="=0.3.1"
+lenso-capability-http-client="=0.3.2"
 lenso-capability-federated-auth={path="../../../crates/lenso-capability-federated-auth"}
 lenso-auth-sdk={path="../../../crates/lenso-auth-sdk"}
-lenso-web-ingress-plugin={version="=0.4.7",default-features=false}
+lenso-web-ingress-plugin={version="=0.4.9",default-features=false}
 lenso-http-egress-plugin={version="=0.3.5",default-features=false,features=["workers"]}
 
 lenso-workers-driver="=0.1.1"
@@ -55,3 +55,5 @@ lenso-capability-phone-auth={path="../../../crates/lenso-capability-phone-auth"}
 lenso-capability-device-auth={path="../../../crates/lenso-capability-device-auth"}
 lenso-capability-oidc-provider={path="../../../crates/lenso-capability-oidc-provider"}
 lenso-capability-sms-delivery={path="../../../crates/lenso-capability-sms-delivery"}
+
+lenso-capability-credential-state={path="../../../crates/lenso-capability-credential-state",version="0.1.0"}

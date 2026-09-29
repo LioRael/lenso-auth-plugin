@@ -146,6 +146,32 @@ impl ApiTokenAuthOperator {
         })
     }
 
+    /// Lists secret-free metadata for one subject and one explicit deployment.
+    pub async fn list_management_credentials(
+        &self,
+        subject: &str,
+        deployment: &str,
+        limit: u32,
+        after_credential_id: Option<&str>,
+    ) -> Result<Vec<ApiTokenMetadata>, AuthOperatorError> {
+        if subject.is_empty()
+            || subject.len() > 256
+            || !crate::valid_identity(deployment)
+            || !(1..=100).contains(&limit)
+            || after_credential_id.is_some_and(|id| !crate::valid_identity(id))
+        {
+            return Err(AuthOperatorError::InvalidIssueSpec);
+        }
+        crate::storage::list_management_credentials(
+            &self.store,
+            subject,
+            deployment,
+            limit,
+            after_credential_id,
+        )
+        .await
+    }
+
     /// Narrows a management credential's current ceiling; it never expands authority.
     pub async fn attenuate_management_credential(
         &self,
@@ -260,6 +286,19 @@ impl IssueApiToken {
         }
         Ok(())
     }
+}
+
+/// Public references and status only; raw credential/verifier/claims are absent.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ApiTokenMetadata {
+    pub credential_id: String,
+    pub session_id: String,
+    pub subject: String,
+    pub actor_kind: String,
+    pub assurance: String,
+    pub audience: Vec<String>,
+    pub expires_at: OffsetDateTime,
+    pub active: bool,
 }
 
 /// One opaque API token returned only at issuance time.
