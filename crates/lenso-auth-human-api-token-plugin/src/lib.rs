@@ -341,14 +341,7 @@ impl HumanApiTokenPlugin {
             match result {
                 Ok(response) => Ok(Ok(translate(response)?)),
                 Err(admin::ApiTokenAdminIssueInvocationError::Domain(error)) => {
-                    Ok(Err(match error {
-                        admin::IssueError::PermissionDenied => human::IssueError::PermissionDenied,
-                        admin::IssueError::Conflict => human::IssueError::Conflict,
-                        admin::IssueError::UnsupportedProfile => {
-                            human::IssueError::UnsupportedProfile
-                        }
-                        _ => human::IssueError::InvalidRequest,
-                    }))
+                    Ok(Err(issue_error(&error)?))
                 }
                 Err(admin::ApiTokenAdminIssueInvocationError::Runtime(error)) => Err(error),
             }
@@ -385,13 +378,7 @@ impl HumanApiTokenPlugin {
             {
                 Ok(response) => Ok(Ok(translate(response)?)),
                 Err(admin::ApiTokenAdminListInvocationError::Domain(error)) => {
-                    Ok(Err(match error {
-                        admin::ListError::PermissionDenied => human::ListError::PermissionDenied,
-                        admin::ListError::UnsupportedProfile => {
-                            human::ListError::UnsupportedProfile
-                        }
-                        _ => human::ListError::InvalidRequest,
-                    }))
+                    Ok(Err(list_error(&error)?))
                 }
                 Err(admin::ApiTokenAdminListInvocationError::Runtime(error)) => Err(error),
             }
@@ -427,15 +414,7 @@ impl HumanApiTokenPlugin {
             {
                 Ok(response) => Ok(Ok(translate(response)?)),
                 Err(admin::ApiTokenAdminReceiptInvocationError::Domain(error)) => {
-                    Ok(Err(match error {
-                        admin::ReceiptError::PermissionDenied => {
-                            human::ReceiptError::PermissionDenied
-                        }
-                        admin::ReceiptError::UnsupportedProfile => {
-                            human::ReceiptError::UnsupportedProfile
-                        }
-                        _ => human::ReceiptError::InvalidRequest,
-                    }))
+                    Ok(Err(receipt_error(&error)?))
                 }
                 Err(admin::ApiTokenAdminReceiptInvocationError::Runtime(error)) => Err(error),
             }
@@ -473,21 +452,51 @@ impl HumanApiTokenPlugin {
                     revoked: response.revoked,
                 })),
                 Err(admin::ApiTokenAdminRevokeInvocationError::Domain(error)) => {
-                    Ok(Err(match error {
-                        admin::RevokeError::PermissionDenied => {
-                            human::RevokeError::PermissionDenied
-                        }
-                        admin::RevokeError::NotFound => human::RevokeError::NotFound,
-                        admin::RevokeError::UnsupportedProfile => {
-                            human::RevokeError::UnsupportedProfile
-                        }
-                        _ => human::RevokeError::InvalidRequest,
-                    }))
+                    Ok(Err(revoke_error(&error)?))
                 }
                 Err(admin::ApiTokenAdminRevokeInvocationError::Runtime(error)) => Err(error),
             }
         })
     }
+}
+fn unknown_owner_result() -> RuntimeFailure {
+    RuntimeFailure::Unavailable {
+        capability: human::CAPABILITY_ID,
+    }
+}
+fn issue_error(error: &admin::IssueError) -> Result<human::IssueError, RuntimeFailure> {
+    Ok(match error {
+        admin::IssueError::PermissionDenied => human::IssueError::PermissionDenied,
+        admin::IssueError::Conflict => human::IssueError::Conflict,
+        admin::IssueError::UnsupportedProfile => human::IssueError::UnsupportedProfile,
+        admin::IssueError::InvalidRequest => human::IssueError::InvalidRequest,
+        admin::IssueError::Unknown(_) => return Err(unknown_owner_result()),
+    })
+}
+fn list_error(error: &admin::ListError) -> Result<human::ListError, RuntimeFailure> {
+    Ok(match error {
+        admin::ListError::PermissionDenied => human::ListError::PermissionDenied,
+        admin::ListError::UnsupportedProfile => human::ListError::UnsupportedProfile,
+        admin::ListError::InvalidRequest => human::ListError::InvalidRequest,
+        admin::ListError::Unknown(_) => return Err(unknown_owner_result()),
+    })
+}
+fn receipt_error(error: &admin::ReceiptError) -> Result<human::ReceiptError, RuntimeFailure> {
+    Ok(match error {
+        admin::ReceiptError::PermissionDenied => human::ReceiptError::PermissionDenied,
+        admin::ReceiptError::UnsupportedProfile => human::ReceiptError::UnsupportedProfile,
+        admin::ReceiptError::InvalidRequest => human::ReceiptError::InvalidRequest,
+        admin::ReceiptError::Unknown(_) => return Err(unknown_owner_result()),
+    })
+}
+fn revoke_error(error: &admin::RevokeError) -> Result<human::RevokeError, RuntimeFailure> {
+    Ok(match error {
+        admin::RevokeError::PermissionDenied => human::RevokeError::PermissionDenied,
+        admin::RevokeError::NotFound => human::RevokeError::NotFound,
+        admin::RevokeError::UnsupportedProfile => human::RevokeError::UnsupportedProfile,
+        admin::RevokeError::InvalidRequest => human::RevokeError::InvalidRequest,
+        admin::RevokeError::Unknown(_) => return Err(unknown_owner_result()),
+    })
 }
 fn translate<T: Serialize, R: serde::de::DeserializeOwned>(value: T) -> Result<R, RuntimeFailure> {
     serde_json::to_value(value)
@@ -500,6 +509,37 @@ fn translate<T: Serialize, R: serde::de::DeserializeOwned>(value: T) -> Result<R
 #[cfg(test)]
 mod scoped_human_tests {
     use super::*;
+    #[test]
+    fn unknown_owner_wire_errors_remain_unconfirmed_for_every_lifecycle_operation() {
+        let unknown = serde_json::json!({
+            "code": "future_owner_outcome",
+            "payload": {"receipt": "not-confirmed"}
+        });
+        assert_eq!(
+            issue_error(&serde_json::from_value(unknown.clone()).unwrap()),
+            Err(unknown_owner_result())
+        );
+        assert_eq!(
+            list_error(&serde_json::from_value(unknown.clone()).unwrap()),
+            Err(unknown_owner_result())
+        );
+        assert_eq!(
+            receipt_error(&serde_json::from_value(unknown.clone()).unwrap()),
+            Err(unknown_owner_result())
+        );
+        assert_eq!(
+            revoke_error(&serde_json::from_value(unknown).unwrap()),
+            Err(unknown_owner_result())
+        );
+        assert_eq!(
+            issue_error(&admin::IssueError::Conflict),
+            Ok(human::IssueError::Conflict)
+        );
+        assert_eq!(
+            revoke_error(&admin::RevokeError::PermissionDenied),
+            Ok(human::RevokeError::PermissionDenied)
+        );
+    }
     #[test]
     fn scoped_agent_user_is_never_a_human_token_operator() {
         let now = OffsetDateTime::now_utc();
