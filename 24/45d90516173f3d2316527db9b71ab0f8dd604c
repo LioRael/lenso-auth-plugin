@@ -1,0 +1,27 @@
+crates/lenso-auth-router-plugin/tests/repository_ownership.rs
+  s_f4202e28c6b5b1::t_062dec80dcd303 36
+experiments/workers-g4/package.json
+  s_f4202e28c6b5b1::t_18c77f827cc7cc 6
+experiments/workers-g4/pnpm-lock.yaml
+  s_f4202e28c6b5b1::t_fff5a8fe1ef49f 19-20,28-29,37-38,43-44,49-50,55-56,61-62,234-236,240-242,246-252,256-257,261-262,267-268,273-274,279-280,285-286,291-292,297-298,303-304,309-311,316-318,323-325,330-332,337-339,344-346,351-353,358-360,365-371,374-376,380-382,386-388,454-455,469-476,485-486,492-493,497-498,502,529,533,535,538,541,544,547,639,641,644,646,649-654,657,660,663,666,669,672,675,678,681,684,686,689,691,694,696,699,701,704,706,709,711,714,716,719,721,724,729-734,737,740,814,817-819,823,833,839-863,870,876,878-882,884,887,890,893,897
+experiments/workers-g4/pnpm-workspace.yaml
+  s_f4202e28c6b5b1::t_9d59d45b649927 9-10
+experiments/workers-g4/qualify-credential-state-d1-workerd.mjs
+  s_f4202e28c6b5b1::t_4de893dd8c80f4 21-22,88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2445d90516173f3d2316527db9b71ab0f8dd604c",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
