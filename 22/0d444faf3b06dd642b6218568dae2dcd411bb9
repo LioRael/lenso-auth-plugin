@@ -1,0 +1,19 @@
+crates/lenso-auth-human-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_ac492e27af4b50 344,381,417,455,462-500,513-543
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "220d444faf3b06dd642b6218568dae2dcd411bb9",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
