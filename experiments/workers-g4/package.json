@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "wrangler": "4.107.0"
+    "wrangler": "4.143.1"
   },
   "dependencies": {
     "@lenso/workers-runtime": "0.1.2",

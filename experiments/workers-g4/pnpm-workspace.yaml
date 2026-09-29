@@ -6,3 +6,5 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@lenso/http-egress-workers@0.1.0'
   - '@lenso/workers-runtime@0.1.2'
+  - miniflare@5.20260926.1-alpha
+  - wrangler@4.143.1

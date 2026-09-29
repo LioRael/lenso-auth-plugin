@@ -18,6 +18,8 @@ const output=resolve(root,".credential-state-proof.bundle.mjs");
 const receiptPath=process.argv[2];
 if(process.argv.length>3)throw new Error("Usage: node qualify-credential-state-d1-workerd.mjs [receipt-path]");
 if(receiptPath && resolve(receiptPath).startsWith(repository))throw new Error("Receipt must be outside source worktree");
+const source=captureWorktreeSnapshot(repository);
+const tools={wrangler:require("wrangler/package.json").version,miniflare:wranglerRequire("miniflare/package.json").version};
 const persistence=await mkdtemp(join(tmpdir(),"lenso-credential-state-d1-"));
 const cases=[];
 let mf;
@@ -83,7 +85,7 @@ try {
   assert.ok((await raw("api.issue",{...spec,claims:{"lenso.auth.credential":refs}})).status>=400);
   assert.ok((await raw("api.issue",{...spec,claims:{"lenso.auth.management-ceiling":{...ceiling,resource_scopes:[]}}})).status>=400);
   cases.push("Issuance rejects forged owner references and an empty management scope");
-  const receipt={schema:"lenso.auth.credential-state-local-d1@1",target:"local-workerd-actual-d1",source:captureWorktreeSnapshot(repository),backend:"D1",cloudResourcesCreated:false,passed:true,cases,wasmBytes:(await readFile(resolve(root,"pkg/lenso_workers_g4_host_bg.wasm"))).length};
+  const receipt={schema:"lenso.auth.credential-state-local-d1@1",target:"local-workerd-actual-d1",source,tools,backend:"D1",cloudResourcesCreated:false,passed:true,cases,wasmBytes:(await readFile(resolve(root,"pkg/lenso_workers_g4_host_bg.wasm"))).length};
   if(receiptPath)await writeFile(receiptPath,JSON.stringify(receipt,null,2)+"\n");
   console.log(JSON.stringify(receipt,null,2));
 } finally {
