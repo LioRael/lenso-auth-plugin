@@ -1145,6 +1145,7 @@ dependencies = [
  "hmac 0.12.1",
  "js-sys",
  "lenso",
+ "lenso-app-plan",
  "lenso-auth-sdk 0.2.3",
  "lenso-capability-account-admin",
  "lenso-capability-auth 0.2.0",

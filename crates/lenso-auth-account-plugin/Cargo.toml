@@ -48,6 +48,7 @@ time.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+lenso-app-plan.workspace = true
 tokio = { version = "1.52", features = ["macros", "rt"] }
 
 [lints]
