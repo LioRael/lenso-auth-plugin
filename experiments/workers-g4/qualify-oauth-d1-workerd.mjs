@@ -88,10 +88,8 @@ try {
       d1Persist: persistenceDirectory,
       workers: [{
       name: "oauth-d1-proof",
-      modules: true,
-      scriptPath: output,
+      modules: [{type: "ESModule", path: output}, {type: "CompiledWasm", path: resolve(root, "pkg/lenso_workers_g4_host_bg.wasm")}],
       modulesRoot: root,
-      modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }],
       compatibilityDate: "2026-07-08",
       d1Databases: {
         ACCOUNT_DB: "oauth-d1-account-local",

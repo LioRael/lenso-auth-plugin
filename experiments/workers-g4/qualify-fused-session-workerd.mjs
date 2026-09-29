@@ -110,10 +110,8 @@ try {
       workers: [
         {
           name: "fused-session-main",
-          modules: true,
-          scriptPath: output,
+          modules: [{type: "ESModule", path: output}, {type: "CompiledWasm", path: resolve(root, "pkg/lenso_workers_g4_host_bg.wasm")}],
           modulesRoot: root,
-          modulesRules: [{ type: "CompiledWasm", include: ["**/*.wasm"] }],
           compatibilityDate: "2026-07-08",
           d1Databases: {
             ACCOUNT_DB: "fused-session-account-local",
