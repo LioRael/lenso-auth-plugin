@@ -1060,7 +1060,7 @@ dependencies = [
 [[package]]
 name = "lenso-access-control-core"
 version = "0.1.0"
-source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=8aabedfeb21a049481d1d2e1ba2523dcb4c3a442#8aabedfeb21a049481d1d2e1ba2523dcb4c3a442"
 dependencies = [
  "lenso",
  "lenso-auth-sdk 0.2.3",
@@ -1077,7 +1077,7 @@ dependencies = [
 [[package]]
 name = "lenso-access-control-postgres-plugin"
 version = "0.2.1"
-source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=8aabedfeb21a049481d1d2e1ba2523dcb4c3a442#8aabedfeb21a049481d1d2e1ba2523dcb4c3a442"
 dependencies = [
  "futures",
  "lenso",
@@ -1594,7 +1594,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-access-control"
 version = "0.2.0"
-source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=8aabedfeb21a049481d1d2e1ba2523dcb4c3a442#8aabedfeb21a049481d1d2e1ba2523dcb4c3a442"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -1607,7 +1607,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-access-control-admin"
 version = "0.2.0"
-source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=8aabedfeb21a049481d1d2e1ba2523dcb4c3a442#8aabedfeb21a049481d1d2e1ba2523dcb4c3a442"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
@@ -1620,7 +1620,7 @@ dependencies = [
 [[package]]
 name = "lenso-capability-access-control-directory"
 version = "0.2.0"
-source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=8aabedfeb21a049481d1d2e1ba2523dcb4c3a442#8aabedfeb21a049481d1d2e1ba2523dcb4c3a442"
 dependencies = [
  "futures",
  "lenso-contract-runtime",
