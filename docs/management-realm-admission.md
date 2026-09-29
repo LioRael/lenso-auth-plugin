@@ -18,9 +18,12 @@ issuer; they do not acquire an operators issuer automatically.
 
 Step-up/MFA requirements currently return `UnsupportedAssurance`. A signed
 string such as `mfa` is not evidence that an implementation performed MFA.
-Idle session timeout, per-method realm login policy and a remotely manageable
-PAT administration Capability remain separate implementation work. This file
-records assertion admission only, not a complete production operators profile.
+Idle session timeout and per-method realm login policy remain separate work.
+The Native PostgreSQL human PAT lifecycle is implemented by the
+[Human API Token Plugin](../crates/lenso-auth-human-api-token-plugin/README.md),
+with exact Account session inspection, constrained issuance and metadata-only
+receipts. Browser and ordinary SourceApp qualification require their own
+recorded proofs; assertion admission alone does not qualify an operators profile.
 
 The legacy TypeScript helper now verifies Ed25519 using public authority,
 matching Rust. Its fifth argument is the URL-safe base64 public key, replacing
@@ -45,7 +48,13 @@ It does not qualify Workers PostgreSQL/Hyperdrive or deployed D1 resources.
 
 ## Current management credential checks
 
-API Token Auth now also provides `lenso.auth.credential-state@1:inspect`.
+Account Auth and API Token Auth both provide `lenso.auth.credential-state@1:inspect`.
+Bind each trusted issuer to its own state provider; matching subject text does
+not permit choosing or combining providers from a request. Account uses an
+opaque stored session reference for both IDs, rather than the Cookie value.
+Its configured `management_session_ceiling` bounds issuance and current
+authentication/inspection, so narrowing or removing the Host ceiling also
+restricts existing sessions.
 An explicit `credential_state_callers` allowlist admits exact Runtime caller
 identities; it defaults to empty. The operation accepts public credential and
 session references, never a raw bearer. On every authentication the owner adds
@@ -80,8 +89,9 @@ and reference rejection, secret-free projections, irreversible ceiling
 attenuation and visibility of revocation while an old signed assertion remains
 unexpired. Worker compilation checks the same private operation adapter; real
 D1 vectors require the separately recorded local/remote backend receipt. MFA,
-browser idle timeout and browser credential administration remain their own
-qualification items and cannot be inferred from this primitive.
+browser idle timeout and browser assembly remain their own qualification items
+and cannot be inferred from this primitive. Human PAT mutations are Native
+PostgreSQL only; Workers returns `UnsupportedProfile`.
 
 `ApiTokenAuthOperator::list_management_credentials(subject, deployment, limit,
 after_credential_id)` exposes secret-free, exact deployment/subject metadata
