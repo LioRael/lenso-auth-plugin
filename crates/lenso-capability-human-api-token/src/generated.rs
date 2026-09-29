@@ -5,8 +5,8 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.human-api-token@1";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:5d78e0843f0d3a7231b332115e3ee70d3d61c118ff55b22094a035c6c31cbb16";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:d0bb0048d93a476ad2fbb4765abb2646be567409e67fbb37553427c6cb50a611";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = false;
 pub const HUMAN_API_TOKEN_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,26 +16,26 @@ pub const HUMAN_API_TOKEN_CONTRACT: CapabilityReference<HumanApiTokenClient> = C
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_human_api_token { () => { "{\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"issue\",\"list\",\"receipt\",\"revoke\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":false}" }; }
+macro_rules! __lenso_provided_human_api_token { () => { "{\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"issue\",\"list\",\"receipt\",\"revoke\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":false}" }; }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_human_api_token_client {
-    () => { "{\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_optional_human_api_token_client {
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_many_human_api_token_client {
-    () => { "{\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.human-api-token@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
 }
 
 pub const ISSUE_OPERATION: &str = "issue";
@@ -109,6 +109,11 @@ pub struct CredentialMetadata {
     #[serde(rename = "active")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub active: bool,
+    #[serde(rename = "created_at")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub created_at: OptionalValue<Timestamp>,
     #[serde(rename = "credential_id")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub credential_id: String,
@@ -118,6 +123,11 @@ pub struct CredentialMetadata {
     #[serde(rename = "expires_at")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub expires_at: Timestamp,
+    #[serde(rename = "last_used_at")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub last_used_at: OptionalValue<Timestamp>,
     #[serde(rename = "name")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub name: String,
@@ -127,6 +137,11 @@ pub struct CredentialMetadata {
     #[serde(rename = "resource_scopes")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
     pub resource_scopes: Vec<ResourceScope>,
+    #[serde(rename = "revoked_at")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub revoked_at: OptionalValue<Timestamp>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

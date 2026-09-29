@@ -18,6 +18,12 @@ pub struct CredentialMetadata {
     #[schemars(extend("format"="date-time"))]
     pub expires_at: String,
     pub active: bool,
+    #[schemars(extend("format"="date-time"))]
+    pub created_at: Option<String>,
+    #[schemars(extend("format"="date-time"))]
+    pub last_used_at: Option<String>,
+    #[schemars(extend("format"="date-time"))]
+    pub revoked_at: Option<String>,
 }
 
 #[derive(lenso::JsonSchema, serde::Deserialize)]
@@ -116,7 +122,7 @@ pub enum RevokeError {
 #[lenso::capability(
     id = "lenso.auth.human-api-token",
     major = 1,
-    version = "1.0.0",
+    version = "1.1.0",
     portable = true,
     cross_lane_transfer = false
 )]

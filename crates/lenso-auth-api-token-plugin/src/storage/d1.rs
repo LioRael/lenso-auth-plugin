@@ -131,7 +131,7 @@ pub(super) async fn list_management_credentials(
     limit: u32,
     after: Option<&str>,
 ) -> Result<Vec<crate::ApiTokenMetadata>, AuthOperatorError> {
-    let results=db.run(vec![statement(r#"SELECT t.token_id,t.session_id,s.subject,s.actor_kind,s.assurance,s.audience,MIN(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE s.subject=?1 AND json_extract(s.claims,'$."lenso.auth.management-ceiling".deployment')=?2 AND (?3 IS NULL OR t.token_id>?3) ORDER BY t.token_id LIMIT ?4"#,vec![json!(subject),json!(deployment),json!(after),json!(limit)])]).await.map_err(operator)?;
+    let results=db.run(vec![statement(r#"SELECT t.token_id,t.session_id,t.created_at,t.last_used_at,t.revoked_at AS revoked_at,s.subject,s.actor_kind,s.assurance,s.audience,MIN(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE s.subject=?1 AND json_extract(s.claims,'$."lenso.auth.management-ceiling".deployment')=?2 AND (?3 IS NULL OR t.token_id>?3) ORDER BY t.token_id LIMIT ?4"#,vec![json!(subject),json!(deployment),json!(after),json!(limit)])]).await.map_err(operator)?;
     results[0]
         .results
         .iter()
@@ -149,8 +149,33 @@ pub(super) async fn list_management_credentials(
                 )
                 .map_err(|_| AuthOperatorError::Storage)?,
                 expires_at,
+                created_at: decode_time(row, "created_at").map_err(operator)?,
+                last_used_at: optional_time(row, "last_used_at")?,
+                revoked_at: optional_time(row, "revoked_at")?,
                 active: !revoked && expires_at > OffsetDateTime::now_utc(),
             })
         })
         .collect()
+}
+
+pub(super) async fn record_authentication(
+    db: &D1Binding,
+    credential_id: &str,
+    session_id: &str,
+    accepted_at: OffsetDateTime,
+) -> Result<bool, AuthPluginError> {
+    let results = db.run(vec![statement("UPDATE api_tokens SET last_used_at=CASE WHEN last_used_at IS NULL OR julianday(last_used_at)<julianday(?3) THEN ?3 ELSE last_used_at END WHERE token_id=?1 AND session_id=?2 AND revoked_at IS NULL AND julianday(expires_at)>julianday(?3) AND EXISTS(SELECT 1 FROM auth_sessions s WHERE s.session_id=?2 AND s.revoked_at IS NULL AND julianday(s.expires_at)>julianday(?3))",vec![json!(credential_id),json!(session_id),timestamp(accepted_at)])]).await.map_err(fail)?;
+    Ok(results[0].meta.changes == 1)
+}
+fn optional_time(
+    row: &serde_json::Value,
+    key: &str,
+) -> Result<Option<OffsetDateTime>, AuthOperatorError> {
+    field::<Option<String>>(row, key)
+        .map_err(operator)?
+        .map(|value| {
+            OffsetDateTime::parse(&value, &time::format_description::well_known::Rfc3339)
+                .map_err(|_| AuthOperatorError::Storage)
+        })
+        .transpose()
 }

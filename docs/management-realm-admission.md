@@ -142,3 +142,29 @@ reserved scoped-delegation claim, a non-user actor kind or malformed encoding is
 rejected. Missing assertions preserve the explicitly configured trusted-local
 caller policy. This helper neither verifies a proof nor grants human authority;
 remote boundaries still perform current realm, credential, ceiling and RBAC checks.
+
+## PAT activity metadata
+
+API-token-admin and Human-api-token Descriptor 1.1 add optional `created_at`,
+`last_used_at` and `revoked_at` timestamps to credential metadata. Existing wire
+requests and operation identifiers remain unchanged. Consumers must use the paired
+new generated projection; absence or null means that fact was not recorded.
+PostgreSQL migration 3 and D1 migration 2 add only the nullable token activity
+column; earlier migration bytes remain unchanged. Existing D1 databases require
+an explicit owner `upgrade`, and runtime readiness only verifies the history.
+
+`created_at` comes from the token owner's original insert. `last_used_at` records
+an accepted API-token Auth decision while the token and session remain live;
+updates are monotonic. Invalid, expired or revoked credentials do not update it.
+This timestamp describes authentication, never management or business-write
+completion. If activity persistence fails or its commit outcome is uncertain,
+Auth returns a runtime failure; callers must report unavailability and may query
+current owner state. The persisted time can reflect an accepted owner decision
+whose HTTP response was lost. It grants no permission and cannot replace live
+CredentialState, ceiling or access checks.
+
+`revoked_at` specifically records explicit token revocation. A revoked session
+also makes `active` false, but does not fabricate a token-revocation timestamp.
+Receipt and list expose the current owner metadata without a secret. The Native
+human/PAT profile remains PostgreSQL-only; D1 evidence covers API token Auth and
+operator metadata, not human-facade support on Workers.

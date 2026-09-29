@@ -123,7 +123,7 @@ pub(super) async fn list_management_credentials(
         operation: "list management credential metadata",
         source,
     };
-    let rows=sqlx::query("SELECT t.token_id,t.session_id,s.subject,s.actor_kind,s.assurance,s.audience,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE s.subject=$1 AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$2 AND ($3::text IS NULL OR t.token_id>$3) ORDER BY t.token_id LIMIT $4")
+    let rows=sqlx::query("SELECT t.token_id,t.session_id,t.created_at,t.last_used_at,t.revoked_at AS revoked_at,s.subject,s.actor_kind,s.assurance,s.audience,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE s.subject=$1 AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$2 AND ($3::text IS NULL OR t.token_id>$3) ORDER BY t.token_id LIMIT $4")
         .bind(subject).bind(deployment).bind(after).bind(i64::from(limit)).fetch_all(postgres.pool()).await.map_err(database)?;
     rows.iter()
         .map(|row| {
@@ -137,8 +137,22 @@ pub(super) async fn list_management_credentials(
                 assurance: row.try_get("assurance").map_err(database)?,
                 audience: row.try_get("audience").map_err(database)?,
                 expires_at,
+                created_at: row.try_get("created_at").map_err(database)?,
+                last_used_at: row.try_get("last_used_at").map_err(database)?,
+                revoked_at: row.try_get("revoked_at").map_err(database)?,
                 active: !revoked && expires_at > time::OffsetDateTime::now_utc(),
             })
         })
         .collect()
+}
+
+pub(super) async fn record_authentication(
+    postgres: &OwnedPostgres,
+    credential_id: &str,
+    session_id: &str,
+    accepted_at: time::OffsetDateTime,
+) -> Result<bool, AuthPluginError> {
+    sqlx::query("UPDATE api_tokens t SET last_used_at=GREATEST(COALESCE(t.last_used_at,$3),$3) FROM auth_sessions s WHERE t.token_id=$1 AND t.session_id=$2 AND s.session_id=t.session_id AND t.revoked_at IS NULL AND s.revoked_at IS NULL AND t.expires_at>$3 AND s.expires_at>$3")
+        .bind(credential_id).bind(session_id).bind(accepted_at).execute(postgres.pool()).await
+        .map(|result|result.rows_affected()==1).map_err(|source|AuthPluginError::Database { operation:"record accepted API token authentication",source })
 }

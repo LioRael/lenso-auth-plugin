@@ -78,7 +78,7 @@ impl ApiTokenAuthPlugin {
                 {
                     return Ok(Err(admin::ListError::InvalidRequest));
                 }
-                let rows = sqlx::query("SELECT t.token_id,COALESCE(i.name,'Operator-issued token') AS name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id LEFT JOIN management_token_issuances i ON i.token_id=t.token_id WHERE s.subject=$1 AND s.actor_kind='user' AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$2 AND ($3::text IS NULL OR t.token_id>$3) ORDER BY t.token_id LIMIT $4")
+                let rows = sqlx::query("SELECT t.token_id,t.created_at,t.last_used_at,t.revoked_at AS revoked_at,COALESCE(i.name,'Operator-issued token') AS name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id LEFT JOIN management_token_issuances i ON i.token_id=t.token_id WHERE s.subject=$1 AND s.actor_kind='user' AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$2 AND ($3::text IS NULL OR t.token_id>$3) ORDER BY t.token_id LIMIT $4")
                     .bind(&request.subject).bind(&request.deployment).bind(request.after_credential_id.flatten()).bind(request.limit).fetch_all(postgres.pool()).await.map_err(database)?;
                 return Ok(Ok(admin::ListResponse {
                     credentials: rows.iter().map(metadata).collect::<Result<_, _>>()?,
@@ -111,7 +111,7 @@ impl ApiTokenAuthPlugin {
                 {
                     return Ok(Err(admin::ReceiptError::InvalidRequest));
                 }
-                let row = sqlx::query("SELECT t.token_id,i.name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM management_token_issuances i JOIN api_tokens t ON t.token_id=i.token_id JOIN auth_sessions s ON s.session_id=t.session_id WHERE i.caller_instance=$1 AND i.subject=$2 AND i.idempotency_key=$3 AND s.actor_kind='user' AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$4")
+                let row = sqlx::query("SELECT t.token_id,t.created_at,t.last_used_at,t.revoked_at AS revoked_at,i.name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM management_token_issuances i JOIN api_tokens t ON t.token_id=i.token_id JOIN auth_sessions s ON s.session_id=t.session_id WHERE i.caller_instance=$1 AND i.subject=$2 AND i.idempotency_key=$3 AND s.actor_kind='user' AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$4")
                     .bind(context.caller_instance().expect("permitted exact caller"))
                     .bind(&request.subject).bind(&request.idempotency_key).bind(&request.deployment)
                     .fetch_optional(postgres.pool()).await.map_err(database)?;
@@ -262,7 +262,7 @@ async fn issue(
         .execute(&mut *tx)
         .await
         .map_err(database)?;
-    let previous=sqlx::query("SELECT i.intent_digest,t.token_id,i.name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM management_token_issuances i JOIN api_tokens t ON t.token_id=i.token_id JOIN auth_sessions s ON s.session_id=t.session_id WHERE i.caller_instance=$1 AND i.subject=$2 AND i.idempotency_key=$3")
+    let previous=sqlx::query("SELECT i.intent_digest,t.token_id,t.created_at,t.last_used_at,t.revoked_at AS revoked_at,i.name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM management_token_issuances i JOIN api_tokens t ON t.token_id=i.token_id JOIN auth_sessions s ON s.session_id=t.session_id WHERE i.caller_instance=$1 AND i.subject=$2 AND i.idempotency_key=$3")
         .bind(caller).bind(&request.subject).bind(&request.idempotency_key).fetch_optional(&mut *tx).await.map_err(database)?;
     if let Some(row) = previous {
         let old: String = row.try_get("intent_digest").map_err(database)?;
@@ -288,14 +288,14 @@ async fn issue(
     let claims = serde_json::json!({MANAGEMENT_CEILING_CLAIM:ceiling});
     sqlx::query("INSERT INTO auth_sessions(session_id,subject,actor_kind,assurance,audience,claims,expires_at) VALUES($1,$2,'user','personal-api-token',$3,$4,$5)")
         .bind(&session_id).bind(&request.subject).bind(&request.audience).bind(Json(&claims)).bind(expires_at).execute(&mut *tx).await.map_err(database)?;
-    sqlx::query(
-        "INSERT INTO api_tokens(token_id,token_digest,session_id,expires_at) VALUES($1,$2,$3,$4)",
+    let created_at: OffsetDateTime = sqlx::query_scalar(
+        "INSERT INTO api_tokens(token_id,token_digest,session_id,expires_at) VALUES($1,$2,$3,$4) RETURNING created_at",
     )
     .bind(&token_id)
     .bind(token_digest)
     .bind(&session_id)
     .bind(expires_at)
-    .execute(&mut *tx)
+    .fetch_one(&mut *tx)
     .await
     .map_err(database)?;
     sqlx::query("INSERT INTO management_token_issuances(caller_instance,subject,idempotency_key,intent_digest,token_id,name) VALUES($1,$2,$3,$4,$5,$6)")
@@ -316,6 +316,9 @@ async fn issue(
                 })
                 .collect(),
             expires_at: expiry,
+            created_at: Some(Some(created_at.format(&Rfc3339).map_err(|_| unprepared())?)),
+            last_used_at: None,
+            revoked_at: None,
             active: true,
         },
         token: Some(Some(secret)),
@@ -343,6 +346,25 @@ fn metadata(row: &sqlx::postgres::PgRow) -> Result<admin::CredentialMetadata, Ru
             })
             .collect(),
         expires_at: expiry.format(&Rfc3339).map_err(|_| unprepared())?,
+        created_at: Some(Some(
+            row.try_get::<OffsetDateTime, _>("created_at")
+                .map_err(database)?
+                .format(&Rfc3339)
+                .map_err(|_| unprepared())?,
+        )),
+        last_used_at: optional_timestamp(row, "last_used_at")?,
+        revoked_at: optional_timestamp(row, "revoked_at")?,
         active: !revoked && expiry > OffsetDateTime::now_utc(),
     })
+}
+
+#[cfg(feature = "postgres")]
+fn optional_timestamp(
+    row: &sqlx::postgres::PgRow,
+    column: &str,
+) -> Result<admin::OptionalValue<admin::Timestamp>, RuntimeFailure> {
+    row.try_get::<Option<OffsetDateTime>, _>(column)
+        .map_err(database)?
+        .map(|value| value.format(&Rfc3339).map(Some).map_err(|_| unprepared()))
+        .transpose()
 }

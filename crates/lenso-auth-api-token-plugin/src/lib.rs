@@ -513,6 +513,17 @@ async fn authenticate(
     let expires_at = std::cmp::min(stored.expires_at, now + prepared.assertion_ttl);
     let validity = Validity::new(now, expires_at)
         .map_err(|_| AuthInvocationError::Domain(AuthenticateError::Expired))?;
+    if !storage::record_authentication(
+        &prepared.store,
+        &stored.credential_id,
+        &stored.session_id,
+        now,
+    )
+    .await
+    .map_err(|error| runtime_failure(&error))?
+    {
+        return Err(AuthInvocationError::Domain(AuthenticateError::Revoked));
+    }
     let mut claims = stored.claims;
     claims.insert(
         CREDENTIAL_BINDING_CLAIM.into(),

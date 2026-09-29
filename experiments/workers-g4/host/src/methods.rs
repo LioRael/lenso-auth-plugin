@@ -354,7 +354,7 @@ pub(super) async fn invoke(
                     )
                     .await
                     .map_err(err)?;
-                let metadata=values.into_iter().map(|m|json!({"credential_id":m.credential_id,"session_id":m.session_id,"subject":m.subject,"active":m.active})).collect::<Vec<_>>();
+                let metadata=values.into_iter().map(|m|json!({"credential_id":m.credential_id,"session_id":m.session_id,"subject":m.subject,"active":m.active,"created_at":m.created_at.format(&time::format_description::well_known::Rfc3339).ok(),"last_used_at":m.last_used_at.and_then(|value|value.format(&time::format_description::well_known::Rfc3339).ok()),"revoked_at":m.revoked_at.and_then(|value|value.format(&time::format_description::well_known::Rfc3339).ok())})).collect::<Vec<_>>();
                 return Ok(json!({"Ok":{"credentials":metadata}}));
             }
             if operation == "api.attenuate" {

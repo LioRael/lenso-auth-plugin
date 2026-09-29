@@ -4,15 +4,28 @@ use crate::workers::D1Binding;
 use lenso_migration::Migration;
 use lenso_migration_d1::{Error, LegacySchema, Plan, SqlMigration, Statement, Transport};
 
-const MIGRATIONS: &[Migration] = &[Migration::new(
-    1,
-    "api-token",
-    include_str!("../migrations/d1/001_api_token.sql"),
-)];
-const SQL: &[SqlMigration] = &[SqlMigration {
-    migration: MIGRATIONS[0],
-    statement_ends: &[91, 465, 720, 786, 899],
-}];
+const MIGRATIONS: &[Migration] = &[
+    Migration::new(
+        1,
+        "api-token",
+        include_str!("../migrations/d1/001_api_token.sql"),
+    ),
+    Migration::new(
+        2,
+        "authentication-activity",
+        include_str!("../migrations/d1/002_authentication_activity.sql"),
+    ),
+];
+const SQL: &[SqlMigration] = &[
+    SqlMigration {
+        migration: MIGRATIONS[0],
+        statement_ends: &[91, 465, 720, 786, 899],
+    },
+    SqlMigration {
+        migration: MIGRATIONS[1],
+        statement_ends: &[53],
+    },
+];
 pub fn plan() -> Result<Plan, Error> {
     Plan::new(
         "lenso.auth.api-token",

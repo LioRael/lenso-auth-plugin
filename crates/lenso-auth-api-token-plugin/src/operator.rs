@@ -298,6 +298,9 @@ pub struct ApiTokenMetadata {
     pub assurance: String,
     pub audience: Vec<String>,
     pub expires_at: OffsetDateTime,
+    pub created_at: OffsetDateTime,
+    pub last_used_at: Option<OffsetDateTime>,
+    pub revoked_at: Option<OffsetDateTime>,
     pub active: bool,
 }
 

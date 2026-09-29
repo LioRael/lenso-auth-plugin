@@ -140,3 +140,22 @@ pub(crate) async fn list_management_credentials(
         }
     }
 }
+
+/// Record an accepted authentication only while both owner references remain live.
+pub(crate) async fn record_authentication(
+    store: &ApiTokenStore,
+    credential_id: &str,
+    session_id: &str,
+    accepted_at: OffsetDateTime,
+) -> Result<bool, AuthPluginError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        ApiTokenStore::Postgres(pg) => {
+            postgres::record_authentication(pg, credential_id, session_id, accepted_at).await
+        }
+        #[cfg(feature = "workers")]
+        ApiTokenStore::D1(db) => {
+            d1::record_authentication(db, credential_id, session_id, accepted_at).await
+        }
+    }
+}

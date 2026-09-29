@@ -11,6 +11,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "management-token-issuance-receipts",
         "migrations/postgres/002_management_token_issuance_receipts.sql"
     ),
+    (
+        3,
+        "authentication-activity",
+        "migrations/postgres/003_add_authentication_activity.sql"
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {

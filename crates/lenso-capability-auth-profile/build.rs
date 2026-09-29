@@ -18,12 +18,11 @@ fn main() {
     let mut snapshot = contract_source::__lenso_capability_snapshot();
     normalize_snapshot(&mut snapshot);
     if env::var_os("LENSO_UPDATE_CONTRACT_SNAPSHOT").is_some() {
-        write_source_snapshot(&snapshot, Path::new("capability.json")).unwrap_or_else(|error| {
-            panic!("failed to update auth-profile-cache snapshot: {error}")
-        });
+        write_source_snapshot(&snapshot, Path::new("capability.json"))
+            .unwrap_or_else(|error| panic!("failed to update auth-profile snapshot: {error}"));
     } else {
         check_source_snapshot(&snapshot, Path::new("capability.json")).unwrap_or_else(|error| {
-            panic!("auth-profile-cache Descriptor or Schemas are stale: {error}")
+            panic!("auth-profile Descriptor or Schemas are stale: {error}")
         });
     }
 
@@ -35,9 +34,7 @@ fn main() {
         ProjectionLanguage::Rust,
         Path::new("src/generated.rs"),
     )
-    .unwrap_or_else(|error| {
-        panic!("auth-profile-cache generated Rust projection is stale: {error}")
-    });
+    .unwrap_or_else(|error| panic!("auth-profile generated Rust projection is stale: {error}"));
 }
 
 fn normalize_snapshot(snapshot: &mut lenso_contract_authoring::CapabilitySnapshot) {

@@ -18,5 +18,11 @@ lenso-capability-auth-profile = { path = "../lenso-capability-auth-profile", ver
 lenso-capability-auth-profile-cache = { path = "../lenso-capability-auth-profile-cache", version = "0.1.0" }
 serde.workspace = true
 url.workspace = true
+[dev-dependencies]
+lenso-capability-secrets.workspace = true
+lenso-app-plan.workspace = true
+lenso-auth-account-plugin = { path="../lenso-auth-account-plugin", version="0.1.0" }
+lenso-auth-profile-cache-plugin = { path="../lenso-auth-profile-cache-plugin", version="0.1.0" }
+serde_json.workspace = true
 [lints]
 workspace = true

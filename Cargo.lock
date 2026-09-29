@@ -1147,13 +1147,10 @@ dependencies = [
  "js-sys",
  "lenso",
  "lenso-app-plan",
- "lenso-auth-profile-cache-plugin",
- "lenso-auth-profile-plugin",
  "lenso-auth-sdk 0.2.4",
  "lenso-capability-account-admin",
  "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
- "lenso-capability-auth-profile-cache",
  "lenso-capability-credential-issuer",
  "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
@@ -1513,12 +1510,17 @@ name = "lenso-auth-profile-plugin"
 version = "0.1.0"
 dependencies = [
  "lenso",
+ "lenso-app-plan",
+ "lenso-auth-account-plugin",
+ "lenso-auth-profile-cache-plugin",
  "lenso-capability-account-admin",
  "lenso-capability-auth-profile",
  "lenso-capability-auth-profile-cache",
+ "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-native-adapter",
  "serde",
+ "serde_json",
  "url",
 ]
 

@@ -861,6 +861,9 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
                 .flatten()
                 .expect("secret only first time");
             assert!(!format!("{issued:?}").contains(&token));
+            assert!(issued.credential.created_at.clone().flatten().is_some());
+            assert!(issued.credential.last_used_at.clone().flatten().is_none());
+            assert!(issued.credential.revoked_at.clone().flatten().is_none());
             let receipt = human
                 .receipt_with_context(context(&app, &alice_assertion), receipt_request.clone())
                 .await
@@ -963,6 +966,27 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
             ));
             let pat_assertion = authenticate(&app, "test.human/pat", "bearer", &token).await;
             assert_eq!(pat_assertion.subject(), alice);
+            let authenticated_metadata = list(&app, &alice_assertion)
+                .await
+                .unwrap()
+                .credentials
+                .remove(0);
+            let accepted_at = authenticated_metadata
+                .last_used_at
+                .clone()
+                .flatten()
+                .expect("owner accepted authentication is recorded");
+            assert_eq!(
+                authenticated_metadata.created_at,
+                issued.credential.created_at
+            );
+            assert!(
+                authenticated_metadata
+                    .revoked_at
+                    .clone()
+                    .flatten()
+                    .is_none()
+            );
             assert_eq!(
                 ManagementCredentialCeiling::from_assertion(&pat_assertion)
                     .unwrap()
@@ -1029,7 +1053,13 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
                 .await
                 .unwrap();
             assert!(revoked_receipt.found);
-            assert!(!revoked_receipt.credential.flatten().unwrap().active);
+            let revoked_metadata = revoked_receipt.credential.flatten().unwrap();
+            assert!(!revoked_metadata.active);
+            assert!(revoked_metadata.revoked_at.flatten().is_some());
+            assert_eq!(
+                revoked_metadata.last_used_at.flatten().as_deref(),
+                Some(accepted_at.as_str())
+            );
             let mut expiring = issue_request("expired-receipt");
             expiring.expires_at = (OffsetDateTime::now_utc() + Duration::seconds(2))
                 .format(&Rfc3339)
