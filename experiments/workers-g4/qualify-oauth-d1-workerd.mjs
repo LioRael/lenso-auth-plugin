@@ -85,7 +85,7 @@ try {
 
   const createLocalWorkerd = () =>
     new Miniflare(convertV4MiniflareOptions({
-      d1Persist: persistenceDirectory,
+      resourcePersistencePath: persistenceDirectory,
       workers: [{
       name: "oauth-d1-proof",
       modules: [{type: "ESModule", path: output}, {type: "CompiledWasm", path: resolve(root, "pkg/lenso_workers_g4_host_bg.wasm")}],

@@ -106,7 +106,7 @@ try {
   const idpJwk = JSON.stringify(privateKey.export({ format: "jwk" }));
   const createLocalWorkerd = () =>
     new Miniflare(convertV4MiniflareOptions({
-      d1Persist: persistenceDirectory,
+      resourcePersistencePath: persistenceDirectory,
       workers: [
         {
           name: "fused-session-main",
