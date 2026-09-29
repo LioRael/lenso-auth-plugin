@@ -1,0 +1,71 @@
+crates/lenso-auth-human-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_2378ba4b6dca5d 396-439
+crates/lenso-auth-human-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_c16fce6689a42d 14
+crates/lenso-auth-sdk/Cargo.toml
+  s_f4202e28c6b5b1::t_c16fce6689a42d 3
+crates/lenso-capability-human-api-token/src/contract.rs
+  s_f4202e28c6b5b1::t_0f4bfac008a190 78-98,134-138
+crates/lenso-capability-api-token-admin/src/contract.rs
+  s_f4202e28c6b5b1::t_0f4bfac008a190 80-101,138-142
+crates/lenso-auth-api-token-plugin/tests/postgres_auth.rs
+  s_f4202e28c6b5b1::t_545143a4b011f3 539
+.github/workflows/ci.yml
+  s_f4202e28c6b5b1::t_c16fce6689a42d 69-70
+crates/lenso-auth-account-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_c16fce6689a42d 31
+crates/lenso-auth-api-token-plugin/src/management.rs
+  s_f4202e28c6b5b1::t_2378ba4b6dca5d 92-127
+experiments/workers-g4/host/src/methods.rs
+  s_f4202e28c6b5b1::t_545143a4b011f3 150
+crates/lenso-auth-human-api-token-plugin/README.md
+  s_f4202e28c6b5b1::t_545143a4b011f3 19,41-45,48-51
+  s_f4202e28c6b5b1::t_30ef165592ebc8 52
+crates/lenso-auth-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_c16fce6689a42d 31
+docs/release-process.md
+  s_f4202e28c6b5b1::t_b3b7981ba8bcf0 5,8-10,20-30,74,141
+crates/lenso-auth-human-api-token-plugin/tests/postgres_lifecycle.rs
+  s_f4202e28c6b5b1::t_545143a4b011f3 279,323,487,718-727,738-742,747-767,806-813,879-880,901-906,924-934
+  s_f4202e28c6b5b1::t_dfb98ed11d649b 743-746,869-878,935-938
+Cargo.lock
+  s_f4202e28c6b5b1::t_8a5fffab9e3dd7 1066,1085,1150,1184,1234,1313,1509-1510,1514,1524,1528
+crates/lenso-capability-api-token-admin/capability.json
+  s_f4202e28c6b5b1::t_b37b375564a759 21-27
+crates/lenso-capability-api-token-admin/schemas/receipt-error.schema.json
+  s_f4202e28c6b5b1::t_edbc7dd2493a71 1-8
+crates/lenso-capability-api-token-admin/schemas/receipt-request.schema.json
+  s_f4202e28c6b5b1::t_afcc595f9e22ac 1-20
+crates/lenso-capability-api-token-admin/schemas/receipt-response.schema.json
+  s_f4202e28c6b5b1::t_b6c64f9985db44 1-80
+crates/lenso-capability-api-token-admin/src/generated.rs
+  s_f4202e28c6b5b1::t_a2e04507d152b8 9,19,43,180-212,288-310,438-488,556-562,628-656,689,713-719,753-760,793-799,830,862-874,927,966-977,1002,1036,1064-1068
+crates/lenso-capability-human-api-token/capability.json
+  s_f4202e28c6b5b1::t_2a14b91b41b3e4 21-27
+crates/lenso-capability-human-api-token/schemas/receipt-error.schema.json
+  s_f4202e28c6b5b1::t_8c8b06baf4652f 1-8
+crates/lenso-capability-human-api-token/schemas/receipt-request.schema.json
+  s_f4202e28c6b5b1::t_e2f0256f9b927b 1-17
+crates/lenso-capability-human-api-token/schemas/receipt-response.schema.json
+  s_f4202e28c6b5b1::t_65c84402f7c9a4 1-80
+crates/lenso-capability-human-api-token/src/generated.rs
+  s_f4202e28c6b5b1::t_6d4de213466e6b 9,19,43,171-200,273-295,423-473,541-547,613-641,674,698-704,738-745,778-784,815,847-859,912,951-962,987,1021,1049-1053
+experiments/workers-g4/Cargo.lock
+  s_f4202e28c6b5b1::t_c3ec8ae9283acf 1091
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "23bbe1e415fe07978970b52b1b7f5a00486e2ae3",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
