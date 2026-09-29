@@ -85,6 +85,9 @@ try {
 
   const createLocalWorkerd = () =>
     new Miniflare({
+      d1Persist: persistenceDirectory,
+      workers: [{
+      name: "oauth-d1-proof",
       modules: true,
       scriptPath: output,
       modulesRoot: root,
@@ -94,7 +97,6 @@ try {
         ACCOUNT_DB: "oauth-d1-account-local",
         OAUTH_DB: "oauth-d1-local",
       },
-      d1Persist: persistenceDirectory,
       bindings: {
         SIGNING_KEY: "0123456789abcdef0123456789abcdef",
         TOKEN_PEPPER: "fedcba9876543210fedcba9876543210",
@@ -104,6 +106,7 @@ try {
         PROVIDER_SIGNING_KEY: "local-proof-provider-signing",
         PROVIDER_JWKS: "{}",
       },
+      }],
     });
   mf = createLocalWorkerd();
 
