@@ -5,8 +5,8 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.account-admin@1";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:3b8010924c71f185dceb5662fb55106d87865ea6683cad76cbbdb71a9a4c67f9";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:a7f0ba1d6f025f01f47660d90086f064f3da65ba77597666a5bc58df961e01f7";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const ACCOUNT_ADMIN_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,33 +16,34 @@ pub const ACCOUNT_ADMIN_CONTRACT: CapabilityReference<AccountAdminClient> = Capa
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_account_admin { () => { "{\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"list_sessions\",\"list_subjects\",\"set_subject_status\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_account_admin { () => { "{\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"list_sessions\",\"list_subjects\",\"read_profile\",\"set_subject_status\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_account_admin_client {
-    () => { "{\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_optional_account_admin_client {
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_many_account_admin_client {
-    () => { "{\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.account-admin@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
 }
 
 pub const LIST_SESSIONS_OPERATION: &str = "list_sessions";
 pub const LIST_SUBJECTS_OPERATION: &str = "list_subjects";
+pub const READ_PROFILE_OPERATION: &str = "read_profile";
 pub const SET_SUBJECT_STATUS_OPERATION: &str = "set_subject_status";
 
-pub use lenso_contract_runtime::{Timestamp, UnknownDomainError};
+pub use lenso_contract_runtime::{OptionalValue, Timestamp, UnknownDomainError};
 use lenso_contract_runtime::{decode_portable_json, encode_portable_json};
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -156,6 +157,46 @@ pub enum ListSubjectsError {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReadProfileRequest {
+    #[serde(rename = "subject")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub subject: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReadProfileResponse {
+    #[serde(rename = "avatar_url")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub avatar_url: OptionalValue<String>,
+    #[serde(rename = "cached")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub cached: bool,
+    #[serde(rename = "display_name")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub display_name: OptionalValue<String>,
+    #[serde(rename = "found")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub found: bool,
+    #[serde(rename = "revision")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub revision: OptionalValue<i64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReadProfileError {
+    Forbidden,
+    InvalidSubject,
+    UnsupportedProfile,
+    Unknown(UnknownDomainError),
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SetSubjectStatusRequest {
     #[serde(rename = "disabled_until")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
@@ -238,6 +279,29 @@ impl RequestCapability for AccountAdminListSubjects {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
         Rc::clone(&typed_endpoint.provider).list_subjects(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct AccountAdminReadProfile;
+impl RequestCapability for AccountAdminReadProfile {
+    type Request = ReadProfileRequest;
+    type Response = ReadProfileResponse;
+    type DomainError = ReadProfileError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != READ_PROFILE_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<AccountAdminRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).read_profile(context, request)
     }
 }
 
@@ -364,6 +428,57 @@ impl<'de> serde::Deserialize<'de> for ListSubjectsError {
     }
 }
 
+impl serde::Serialize for ReadProfileError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::Forbidden => serializer.serialize_str("forbidden"),
+            Self::InvalidSubject => serializer.serialize_str("invalid_subject"),
+            Self::UnsupportedProfile => serializer.serialize_str("unsupported_profile"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ReadProfileError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "forbidden" => Ok(Self::Forbidden),
+                "invalid_subject" => Ok(Self::InvalidSubject),
+                "unsupported_profile" => Ok(Self::UnsupportedProfile),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
 impl serde::Serialize for SetSubjectStatusError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -431,6 +546,13 @@ pub fn decode_list_subjects_response(wire: &str) -> Result<ListSubjectsResponse,
 pub fn encode_list_subjects_error(value: &ListSubjectsError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_list_subjects_error(wire: &str) -> Result<ListSubjectsError, serde_json::Error> { decode_portable_json(wire) }
 
+pub fn encode_read_profile_request(value: &ReadProfileRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_read_profile_request(wire: &str) -> Result<ReadProfileRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_read_profile_response(value: &ReadProfileResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_read_profile_response(wire: &str) -> Result<ReadProfileResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_read_profile_error(value: &ReadProfileError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_read_profile_error(wire: &str) -> Result<ReadProfileError, serde_json::Error> { decode_portable_json(wire) }
+
 pub fn encode_set_subject_status_request(value: &SetSubjectStatusRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_set_subject_status_request(wire: &str) -> Result<SetSubjectStatusRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_set_subject_status_response(value: &SetSubjectStatusResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
@@ -497,6 +619,35 @@ impl __LensoIntoAccountAdminListSubjectsResult for Result<ListSubjectsResponse, 
 }
 
 #[doc(hidden)]
+pub trait __LensoIntoAccountAdminReadProfileResult {
+    fn __lenso_into_result(self) -> Result<Result<ReadProfileResponse, ReadProfileError>, RuntimeFailure>;
+}
+impl __LensoIntoAccountAdminReadProfileResult for Result<ReadProfileResponse, ReadProfileError> {
+    fn __lenso_into_result(self) -> Result<Result<ReadProfileResponse, ReadProfileError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoAccountAdminReadProfileResult for Result<Result<ReadProfileResponse, ReadProfileError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<ReadProfileResponse, ReadProfileError>, RuntimeFailure> { self }
+}
+impl __LensoIntoAccountAdminReadProfileResult for Result<ReadProfileResponse, lenso_plugin_authoring::PluginError<ReadProfileError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<ReadProfileResponse, ReadProfileError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoAccountAdminReadProfileResult for Result<ReadProfileResponse, AccountAdminReadProfileInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<ReadProfileResponse, ReadProfileError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(AccountAdminReadProfileInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(AccountAdminReadProfileInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
 pub trait __LensoIntoAccountAdminSetSubjectStatusResult {
     fn __lenso_into_result(self) -> Result<Result<SetSubjectStatusResponse, SetSubjectStatusError>, RuntimeFailure>;
 }
@@ -528,6 +679,7 @@ impl __LensoIntoAccountAdminSetSubjectStatusResult for Result<SetSubjectStatusRe
 pub trait AccountAdminProvider: fmt::Debug + 'static {
     fn list_sessions(&self, context: InvocationContext, request: ListSessionsRequest) -> NativeRequestFuture<AccountAdminListSessions>;
     fn list_subjects(&self, context: InvocationContext, request: ListSubjectsRequest) -> NativeRequestFuture<AccountAdminListSubjects>;
+    fn read_profile(&self, context: InvocationContext, request: ReadProfileRequest) -> NativeRequestFuture<AccountAdminReadProfile>;
     fn set_subject_status(&self, context: InvocationContext, request: SetSubjectStatusRequest) -> NativeRequestFuture<AccountAdminSetSubjectStatus>;
 }
 
@@ -549,6 +701,13 @@ macro_rules! __lenso_native_lower_account_admin {
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::list_subjects(&plugin, context, request).await;
                 $crate::__LensoIntoAccountAdminListSubjectsResult::__lenso_into_result(result)
+            })
+        }
+        fn read_profile(&self, context: __LensoNativeSupportAccountAdmin::InvocationContext, request: $crate::ReadProfileRequest) -> __LensoNativeSupportAccountAdmin::NativeRequestFuture<$crate::AccountAdminReadProfile> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::read_profile(&plugin, context, request).await;
+                $crate::__LensoIntoAccountAdminReadProfileResult::__lenso_into_result(result)
             })
         }
         fn set_subject_status(&self, context: __LensoNativeSupportAccountAdmin::InvocationContext, request: $crate::SetSubjectStatusRequest) -> __LensoNativeSupportAccountAdmin::NativeRequestFuture<$crate::AccountAdminSetSubjectStatus> {
@@ -584,6 +743,14 @@ macro_rules! __lenso_native_lower_object_account_admin {
                 $crate::__LensoIntoAccountAdminListSubjectsResult::__lenso_into_result(result)
             })
         }
+        fn read_profile(&self, context: __LensoNativeSupportAccountAdmin::InvocationContext, request: $crate::ReadProfileRequest) -> __LensoNativeSupportAccountAdmin::NativeRequestFuture<$crate::AccountAdminReadProfile> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::read_profile(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoAccountAdminReadProfileResult::__lenso_into_result(result)
+            })
+        }
         fn set_subject_status(&self, context: __LensoNativeSupportAccountAdmin::InvocationContext, request: $crate::SetSubjectStatusRequest) -> __LensoNativeSupportAccountAdmin::NativeRequestFuture<$crate::AccountAdminSetSubjectStatus> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -616,6 +783,13 @@ macro_rules! __lenso_native_lower_trait_object_account_admin {
                 <$plugin as $crate::AccountAdminProvider>::list_subjects(plugin.as_ref(), context, request).await
             })
         }
+        fn read_profile(&self, context: __LensoNativeSupportAccountAdmin::InvocationContext, request: $crate::ReadProfileRequest) -> __LensoNativeSupportAccountAdmin::NativeRequestFuture<$crate::AccountAdminReadProfile> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::AccountAdminProvider>::read_profile(plugin.as_ref(), context, request).await
+            })
+        }
         fn set_subject_status(&self, context: __LensoNativeSupportAccountAdmin::InvocationContext, request: $crate::SetSubjectStatusRequest) -> __LensoNativeSupportAccountAdmin::NativeRequestFuture<$crate::AccountAdminSetSubjectStatus> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -646,6 +820,7 @@ impl<P: AccountAdminProvider> NativeRequestEndpoint for AccountAdminEndpoint<P> 
     fn operations(&self) -> &'static [&'static str] { &[
         LIST_SESSIONS_OPERATION,
         LIST_SUBJECTS_OPERATION,
+        READ_PROFILE_OPERATION,
         SET_SUBJECT_STATUS_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
@@ -669,6 +844,19 @@ impl<P: AccountAdminProvider> NativeRequestEndpoint for AccountAdminEndpoint<P> 
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).list_subjects(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            READ_PROFILE_OPERATION => {
+                let Ok(request) = request.downcast::<ReadProfileRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).read_profile(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -729,6 +917,7 @@ macro_rules! __lenso_native_provide_account_admin {
 pub struct AccountAdminClient {
     list_sessions: NativeRequestHandle<AccountAdminListSessions>,
     list_subjects: NativeRequestHandle<AccountAdminListSubjects>,
+    read_profile: NativeRequestHandle<AccountAdminReadProfile>,
     set_subject_status: NativeRequestHandle<AccountAdminSetSubjectStatus>,
 }
 impl AccountAdminClient {
@@ -767,6 +956,18 @@ impl AccountAdminClient {
             .map_err(AccountAdminListSubjectsInvocationError::Domain)
     }
 
+    pub async fn read_profile(&self, request: ReadProfileRequest) -> Result<ReadProfileResponse, AccountAdminReadProfileInvocationError> {
+        self.read_profile.invoke(READ_PROFILE_OPERATION, request).await
+            .map_err(AccountAdminReadProfileInvocationError::Runtime)?
+            .map_err(AccountAdminReadProfileInvocationError::Domain)
+    }
+
+    pub async fn read_profile_with_context(&self, context: InvocationContext, request: ReadProfileRequest) -> Result<ReadProfileResponse, AccountAdminReadProfileInvocationError> {
+        self.read_profile.invoke_with_context(READ_PROFILE_OPERATION, context, request).await
+            .map_err(AccountAdminReadProfileInvocationError::Runtime)?
+            .map_err(AccountAdminReadProfileInvocationError::Domain)
+    }
+
     pub async fn set_subject_status(&self, request: SetSubjectStatusRequest) -> Result<SetSubjectStatusResponse, AccountAdminSetSubjectStatusInvocationError> {
         self.set_subject_status.invoke(SET_SUBJECT_STATUS_OPERATION, request).await
             .map_err(AccountAdminSetSubjectStatusInvocationError::Runtime)?
@@ -791,6 +992,7 @@ impl CapabilityClient for AccountAdminClient {
         Ok(Self {
             list_sessions: dependencies.one::<AccountAdminListSessions>()?,
             list_subjects: dependencies.one::<AccountAdminListSubjects>()?,
+            read_profile: dependencies.one::<AccountAdminReadProfile>()?,
             set_subject_status: dependencies.one::<AccountAdminSetSubjectStatus>()?,
         })
     }
@@ -824,6 +1026,7 @@ impl CapabilityClientMany for AccountAdminClient {
                     Self {
                     list_sessions: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<AccountAdminListSessions>()?,
                     list_subjects: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<AccountAdminListSubjects>()?,
+                    read_profile: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<AccountAdminReadProfile>()?,
                     set_subject_status: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<AccountAdminSetSubjectStatus>()?,
                     },
                 ))
@@ -848,6 +1051,11 @@ pub enum AccountAdminListSessionsInvocationError {
 #[derive(Clone, Debug, PartialEq)]
 pub enum AccountAdminListSubjectsInvocationError {
     Domain(ListSubjectsError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum AccountAdminReadProfileInvocationError {
+    Domain(ReadProfileError),
     Runtime(RuntimeFailure),
 }
 #[derive(Clone, Debug, PartialEq)]

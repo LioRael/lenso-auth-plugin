@@ -1147,10 +1147,13 @@ dependencies = [
  "js-sys",
  "lenso",
  "lenso-app-plan",
+ "lenso-auth-profile-cache-plugin",
+ "lenso-auth-profile-plugin",
  "lenso-auth-sdk 0.2.4",
  "lenso-capability-account-admin",
  "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
+ "lenso-capability-auth-profile-cache",
  "lenso-capability-credential-issuer",
  "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
@@ -1167,6 +1170,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "zeroize",
@@ -1310,6 +1314,8 @@ dependencies = [
  "lenso-app-plan",
  "lenso-auth-account-plugin",
  "lenso-auth-api-token-plugin",
+ "lenso-auth-profile-cache-plugin",
+ "lenso-auth-profile-plugin",
  "lenso-auth-sdk 0.2.4",
  "lenso-capability-access-control",
  "lenso-capability-access-control-admin",
@@ -1318,6 +1324,8 @@ dependencies = [
  "lenso-capability-api-token-admin",
  "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
+ "lenso-capability-auth-profile",
+ "lenso-capability-auth-profile-cache",
  "lenso-capability-credential-issuer",
  "lenso-capability-credential-state",
  "lenso-capability-human-api-token",
@@ -1485,6 +1493,33 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-profile-cache-plugin"
+version = "0.1.0"
+dependencies = [
+ "lenso",
+ "lenso-capability-auth-profile-cache",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
+name = "lenso-auth-profile-plugin"
+version = "0.1.0"
+dependencies = [
+ "lenso",
+ "lenso-capability-account-admin",
+ "lenso-capability-auth-profile",
+ "lenso-capability-auth-profile-cache",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "serde",
+ "url",
 ]
 
 [[package]]
@@ -1691,6 +1726,36 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-auth-delegation"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-auth-profile"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-auth-profile-cache"
 version = "0.1.0"
 dependencies = [
  "futures",

@@ -151,13 +151,23 @@ fn endpoint(
     version: &str,
     ops: &[&str],
 ) -> PluginInstancePlan {
-    instance.with_capability(CapabilityEndpointPlan::new(
-        cap,
-        version,
-        ops.iter().copied(),
-    ))
+    let mut operations = ops.to_vec();
+    operations.sort_unstable();
+    let endpoint = CapabilityEndpointPlan::new(cap, version, operations);
+    instance.with_capability(if cap == account_admin::CAPABILITY_ID {
+        endpoint.with_cross_lane_transfer()
+    } else {
+        endpoint
+    })
 }
 fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> ResolvedAppPlan {
+    plan_cache(schemas, current, false)
+}
+fn plan_cache(
+    schemas: &[String; 3],
+    current: ManagementCredentialCeiling,
+    selected_cache: bool,
+) -> ResolvedAppPlan {
     let mut bindings = Vec::new();
     let account_config = AccountAuthConfig::new(
         &schemas[0],
@@ -168,6 +178,11 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
         "pepper",
         60,
     )
+    .unwrap()
+    .with_admin_callers(vec![
+        "test.human/bootstrap".into(),
+        "lenso.auth.profile/default".into(),
+    ])
     .unwrap()
     .with_delegation_callers(vec!["test.human/browser".into()])
     .unwrap()
@@ -246,7 +261,12 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
         (
             account_admin::CAPABILITY_ID,
             account_admin::DESCRIPTOR_VERSION,
-            vec!["list_sessions", "list_subjects", "set_subject_status"],
+            vec![
+                "list_sessions",
+                "list_subjects",
+                "set_subject_status",
+                "read_profile",
+            ],
         ),
         (
             delegation::CAPABILITY_ID,
@@ -375,6 +395,11 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
     for (cap, version, target) in [
         (auth::CAPABILITY_ID, auth::DESCRIPTOR_VERSION, "account"),
         (
+            account_admin::CAPABILITY_ID,
+            account_admin::DESCRIPTOR_VERSION,
+            "account",
+        ),
+        (
             directory::CAPABILITY_ID,
             directory::DESCRIPTOR_VERSION,
             "account",
@@ -432,14 +457,101 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
             "secrets",
         ));
     }
-    AppComposition::new(
-        vec![
-            account, tokens, acl, facade, browser, bootstrap, pat, observer, secrets,
-        ],
-        bindings,
+    let mut plugins = vec![
+        account, tokens, acl, facade, browser, bootstrap, pat, observer, secrets,
+    ];
+    let projection = PluginInstancePlan::new(
+        "lenso.auth.profile/default",
+        lenso_auth_profile_plugin::PACKAGE_ID,
     )
-    .resolve()
-    .unwrap()
+    .with_authoring(2, "lenso.native-authoring@2")
+    .with_configuration(
+        serde_json::to_string(
+            &lenso_auth_profile_plugin::ProfileConfig::new(
+                "operators.account",
+                vec!["test.human/bootstrap".into()],
+            )
+            .unwrap(),
+        )
+        .unwrap(),
+    )
+    .with_requirement(
+        CapabilityRequirementPlan::one(
+            account_admin::CAPABILITY_ID,
+            account_admin::DESCRIPTOR_VERSION,
+        )
+        .with_requirement_id("account"),
+    )
+    .with_requirement(
+        CapabilityRequirementPlan::optional(
+            lenso_capability_auth_profile_cache::CAPABILITY_ID,
+            lenso_capability_auth_profile_cache::DESCRIPTOR_VERSION,
+        )
+        .with_requirement_id("profile_cache"),
+    );
+    plugins.push(endpoint(
+        projection,
+        lenso_capability_auth_profile::CAPABILITY_ID,
+        lenso_capability_auth_profile::DESCRIPTOR_VERSION,
+        &["read"],
+    ));
+    bindings.push(
+        CapabilityBinding::new(
+            "lenso.auth.profile/default",
+            account_admin::CAPABILITY_ID,
+            account_admin::DESCRIPTOR_VERSION,
+            "account",
+        )
+        .with_requirement_id("account"),
+    );
+    // Bootstrap consumes display data only for the qualification proof.
+    let bootstrap = plugins
+        .iter_mut()
+        .find(|instance| instance.instance_key() == "test.human/bootstrap")
+        .unwrap();
+    *bootstrap = bootstrap
+        .clone()
+        .with_requirement(CapabilityRequirementPlan::one(
+            lenso_capability_auth_profile::CAPABILITY_ID,
+            lenso_capability_auth_profile::DESCRIPTOR_VERSION,
+        ));
+    bindings.push(CapabilityBinding::new(
+        "test.human/bootstrap",
+        lenso_capability_auth_profile::CAPABILITY_ID,
+        lenso_capability_auth_profile::DESCRIPTOR_VERSION,
+        "lenso.auth.profile/default",
+    ));
+    if selected_cache {
+        let cache = PluginInstancePlan::new("cache", lenso_auth_profile_cache_plugin::PACKAGE_ID)
+            .with_authoring(2, "lenso.native-authoring@2")
+            .with_configuration(
+                serde_json::to_string(
+                    &lenso_auth_profile_cache_plugin::ProfileCacheConfig::new(
+                        300,
+                        64,
+                        vec!["lenso.auth.profile/default".into()],
+                    )
+                    .unwrap(),
+                )
+                .unwrap(),
+            );
+        plugins.push(endpoint(
+            cache,
+            lenso_capability_auth_profile_cache::CAPABILITY_ID,
+            lenso_capability_auth_profile_cache::DESCRIPTOR_VERSION,
+            &["get", "put"],
+        ));
+        bindings.push(
+            CapabilityBinding::new(
+                "lenso.auth.profile/default",
+                lenso_capability_auth_profile_cache::CAPABILITY_ID,
+                lenso_capability_auth_profile_cache::DESCRIPTOR_VERSION,
+                "cache",
+            )
+            .with_requirement_id("profile_cache"),
+        );
+    }
+    AppComposition::new(plugins, bindings).resolve().unwrap()
 }
 async fn start(
     database: &str,
@@ -1287,4 +1399,144 @@ async fn scoped_agent_child_is_owner_issued_once_and_tracks_current_parent() {
 }
 fn valid_child(credential: &str) -> bool {
     credential.starts_with("lenso_st_") && credential.len() == 52
+}
+
+#[tokio::test]
+#[ignore = "requires LENSO_POSTGRES_TEST_URL"]
+async fn stale_display_cache_never_authorizes_a_revoked_session() {
+    use sqlx::{AssertSqlSafe, Executor};
+    let database = std::env::var("LENSO_POSTGRES_TEST_URL").unwrap();
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let schemas = [
+        format!("profile_account_{suffix}"),
+        format!("profile_api_{suffix}"),
+        format!("profile_acl_{suffix}"),
+    ];
+    AccountAuthOperator::setup(&database, &schemas[0])
+        .await
+        .unwrap();
+    ApiTokenAuthOperator::setup(&database, &schemas[1])
+        .await
+        .unwrap();
+    AccessControlOperator::setup(&database, &schemas[2])
+        .await
+        .unwrap();
+    let operator = AccountAuthOperator::connect(&database, &schemas[0])
+        .await
+        .unwrap();
+    tokio::task::LocalSet::new()
+        .run_until(Box::pin(async {
+            let app = Kernel::start_native(
+                plan_cache(&schemas, ceiling(), true),
+                TokioDriver::new(),
+                NativePluginRegistry::new()
+                    .with_linked_factories()
+                    .with_factory(CallerFactory)
+                    .with_factory(StaticSecretsFactory {
+                        values: BTreeMap::from([
+                            ("database".into(), database.clone()),
+                            ("account-key".into(), ACCOUNT_KEY.into()),
+                            ("api-key".into(), API_KEY.into()),
+                            ("pepper".into(), TOKEN_PEPPER.into()),
+                        ]),
+                    }),
+            )
+            .await
+            .unwrap();
+            let (subject, session) = session(&app, "display-subject", "user").await;
+            assert_eq!(
+                operator
+                    .update_display_profile(
+                        &subject,
+                        0,
+                        "Alice",
+                        Some("https://example.invalid/avatar.png")
+                    )
+                    .await
+                    .unwrap(),
+                Some(1)
+            );
+            let admin = lenso_capability_auth_profile::ProfileClient::from_dependencies(
+                &app.dependencies("test.human/bootstrap").unwrap(),
+            )
+            .unwrap();
+            let request = lenso_capability_auth_profile::ReadRequest {
+                subject: subject.clone(),
+            };
+            let first = admin.read(request.clone()).await.unwrap();
+            assert!(!first.cached);
+            assert_eq!(first.display_name.flatten().unwrap(), "Alice");
+            assert_eq!(
+                operator
+                    .update_display_profile(&subject, 1, "Alice New", None)
+                    .await
+                    .unwrap(),
+                Some(2)
+            );
+            assert_eq!(
+                operator
+                    .update_display_profile(&subject, 1, "Lost Update", None)
+                    .await
+                    .unwrap(),
+                None
+            );
+            let stale = admin.read(request.clone()).await.unwrap();
+            assert!(stale.cached);
+            assert_eq!(stale.display_name.flatten().unwrap(), "Alice");
+            assert_eq!(stale.revision.flatten(), Some(1));
+            operator.disable_subject(&subject).await.unwrap();
+            assert!(admin.read(request.clone()).await.unwrap().cached);
+            let response = app
+                .invoke::<auth::Auth>(
+                    "test.human/browser",
+                    "authenticate",
+                    authenticate_request(Some(CredentialEvidence::new(
+                        "session",
+                        &session.credential,
+                    ))),
+                )
+                .await
+                .unwrap();
+            assert!(matches!(response, Err(auth::AuthenticateError::Revoked)));
+            assert_eq!(
+                app.shutdown(StdDuration::from_secs(2)).await,
+                ShutdownOutcome::Clean
+            );
+            let app = start(&database, &schemas, ceiling()).await;
+            let admin = lenso_capability_auth_profile::ProfileClient::from_dependencies(
+                &app.dependencies("test.human/bootstrap").unwrap(),
+            )
+            .unwrap();
+            let fresh = admin.read(request).await.unwrap();
+            assert!(!fresh.cached);
+            assert_eq!(fresh.display_name.flatten().unwrap(), "Alice New");
+            assert_eq!(fresh.revision.flatten(), Some(2));
+            let response = app
+                .invoke::<auth::Auth>(
+                    "test.human/browser",
+                    "authenticate",
+                    authenticate_request(Some(CredentialEvidence::new(
+                        "session",
+                        &session.credential,
+                    ))),
+                )
+                .await
+                .unwrap();
+            assert!(matches!(response, Err(auth::AuthenticateError::Revoked)));
+            assert_eq!(
+                app.shutdown(StdDuration::from_secs(2)).await,
+                ShutdownOutcome::Clean
+            );
+        }))
+        .await;
+    let pool = sqlx::PgPool::connect(&database).await.unwrap();
+    for schema in &schemas {
+        pool.execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
+            .await
+            .unwrap();
+    }
+    pool.close().await;
 }

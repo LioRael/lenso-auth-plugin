@@ -1,0 +1,22 @@
+[package]
+name = "lenso-auth-profile-plugin"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+repository.workspace = true
+description = "Display-only Account profile projection with optional stale cache."
+[package.metadata.lenso]
+plugin-id = "lenso.auth.profile"
+root-slot = "auth-profile"
+[dependencies]
+lenso.workspace = true
+lenso-kernel.workspace = true
+lenso-native-adapter.workspace = true
+lenso-capability-account-admin = { path = "../lenso-capability-account-admin", version = "0.1.0" }
+lenso-capability-auth-profile = { path = "../lenso-capability-auth-profile", version = "0.1.0" }
+lenso-capability-auth-profile-cache = { path = "../lenso-capability-auth-profile-cache", version = "0.1.0" }
+serde.workspace = true
+url.workspace = true
+[lints]
+workspace = true

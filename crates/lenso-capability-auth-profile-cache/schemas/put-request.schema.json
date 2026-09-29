@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["namespace", "subject", "display_name", "revision"],
+  "properties": {
+    "namespace": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "avatar_url": {
+      "type": ["string", "null"]
+    },
+    "revision": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false,
+  "title": "PutRequest"
+}

@@ -22,6 +22,10 @@ serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 [dev-dependencies]
+lenso-auth-profile-plugin = { path = "../lenso-auth-profile-plugin", version = "0.1.0" }
+lenso-capability-auth-profile = { path = "../lenso-capability-auth-profile", version = "0.1.0" }
+lenso-auth-profile-cache-plugin = {path="../lenso-auth-profile-cache-plugin"}
+lenso-capability-auth-profile-cache = {path="../lenso-capability-auth-profile-cache"}
 lenso-app-plan.workspace = true
 lenso-runner.workspace = true
 lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
@@ -40,3 +44,4 @@ sqlx.workspace = true
 tokio = { version = "1.52", features = ["macros", "rt"] }
 [lints]
 workspace = true
+

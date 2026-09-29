@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["found", "cached"],
+  "properties": {
+    "found": {
+      "type": "boolean"
+    },
+    "display_name": {
+      "type": ["string", "null"]
+    },
+    "avatar_url": {
+      "type": ["string", "null"]
+    },
+    "revision": {
+      "type": ["integer", "null"],
+      "format": "int64"
+    },
+    "cached": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "title": "ReadResponse"
+}

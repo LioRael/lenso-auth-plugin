@@ -108,3 +108,37 @@ normal generated Rust Plugin/Capability path, with isolated temporary storage.
 The receipt separately identifies local D1 qualification; it is not remote D1
 or Hyperdrive deployment evidence. Hyperdrive qualification was deferred by the
 owner for this delivery.
+
+## Display profile and optional cache
+
+`AccountAdmin@1` Descriptor 1.1 adds `read_profile`, guarded by the Account
+owner's exact `admin_callers`. PostgreSQL migration 5 stores only display name,
+avatar URL and a CAS revision. `AccountAuthOperator::update_display_profile`
+updates those fields; the read always uses current owner storage. Workers returns
+`UnsupportedProfile` for this new display operation and has no display migration.
+
+The removable `lenso.auth.profile` Plugin provides the display-only
+`lenso.auth.profile@1` role. Its required named `account` port is an
+`AccountAdminClient`; its optional named `profile_cache` port is an
+`Option<ProfileCacheClient>`. The separately selected `lenso.auth.profile-cache.memory`
+implementation holds bounded, generation-local values with a monotonic TTL.
+A cache failure, malformed display value or expiry falls back to the Account read.
+Cache values may be stale and cannot include status, sessions, credentials,
+assertions, permissions or any other authorization fact. Account `authenticate`,
+`CredentialState.inspect`, credential issuance and subject-status reads never
+call either display role.
+
+Choose `None` through the normal Source App dependency selection API for
+consumer `lenso.auth.profile/default`, requirement `profile_cache`. The persisted
+`plugins/.dependencies.json` choice has `provider: null` and remains absent after
+restarts, provider removal and provider return. Selecting a cache is an explicit
+Host-granted choice; the projection does not create a fallback provider. The
+PostgreSQL fixture proves a cached old name remains displayable while a revoked
+session is rejected, and restarting with no cache reads the new owner revision.
+
+`lenso_auth_sdk::delegation::denies_human_context` is a denial-only filter for
+existing trusted human-decider callers. A forwarded sealed assertion with a
+reserved scoped-delegation claim, a non-user actor kind or malformed encoding is
+rejected. Missing assertions preserve the explicitly configured trusted-local
+caller policy. This helper neither verifies a proof nor grants human authority;
+remote boundaries still perform current realm, credential, ceiling and RBAC checks.

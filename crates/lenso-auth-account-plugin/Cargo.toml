@@ -24,6 +24,7 @@ js-sys = { version = "0.3", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 lenso.workspace = true
+url.workspace = true
 base64.workspace = true
 futures.workspace = true
 getrandom.workspace = true
@@ -48,6 +49,9 @@ time.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+lenso-auth-profile-plugin = { path="../lenso-auth-profile-plugin", version="0.1.0" }
+lenso-auth-profile-cache-plugin = { path="../lenso-auth-profile-cache-plugin", version="0.1.0" }
+lenso-capability-auth-profile-cache = { path="../lenso-capability-auth-profile-cache", version="0.1.0" }
 lenso-app-plan.workspace = true
 tokio = { version = "1.52", features = ["macros", "rt"] }
 

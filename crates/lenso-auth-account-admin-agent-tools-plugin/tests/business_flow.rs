@@ -182,7 +182,12 @@ fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
         .with_capability(endpoint(
             admin::CAPABILITY_ID,
             admin::DESCRIPTOR_VERSION,
-            &["list_subjects", "list_sessions", "set_subject_status"],
+            &[
+                "list_subjects",
+                "list_sessions",
+                "set_subject_status",
+                "read_profile",
+            ],
         ))
         .with_capability(endpoint(
             credential_state::CAPABILITY_ID,

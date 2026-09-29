@@ -35,6 +35,23 @@ impl AccountAuthOperator {
             postgres: OwnedPostgres::prepare(database_url, schema_plan(schema)?).await?,
         })
     }
+    /// Updates display-only subject data using an explicit revision precondition.
+    pub async fn update_display_profile(
+        &self,
+        subject: &str,
+        expected_revision: i64,
+        display_name: &str,
+        avatar_url: Option<&str>,
+    ) -> Result<Option<i64>, AccountOperatorError> {
+        if !crate::valid_name(subject)
+            || expected_revision < 0
+            || !crate::profile::valid_profile(display_name, avatar_url)
+        {
+            return Err(AccountOperatorError::InvalidProfile);
+        }
+        sqlx::query_scalar("UPDATE identity_subjects SET display_name=$3,avatar_url=$4,profile_revision=profile_revision+1 WHERE subject_id=$1 AND profile_revision=$2 RETURNING profile_revision").bind(subject).bind(expected_revision).bind(display_name).bind(avatar_url).fetch_optional(self.postgres.pool()).await.map_err(db("update display profile"))
+    }
+
     /// Narrows an existing session's stored ceiling without issuing another credential.
     pub async fn attenuate_session_ceiling(
         &self,
@@ -103,6 +120,8 @@ impl AccountAuthOperator {
 
 #[derive(Debug, Error)]
 pub enum AccountOperatorError {
+    #[error("invalid display-only profile")]
+    InvalidProfile,
     #[error(transparent)]
     Plan(#[from] lenso_postgres_kit::PlanError),
     #[error(transparent)]

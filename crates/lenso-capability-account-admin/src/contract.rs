@@ -135,14 +135,42 @@ pub enum ListSessionsError {
     Forbidden,
 }
 
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct ReadProfileRequest {
+    pub subject: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct ReadProfileResponse {
+    pub found: bool,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+    pub revision: Option<i64>,
+    pub cached: bool,
+}
+#[derive(lenso::DomainError)]
+pub enum ReadProfileError {
+    Forbidden,
+    InvalidSubject,
+    UnsupportedProfile,
+}
+
 #[lenso::capability(
     id = "lenso.auth.account-admin",
     major = 1,
-    version = "1.0.0",
+    version = "1.1.0",
     portable = true,
     cross_lane_transfer = true
 )]
 pub trait AccountAdmin {
+    async fn read_profile(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: ReadProfileRequest,
+    ) -> Result<ReadProfileResponse, ReadProfileError>;
     async fn list_subjects(
         &self,
         context: lenso::Ctx<'_>,

@@ -2,6 +2,10 @@
 resolver = "2"
 members = [
     "crates/lenso-auth-account-plugin",
+    "crates/lenso-auth-profile-cache-plugin",
+    "crates/lenso-capability-auth-profile-cache",
+    "crates/lenso-capability-auth-profile",
+    "crates/lenso-auth-profile-plugin",
     "crates/lenso-auth-account-admin-agent-tools-plugin",
     "crates/lenso-auth-anonymous-plugin",
     "crates/lenso-auth-api-token-plugin",

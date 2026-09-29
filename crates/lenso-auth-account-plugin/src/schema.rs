@@ -21,6 +21,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "add-scoped-delegation-receipts",
         "migrations/postgres/004_add_scoped_delegation_receipts.sql"
     ),
+    (
+        5,
+        "add-display-profile",
+        "migrations/postgres/005_add_display_profile.sql"
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {

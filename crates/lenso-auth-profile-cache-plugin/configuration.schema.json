@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "maximum_age_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600
+    },
+    "maximum_entries": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000
+    },
+    "caller_instances": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "maximum_age_seconds",
+    "maximum_entries",
+    "caller_instances"
+  ]
+}

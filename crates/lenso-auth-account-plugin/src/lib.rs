@@ -3,6 +3,7 @@
 mod delegation;
 #[cfg(feature = "postgres")]
 mod operator;
+mod profile;
 #[cfg(feature = "postgres")]
 mod schema;
 mod storage;
