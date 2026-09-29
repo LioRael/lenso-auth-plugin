@@ -12,6 +12,10 @@ use lenso_app_plan::{
 use lenso_auth_api_token_plugin::{
     ApiTokenAuthConfig, ApiTokenAuthOperator, IssueApiToken, PACKAGE_ID, assertion_public_key,
 };
+use lenso_auth_sdk::credential::{
+    CredentialBinding, MANAGEMENT_CEILING_CLAIM, ManagementCredentialCeiling,
+    ManagementResourceScope,
+};
 use lenso_auth_sdk::{
     ActorAssertion, ActorAssertionVerifier, ActorProjectionError, AuthOutcome, CredentialEvidence,
     FixedClock, TypedActor, audience, authenticate_request, decode_auth_response,
@@ -20,6 +24,7 @@ use lenso_capability_auth::{
     AUTHENTICATE_OPERATION, Auth, AuthenticateError, CAPABILITY_ID as AUTH_CAPABILITY_ID,
     DESCRIPTOR_VERSION as AUTH_DESCRIPTOR_VERSION,
 };
+use lenso_capability_credential_state as credential_state;
 use lenso_capability_secrets::{
     CAPABILITY_ID as SECRETS_CAPABILITY_ID, DESCRIPTOR_VERSION as SECRETS_DESCRIPTOR_VERSION,
     RESOLVE_OPERATION, ResolveError, ResolveRequest, ResolveResponse, Secrets, SecretsEndpoint,
@@ -154,7 +159,23 @@ async fn composed_auth_issues_publicly_verifiable_assertions_and_observes_revoca
                 actor_kind: "user".to_owned(),
                 assurance: "api-token".to_owned(),
                 audience: vec![audience("example.secure@1", "read")],
-                claims: BTreeMap::from([("tenant".to_owned(), json!("acme"))]),
+                claims: BTreeMap::from([
+                    ("tenant".to_owned(), json!("acme")),
+                    (
+                        MANAGEMENT_CEILING_CLAIM.into(),
+                        json!(ManagementCredentialCeiling {
+                            deployment: "deployment-a".into(),
+                            permissions: vec![
+                                "auth.subject.read".into(),
+                                "auth.session.revoke".into()
+                            ],
+                            resource_scopes: vec![ManagementResourceScope {
+                                kind: "management-deployment".into(),
+                                id: "deployment-a".into()
+                            }]
+                        }),
+                    ),
+                ]),
                 expires_at: OffsetDateTime::now_utc() + Duration::hours(1),
             },
         )
@@ -242,7 +263,7 @@ async fn exercise_auth(
         .unwrap();
     assert_eq!(actor, TestActor("user-123".to_owned()));
 
-    assert!(operator.revoke_session(session_id).await.unwrap());
+    exercise_credential_state(app, operator, &assertion, session_id).await;
     let revoked = app
         .invoke::<Auth>(
             "caller",
@@ -253,6 +274,123 @@ async fn exercise_auth(
         .unwrap()
         .unwrap_err();
     assert_eq!(revoked, AuthenticateError::Revoked);
+}
+
+async fn exercise_credential_state(
+    app: &NativeApp,
+    operator: &ApiTokenAuthOperator,
+    assertion: &ActorAssertion,
+    session_id: &str,
+) {
+    let binding = CredentialBinding::from_assertion(assertion).unwrap();
+    assert_eq!(binding.session_id, session_id);
+    let request = || credential_state::InspectRequest {
+        credential_id: binding.credential_id.clone(),
+        session_id: binding.session_id.clone(),
+    };
+    let current = app
+        .invoke::<credential_state::CredentialState>(
+            "caller",
+            credential_state::INSPECT_OPERATION,
+            request(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(current.active);
+    assert_eq!(current.subject, assertion.subject());
+    assert_eq!(
+        CredentialBinding::from_claims(&current.claims).unwrap(),
+        binding
+    );
+    exercise_reference_rejection(app, &binding).await;
+    let signed = ManagementCredentialCeiling::from_assertion(assertion).unwrap();
+    let mut narrowed = signed.clone();
+    narrowed.permissions.pop();
+    assert!(
+        operator
+            .attenuate_management_credential(&binding, &narrowed)
+            .await
+            .unwrap()
+    );
+    assert!(
+        operator
+            .attenuate_management_credential(&binding, &signed)
+            .await
+            .is_err()
+    );
+    let current = app
+        .invoke::<credential_state::CredentialState>(
+            "caller",
+            credential_state::INSPECT_OPERATION,
+            request(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    let ceiling = ManagementCredentialCeiling::from_claims(&current.claims).unwrap();
+    assert!(!ceiling.allows(
+        "deployment-a",
+        "auth.session.revoke",
+        "management-deployment",
+        "deployment-a"
+    ));
+    assert!(signed.allows(
+        "deployment-a",
+        "auth.session.revoke",
+        "management-deployment",
+        "deployment-a"
+    ));
+    assert!(!format!("{current:?}").contains("acme"));
+    assert!(operator.revoke_session(session_id).await.unwrap());
+    let current = app
+        .invoke::<credential_state::CredentialState>(
+            "caller",
+            credential_state::INSPECT_OPERATION,
+            request(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!current.active);
+    assert!(
+        !operator
+            .attenuate_management_credential(&binding, &narrowed)
+            .await
+            .unwrap()
+    );
+}
+
+async fn exercise_reference_rejection(app: &NativeApp, binding: &CredentialBinding) {
+    let request = || credential_state::InspectRequest {
+        credential_id: binding.credential_id.clone(),
+        session_id: binding.session_id.clone(),
+    };
+    assert_eq!(
+        app.invoke::<credential_state::CredentialState>(
+            "observer",
+            credential_state::INSPECT_OPERATION,
+            request()
+        )
+        .await
+        .unwrap()
+        .unwrap_err(),
+        credential_state::InspectError::PermissionDenied
+    );
+    assert_eq!(
+        app.invoke::<credential_state::CredentialState>(
+            "caller",
+            credential_state::INSPECT_OPERATION,
+            credential_state::InspectRequest {
+                credential_id: binding.credential_id.clone(),
+                session_id: "ses_other".into()
+            }
+        )
+        .await
+        .unwrap()
+        .unwrap_err(),
+        credential_state::InspectError::NotFound
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -325,8 +463,23 @@ fn plan(schema: &str, public_key_secret: &str) -> ResolvedAppPlan {
         60,
     )
     .unwrap();
-    let caller = PluginInstancePlan::new("caller", CALLER_PACKAGE_ID).with_requirement(
-        CapabilityRequirementPlan::one(AUTH_CAPABILITY_ID, AUTH_DESCRIPTOR_VERSION),
+    let config = config
+        .with_credential_state_callers(vec!["caller".into()])
+        .unwrap();
+    let caller = PluginInstancePlan::new("caller", CALLER_PACKAGE_ID)
+        .with_requirement(CapabilityRequirementPlan::one(
+            AUTH_CAPABILITY_ID,
+            AUTH_DESCRIPTOR_VERSION,
+        ))
+        .with_requirement(CapabilityRequirementPlan::one(
+            credential_state::CAPABILITY_ID,
+            credential_state::DESCRIPTOR_VERSION,
+        ));
+    let observer = PluginInstancePlan::new("observer", CALLER_PACKAGE_ID).with_requirement(
+        CapabilityRequirementPlan::one(
+            credential_state::CAPABILITY_ID,
+            credential_state::DESCRIPTOR_VERSION,
+        ),
     );
     let auth = PluginInstancePlan::new("auth", PACKAGE_ID)
         .with_configuration(serde_json::to_string(&config).unwrap())
@@ -339,6 +492,11 @@ fn plan(schema: &str, public_key_secret: &str) -> ResolvedAppPlan {
             AUTH_DESCRIPTOR_VERSION,
             [AUTHENTICATE_OPERATION],
         ));
+    let auth = auth.with_capability(CapabilityEndpointPlan::new(
+        credential_state::CAPABILITY_ID,
+        credential_state::DESCRIPTOR_VERSION,
+        [credential_state::INSPECT_OPERATION],
+    ));
     let secrets = PluginInstancePlan::new("secrets", SECRETS_PACKAGE_ID).with_capability(
         CapabilityEndpointPlan::new(
             SECRETS_CAPABILITY_ID,
@@ -347,8 +505,20 @@ fn plan(schema: &str, public_key_secret: &str) -> ResolvedAppPlan {
         ),
     );
     AppComposition::new(
-        vec![caller, auth, secrets],
+        vec![caller, observer, auth, secrets],
         vec![
+            CapabilityBinding::new(
+                "caller",
+                credential_state::CAPABILITY_ID,
+                credential_state::DESCRIPTOR_VERSION,
+                "auth",
+            ),
+            CapabilityBinding::new(
+                "observer",
+                credential_state::CAPABILITY_ID,
+                credential_state::DESCRIPTOR_VERSION,
+                "auth",
+            ),
             CapabilityBinding::new(
                 "auth",
                 SECRETS_CAPABILITY_ID,

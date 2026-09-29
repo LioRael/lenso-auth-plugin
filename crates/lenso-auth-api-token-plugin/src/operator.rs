@@ -146,6 +146,21 @@ impl ApiTokenAuthOperator {
         })
     }
 
+    /// Narrows a management credential's current ceiling; it never expands authority.
+    pub async fn attenuate_management_credential(
+        &self,
+        binding: &lenso_auth_sdk::credential::CredentialBinding,
+        ceiling: &lenso_auth_sdk::credential::ManagementCredentialCeiling,
+    ) -> Result<bool, AuthOperatorError> {
+        binding
+            .validate()
+            .map_err(|_| AuthOperatorError::InvalidIssueSpec)?;
+        ceiling
+            .validate()
+            .map_err(|_| AuthOperatorError::InvalidIssueSpec)?;
+        crate::storage::attenuate_management_credential(&self.store, binding, ceiling).await
+    }
+
     /// Revokes one complete session and every credential attached to it.
     pub async fn revoke_session(&self, session_id: &str) -> Result<bool, AuthOperatorError> {
         match &self.store {
@@ -210,6 +225,15 @@ pub struct IssueApiToken {
 
 impl IssueApiToken {
     fn validate(&self) -> Result<(), AuthOperatorError> {
+        use lenso_auth_sdk::credential::{
+            CREDENTIAL_BINDING_CLAIM, MANAGEMENT_CEILING_CLAIM, ManagementCredentialCeiling,
+        };
+        if self.claims.contains_key(CREDENTIAL_BINDING_CLAIM)
+            || (self.claims.contains_key(MANAGEMENT_CEILING_CLAIM)
+                && ManagementCredentialCeiling::from_claims(&self.claims).is_err())
+        {
+            return Err(AuthOperatorError::InvalidIssueSpec);
+        }
         for value in [&self.subject, &self.actor_kind, &self.assurance] {
             if value.is_empty() || value.len() > MAX_IDENTITY_LENGTH {
                 return Err(AuthOperatorError::InvalidIssueSpec);

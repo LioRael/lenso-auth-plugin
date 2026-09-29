@@ -12,11 +12,13 @@ pub mod workers;
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 
 use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
+use lenso_auth_sdk::credential::{CREDENTIAL_BINDING_CLAIM, CredentialBinding};
 use lenso_auth_sdk::{ActorAssertionIssuer, Validity, absent_response, authenticated_response};
 use lenso_capability_auth as auth;
 use lenso_capability_auth::{
-    Auth, AuthInvocationError, AuthProvider, AuthRequest, AuthResponse, AuthenticateError,
+    Auth, AuthInvocationError, AuthRequest, AuthResponse, AuthenticateError,
 };
+use lenso_capability_credential_state as credential_state;
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
@@ -55,6 +57,9 @@ pub struct ApiTokenAuthConfig {
     assertion_signing_key_secret: String,
     token_pepper_secret: String,
     assertion_ttl_seconds: u64,
+    #[serde(default)]
+    #[lenso(default = [])]
+    credential_state_callers: Vec<String>,
 }
 
 impl ApiTokenAuthConfig {
@@ -77,6 +82,7 @@ impl ApiTokenAuthConfig {
             assertion_signing_key_secret: assertion_signing_key_secret.into(),
             token_pepper_secret: token_pepper_secret.into(),
             assertion_ttl_seconds,
+            credential_state_callers: Vec::new(),
         };
         config.validate()?;
         Ok(config)
@@ -94,7 +100,30 @@ impl ApiTokenAuthConfig {
         &self.assertion_public_key
     }
 
+    pub fn with_credential_state_callers(
+        mut self,
+        callers: Vec<String>,
+    ) -> Result<Self, AuthConfigError> {
+        self.credential_state_callers = callers;
+        self.validate()?;
+        Ok(self)
+    }
+
     fn validate(&self) -> Result<(), AuthConfigError> {
+        if self.credential_state_callers.len() > 64
+            || self
+                .credential_state_callers
+                .iter()
+                .any(|caller| !valid_caller(caller))
+            || self
+                .credential_state_callers
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.credential_state_callers.len()
+        {
+            return Err(AuthConfigError::InvalidCredentialStateCallers);
+        }
         if self.schema.is_empty()
             || self.schema.len() > 63
             || !self.schema.as_bytes()[0].is_ascii_lowercase()
@@ -161,6 +190,7 @@ impl fmt::Debug for ApiTokenAuthConfig {
             .field("d1_binding", &self.d1_binding)
             .field("schema", &self.schema)
             .field("issuer", &self.issuer)
+            .field("credential_state_callers", &self.credential_state_callers)
             .field("assertion_public_key", &self.assertion_public_key)
             .field("database_url_secret", &self.database_url_secret)
             .field(
@@ -175,6 +205,8 @@ impl fmt::Debug for ApiTokenAuthConfig {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum AuthConfigError {
+    #[error("invalid exact credential-state caller allowlist")]
+    InvalidCredentialStateCallers,
     #[error("invalid owned PostgreSQL schema")]
     InvalidSchema,
     #[error("invalid Auth assertion issuer")]
@@ -243,8 +275,10 @@ impl fmt::Debug for ApiTokenAuthPlugin {
     }
 }
 
-#[provides(auth::Auth)]
-impl AuthProvider for ApiTokenAuthPlugin {
+#[provides(auth::Auth, credential_state::CredentialState)]
+impl ApiTokenAuthPlugin {}
+
+impl ApiTokenAuthPlugin {
     fn authenticate(
         &self,
         _context: InvocationContext,
@@ -262,6 +296,31 @@ impl AuthProvider for ApiTokenAuthPlugin {
                 Err(AuthInvocationError::Domain(error)) => Ok(Err(error)),
                 Err(AuthInvocationError::Runtime(error)) => Err(error),
             }
+        })
+    }
+}
+
+impl ApiTokenAuthPlugin {
+    fn inspect(
+        &self,
+        context: InvocationContext,
+        request: credential_state::InspectRequest,
+    ) -> NativeRequestFuture<credential_state::CredentialState> {
+        let callers = self.config.credential_state_callers.clone();
+        let prepared = self.state.borrow().clone();
+        Box::pin(async move {
+            let permitted = context
+                .caller_instance()
+                .is_some_and(|caller| callers.iter().any(|allowed| allowed == caller));
+            if !permitted {
+                return Ok(Err(credential_state::InspectError::PermissionDenied));
+            }
+            let Some(prepared) = prepared else {
+                return Err(RuntimeFailure::PluginFailure {
+                    detail: "API Token Auth is not prepared".into(),
+                });
+            };
+            inspect(&prepared, request).await
         })
     }
 }
@@ -418,13 +477,18 @@ async fn authenticate(
     let expires_at = std::cmp::min(stored.expires_at, now + prepared.assertion_ttl);
     let validity = Validity::new(now, expires_at)
         .map_err(|_| AuthInvocationError::Domain(AuthenticateError::Expired))?;
+    let mut claims = stored.claims;
+    claims.insert(
+        CREDENTIAL_BINDING_CLAIM.into(),
+        serde_json::json!({"credential_id":stored.credential_id,"session_id":stored.session_id}),
+    );
     let assertion = prepared.issuer.issue(
         stored.subject,
         stored.actor_kind,
         stored.assurance,
         stored.audience,
         validity,
-        stored.claims,
+        claims,
     );
     Ok(authenticated_response(&assertion))
 }
@@ -511,6 +575,62 @@ pub fn workers_factory(
         plugin.d1 = Some(binding.clone());
         Ok(())
     })
+}
+
+async fn inspect(
+    prepared: &PreparedAuth,
+    request: credential_state::InspectRequest,
+) -> NativeRequestFutureResult {
+    let binding = CredentialBinding {
+        credential_id: request.credential_id,
+        session_id: request.session_id,
+    };
+    if binding.validate().is_err() {
+        return Ok(Err(credential_state::InspectError::InvalidReference));
+    }
+    let Some(stored) =
+        storage::inspect_credential(&prepared.store, &binding.credential_id, &binding.session_id)
+            .await
+            .map_err(|error| RuntimeFailure::PluginFailure {
+                detail: error.to_string(),
+            })?
+    else {
+        return Ok(Err(credential_state::InspectError::NotFound));
+    };
+    let mut claims = stored.claims;
+    claims.insert(
+        CREDENTIAL_BINDING_CLAIM.into(),
+        serde_json::to_value(&binding).expect("credential binding serializes"),
+    );
+    Ok(Ok(credential_state::InspectResponse {
+        credential_id: stored.credential_id,
+        session_id: stored.session_id,
+        subject: stored.subject,
+        actor_kind: stored.actor_kind,
+        assurance: stored.assurance,
+        audience: stored.audience,
+        claims,
+        expires_at: stored
+            .expires_at
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|_| RuntimeFailure::PluginFailure {
+                detail: "credential expiry is invalid".into(),
+            })?,
+        active: !stored.revoked && stored.expires_at > OffsetDateTime::now_utc(),
+    }))
+}
+type NativeRequestFutureResult = Result<
+    Result<credential_state::InspectResponse, credential_state::InspectError>,
+    RuntimeFailure,
+>;
+fn valid_caller(value: &str) -> bool {
+    let mut count = 0;
+    value.len() <= 256
+        && value.split('/').all(|segment| {
+            count += 1;
+            valid_identity(segment)
+        })
+        && (1..=2).contains(&count)
 }
 
 #[cfg(test)]

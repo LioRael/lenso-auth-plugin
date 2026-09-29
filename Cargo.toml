@@ -21,6 +21,7 @@ members = [
     "crates/lenso-capability-account-admin",
     "crates/lenso-capability-anonymous-auth",
     "crates/lenso-capability-credential-issuer",
+    "crates/lenso-capability-credential-state",
     "crates/lenso-capability-identity-directory",
     "crates/lenso-capability-device-auth",
     "crates/lenso-capability-federated-auth",

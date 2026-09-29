@@ -1,0 +1,15 @@
+{
+  "id": "lenso.auth.credential-state@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": false,
+  "operations": [
+    {
+      "name": "inspect",
+      "interaction": "request",
+      "request_schema": "schemas/inspect-request.schema.json",
+      "response_schema": "schemas/inspect-response.schema.json",
+      "domain_error_schema": "schemas/inspect-error.schema.json"
+    }
+  ]
+}

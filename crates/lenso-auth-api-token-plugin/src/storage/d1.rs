@@ -16,12 +16,20 @@ pub(super) async fn load_credential(
     db: &D1Binding,
     digest: &[u8],
 ) -> Result<Option<StoredCredential>, AuthPluginError> {
-    let results=db.run(vec![statement("SELECT s.subject,s.actor_kind,s.assurance,s.audience,s.claims,MIN(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE t.token_digest=?1",vec![json!(URL_SAFE_NO_PAD.encode(digest))])]).await.map_err(fail)?;
+    let results=db.run(vec![statement("SELECT t.token_id,t.session_id,s.subject,s.actor_kind,s.assurance,s.audience,s.claims,MIN(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE t.token_digest=?1",vec![json!(URL_SAFE_NO_PAD.encode(digest))])]).await.map_err(fail)?;
+    decode_result(&results)
+}
+
+fn decode_result(
+    results: &[crate::workers::BatchResult],
+) -> Result<Option<StoredCredential>, AuthPluginError> {
     results[0]
         .results
         .first()
         .map(|row| {
             Ok(StoredCredential {
+                credential_id: field(row, "token_id").map_err(fail)?,
+                session_id: field(row, "session_id").map_err(fail)?,
                 subject: field(row, "subject").map_err(fail)?,
                 actor_kind: field(row, "actor_kind").map_err(fail)?,
                 assurance: field(row, "assurance").map_err(fail)?,
@@ -70,5 +78,48 @@ pub(crate) async fn revoke_token(db: &D1Binding, id: &str) -> Result<bool, AuthO
         )])
         .await
         .map_err(operator)?;
+    Ok(result[0].meta.changes == 1)
+}
+
+pub(super) async fn inspect_credential(
+    db: &D1Binding,
+    credential_id: &str,
+    session_id: &str,
+) -> Result<Option<StoredCredential>, AuthPluginError> {
+    let results=db.run(vec![statement("SELECT t.token_id,t.session_id,s.subject,s.actor_kind,s.assurance,s.audience,s.claims,MIN(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM api_tokens t JOIN auth_sessions s ON s.session_id=t.session_id WHERE t.token_id=?1 AND t.session_id=?2",vec![json!(credential_id),json!(session_id)])]).await.map_err(fail)?;
+    decode_result(&results)
+}
+
+pub(super) async fn attenuate_management_credential(
+    db: &D1Binding,
+    binding: &lenso_auth_sdk::credential::CredentialBinding,
+    ceiling: &lenso_auth_sdk::credential::ManagementCredentialCeiling,
+) -> Result<bool, AuthOperatorError> {
+    use lenso_auth_sdk::credential::{MANAGEMENT_CEILING_CLAIM, ManagementCredentialCeiling};
+    let Some(stored) = inspect_credential(db, &binding.credential_id, &binding.session_id)
+        .await
+        .map_err(|_| AuthOperatorError::Storage)?
+    else {
+        return Ok(false);
+    };
+    let now = OffsetDateTime::now_utc();
+    if stored.revoked || stored.expires_at <= now {
+        return Ok(false);
+    }
+    let parent = ManagementCredentialCeiling::from_claims(&stored.claims)
+        .map_err(|_| AuthOperatorError::InvalidIssueSpec)?;
+    if !ceiling.is_attenuation_of(&parent) {
+        return Err(AuthOperatorError::InvalidIssueSpec);
+    }
+    let expected =
+        serde_json::to_string(&stored.claims).map_err(|_| AuthOperatorError::InvalidIssueSpec)?;
+    let mut claims = stored.claims;
+    claims.insert(
+        MANAGEMENT_CEILING_CLAIM.into(),
+        serde_json::to_value(ceiling).expect("ceiling serializes"),
+    );
+    let narrowed =
+        serde_json::to_string(&claims).map_err(|_| AuthOperatorError::InvalidIssueSpec)?;
+    let result=db.run(vec![statement("UPDATE auth_sessions SET claims=?1 WHERE session_id=?2 AND claims=?3 AND revoked_at IS NULL AND expires_at>?4 AND EXISTS(SELECT 1 FROM api_tokens WHERE token_id=?5 AND session_id=?2 AND revoked_at IS NULL AND expires_at>?4)",vec![json!(narrowed),json!(binding.session_id),json!(expected),timestamp(now),json!(binding.credential_id)])]).await.map_err(operator)?;
     Ok(result[0].meta.changes == 1)
 }

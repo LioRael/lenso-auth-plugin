@@ -67,4 +67,4 @@ jobs:
       - name: Check extracted Workers Auth packages
         run: python3 workers/check-packages.py
       - name: Package public crates
-        run: cargo package --locked -p lenso-capability-auth -p lenso-auth-sdk -p lenso-capability-credential-issuer -p lenso-capability-identity-directory -p lenso-capability-password-auth -p lenso-auth-api-token-plugin
+        run: cargo package --locked -p lenso-capability-auth -p lenso-capability-credential-state -p lenso-auth-sdk -p lenso-capability-credential-issuer -p lenso-capability-identity-directory -p lenso-capability-password-auth

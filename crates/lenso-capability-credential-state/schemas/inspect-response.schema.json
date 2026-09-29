@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "credential_id",
+    "session_id",
+    "subject",
+    "actor_kind",
+    "assurance",
+    "audience",
+    "claims",
+    "expires_at",
+    "active"
+  ],
+  "properties": {
+    "credential_id": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "actor_kind": {
+      "type": "string"
+    },
+    "assurance": {
+      "type": "string"
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": true,
+      "x-lenso-sensitive": true
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "active": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "title": "InspectResponse"
+}

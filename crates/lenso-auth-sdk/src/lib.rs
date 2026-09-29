@@ -1,5 +1,6 @@
 //! Portable Auth semantics shared by ingress Adapters and target Plugins.
 
+pub mod credential;
 pub mod realm;
 
 use std::{collections::BTreeMap, fmt};

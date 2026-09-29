@@ -1189,6 +1189,7 @@ dependencies = [
  "lenso-app-plan",
  "lenso-auth-sdk",
  "lenso-capability-auth",
+ "lenso-capability-credential-state",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-migration",
@@ -1541,6 +1542,21 @@ dependencies = [
 [[package]]
 name = "lenso-capability-credential-issuer"
 version = "0.3.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-credential-state"
+version = "0.1.0"
 dependencies = [
  "futures",
  "lenso-contract-authoring",

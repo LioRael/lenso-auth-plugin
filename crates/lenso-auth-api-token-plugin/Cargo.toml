@@ -29,6 +29,7 @@ futures.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
 lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.3" }
+lenso-capability-credential-state = { path = "../lenso-capability-credential-state", version = "0.1.0" }
 lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true

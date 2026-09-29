@@ -9,6 +9,8 @@ use crate::AuthPluginError;
 
 #[derive(Clone, Debug)]
 pub(crate) struct StoredCredential {
+    pub(crate) credential_id: String,
+    pub(crate) session_id: String,
     pub(crate) subject: String,
     pub(crate) actor_kind: String,
     pub(crate) assurance: String,
@@ -87,3 +89,35 @@ pub(crate) use d1::{
     issue as issue_workers, revoke_session as revoke_session_workers,
     revoke_token as revoke_token_workers,
 };
+
+pub(crate) async fn inspect_credential(
+    store: &ApiTokenStore,
+    credential_id: &str,
+    session_id: &str,
+) -> Result<Option<StoredCredential>, AuthPluginError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        ApiTokenStore::Postgres(pg) => {
+            postgres::inspect_credential(pg, credential_id, session_id).await
+        }
+        #[cfg(feature = "workers")]
+        ApiTokenStore::D1(binding) => {
+            d1::inspect_credential(binding, credential_id, session_id).await
+        }
+    }
+}
+
+pub(crate) async fn attenuate_management_credential(
+    store: &ApiTokenStore,
+    binding: &lenso_auth_sdk::credential::CredentialBinding,
+    ceiling: &lenso_auth_sdk::credential::ManagementCredentialCeiling,
+) -> Result<bool, crate::AuthOperatorError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        ApiTokenStore::Postgres(pg) => {
+            postgres::attenuate_management_credential(pg, binding, ceiling).await
+        }
+        #[cfg(feature = "workers")]
+        ApiTokenStore::D1(db) => d1::attenuate_management_credential(db, binding, ceiling).await,
+    }
+}

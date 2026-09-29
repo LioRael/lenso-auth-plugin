@@ -21,7 +21,7 @@ OWNERS = {
     "account": ("account-admin", "auth-delegation"), "oauth-flow": ("oauth-flow",),
     "password": ("credential-issuer", "identity-directory", "password-auth"),
     "phone": ("credential-issuer", "identity-directory", "phone-auth", "sms-delivery"),
-    "device": ("device-auth",), "api-token": ("auth",),
+    "device": ("device-auth",), "api-token": ("auth", "credential-state"),
     "oidc": ("credential-issuer", "identity-directory", "oidc-provider"),
 }
 CAPABILITIES = tuple(sorted({name for dependencies in OWNERS.values() for name in dependencies}))
@@ -80,6 +80,10 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
             packed.extractall(extracted, filter="data")
         return extracted / f"{name}-{versions[name]}"
 
+    runtime_packages["lenso-auth-sdk"] = package("lenso-auth-sdk")
+    cohort_config.write_text("[patch.crates-io]\n" + "".join(
+        f'{name} = {{ path = {json.dumps(str(directory))} }}\n'
+        for name, directory in runtime_packages.items()))
     capabilities = {name: package(f"lenso-capability-{name}") for name in CAPABILITIES}
     for owner, dependencies in OWNERS.items():
         config = task / f"{owner}-patch.toml"
