@@ -1,0 +1,71 @@
+.github/workflows/ci.yml
+  s_f4202e28c6b5b1::t_67f60918544cf8 70
+Cargo.lock
+  s_f4202e28c6b5b1::t_a6bf71cd65fc5d 1192,1557-1571
+Cargo.toml
+  s_f4202e28c6b5b1::t_ddaae476876ce0 24
+crates/lenso-auth-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_aee8b638c43048 32
+crates/lenso-auth-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_665f14ac1b9a05 15,19,21,60-62,85,103-111,113-126,193,208-209,278-281,303-327,480-484,491,580-635
+crates/lenso-auth-api-token-plugin/src/operator.rs
+  s_f4202e28c6b5b1::t_2e4aaef8d577bc 149-163,228-236
+crates/lenso-auth-api-token-plugin/src/storage.rs
+  s_f4202e28c6b5b1::t_40e80c2ab2dcdf 12-13,92-123
+crates/lenso-auth-api-token-plugin/src/storage/d1.rs
+  s_f4202e28c6b5b1::t_bf005ba8fa50dc 19-25,31-32,83-125
+crates/lenso-auth-api-token-plugin/src/storage/postgres.rs
+  s_f4202e28c6b5b1::t_5787add76b5488 9,27-30,37-43,45-47,60-113
+crates/lenso-auth-api-token-plugin/tests/postgres_auth.rs
+  s_f4202e28c6b5b1::t_c9331069b28999 15-18,27,162-178,266,279-395,466-482,495-499,508,510-521
+crates/lenso-auth-sdk/src/credential.rs
+  s_f4202e28c6b5b1::t_2d062263ce8834 1-193
+crates/lenso-auth-sdk/src/lib.rs
+  s_f4202e28c6b5b1::t_95bd340881e2bd 3
+crates/lenso-capability-credential-state/Cargo.toml
+  s_f4202e28c6b5b1::t_dffddd54a5bb55 1-29
+crates/lenso-capability-credential-state/build.rs
+  s_f4202e28c6b5b1::t_78587578be84d1 1-85
+crates/lenso-capability-credential-state/capability.json
+  s_7d146975368699::t_d8e3279fe86897 1-15
+crates/lenso-capability-credential-state/schemas/inspect-error.schema.json
+  s_7d146975368699::t_9c24920878d258 1-8
+crates/lenso-capability-credential-state/schemas/inspect-request.schema.json
+  s_7d146975368699::t_479df4e1b36617 1-19
+crates/lenso-capability-credential-state/schemas/inspect-response.schema.json
+  s_7d146975368699::t_f9d2fbbcf27364 1-52
+crates/lenso-capability-credential-state/src/contract.rs
+  s_f4202e28c6b5b1::t_96a24ee1ff9739 1-51
+crates/lenso-capability-credential-state/src/generated.rs
+  s_f4202e28c6b5b1::t_cebe2b99ad1884 1-441
+crates/lenso-capability-credential-state/src/lib.rs
+  s_f4202e28c6b5b1::t_29afcfcea85639 1-8
+docs/management-realm-admission.md
+  s_f4202e28c6b5b1::t_b615d93042f12f 45-84
+workers/check-packages.py
+  s_f4202e28c6b5b1::t_5d34e584505f51 24,83-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b582fde766a3c2c776f1d356d53361ecdd2d3cd4",
+  "prompts": {},
+  "sessions": {
+    "s_7d146975368699": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c54a-381f-7362-9b4d-95aea89e2437",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    },
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
