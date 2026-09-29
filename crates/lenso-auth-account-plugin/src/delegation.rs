@@ -81,6 +81,235 @@ impl AccountAuthPlugin {
     }
 }
 
+use lenso_auth_sdk::credential::{
+    CredentialBinding, ManagementCredentialCeiling, ManagementResourceScope,
+};
+use lenso_auth_sdk::delegation::{SCOPED_DELEGATION_CLAIM, ScopedDelegationBinding};
+use lenso_auth_sdk::realm::RealmAssertionVerifier;
+use lenso_auth_sdk::{ActorAssertion, ActorProjectionError, TypedActor};
+use lenso_capability_auth_delegation as scoped;
+
+struct ScopedUser(ActorAssertion);
+impl TypedActor for ScopedUser {
+    fn from_assertion(assertion: &ActorAssertion) -> Result<Self, ActorProjectionError> {
+        if assertion.actor_kind() != "user" {
+            return Err(ActorProjectionError::UnexpectedActorKind {
+                expected: "user".into(),
+                actual: assertion.actor_kind().into(),
+            });
+        }
+        Ok(Self(assertion.clone()))
+    }
+}
+#[derive(Clone, Debug)]
+struct ScopedParent {
+    subject: String,
+    session_id: String,
+    ceiling: ManagementCredentialCeiling,
+    audience: Vec<String>,
+}
+impl AccountAuthPlugin {
+    fn scoped_parent(&self, context: &InvocationContext, operation: &str) -> Option<ScopedParent> {
+        let caller = context.caller_instance()?;
+        if !caller.contains('/')
+            || !self
+                .config
+                .delegation_callers
+                .iter()
+                .any(|allowed| allowed == caller)
+        {
+            return None;
+        }
+        let verifier = RealmAssertionVerifier::new(
+            "account",
+            &self.config.issuer,
+            &self.config.assertion_public_key,
+            u32::try_from(self.config.assertion_ttl_seconds).ok()?,
+            None,
+        )
+        .ok()?;
+        let ScopedUser(assertion) = verifier
+            .project_context::<ScopedUser>(
+                context,
+                scoped::CAPABILITY_ID,
+                operation,
+                &lenso_auth_sdk::FixedClock::new(OffsetDateTime::now_utc()),
+            )
+            .ok()?;
+        if assertion.actor_kind() != "user"
+            || assertion
+                .to_wire()
+                .claims
+                .as_ref()
+                .is_some_and(|claims| claims.contains_key(SCOPED_DELEGATION_CLAIM))
+        {
+            return None;
+        }
+        let binding = CredentialBinding::from_assertion(&assertion).ok()?;
+        if binding.credential_id != binding.session_id {
+            return None;
+        }
+        let ceiling = ManagementCredentialCeiling::from_assertion(&assertion).ok()?;
+        Some(ScopedParent {
+            subject: assertion.subject().into(),
+            session_id: binding.session_id,
+            ceiling,
+            audience: assertion.audience().to_vec(),
+        })
+    }
+    pub(crate) fn grant_scoped(
+        &self,
+        context: InvocationContext,
+        mut request: scoped::GrantScopedRequest,
+    ) -> NativeRequestFuture<scoped::DelegationGrantScoped> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            if context.is_cancelled() {
+                return Err(RuntimeFailure::Cancelled {
+                    request_id: context.request_id(),
+                });
+            }
+            let Some(parent) = plugin.scoped_parent(&context, scoped::GRANT_SCOPED_OPERATION)
+            else {
+                return Ok(Err(scoped::GrantScopedError::PermissionDenied));
+            };
+            let binding = ScopedDelegationBinding {
+                task_id: request.task_id.clone(),
+                agent_session_id: request.agent_session_id.clone(),
+                delegate_caller: request.delegate_caller.clone(),
+            };
+            let ceiling = requested_ceiling(&request);
+            if !super::valid_name(&request.idempotency_key)
+                || request.idempotency_key.len() > 128
+                || binding.validate().is_err()
+                || !plugin
+                    .config
+                    .scoped_delegation_targets
+                    .contains(&binding.delegate_caller)
+                || !ceiling.is_attenuation_of(&parent.ceiling)
+                || request.audience.is_empty()
+                || request.audience.len() > 64
+                || request.audience.iter().any(|audience| {
+                    !valid_operation_audience(audience) || !parent.audience.contains(audience)
+                })
+                || request
+                    .audience
+                    .iter()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    != request.audience.len()
+            {
+                return Ok(Err(scoped::GrantScopedError::InvalidRequest));
+            }
+            let Ok(expiry) = OffsetDateTime::parse(&request.expires_at, &Rfc3339) else {
+                return Ok(Err(scoped::GrantScopedError::InvalidRequest));
+            };
+            let expiry = expiry
+                .replace_nanosecond(expiry.nanosecond() / 1000 * 1000)
+                .map_err(runtime)?;
+            request.expires_at = super::format_time(expiry)?;
+            request.permissions.sort();
+            request
+                .resource_scopes
+                .sort_by(|a, b| (&a.kind, &a.id).cmp(&(&b.kind, &b.id)));
+            request.audience.sort();
+            let prepared = plugin.prepared()?;
+            match prepared.store {
+                #[cfg(feature = "postgres")]
+                storage::AccountStore::Postgres(pg) => {
+                    scoped_postgres::grant(
+                        &pg,
+                        &prepared.pepper,
+                        &context,
+                        &parent,
+                        &request,
+                        plugin.config.management_session_ceiling.as_ref(),
+                        expiry,
+                    )
+                    .await
+                }
+                #[cfg(feature = "workers")]
+                storage::AccountStore::D1(_) => {
+                    Ok(Err(scoped::GrantScopedError::UnsupportedProfile))
+                }
+            }
+        })
+    }
+    pub(crate) fn scoped_receipt(
+        &self,
+        context: InvocationContext,
+        request: scoped::ScopedReceiptRequest,
+    ) -> NativeRequestFuture<scoped::DelegationScopedReceipt> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            if context.is_cancelled() {
+                return Err(RuntimeFailure::Cancelled {
+                    request_id: context.request_id(),
+                });
+            }
+            let Some(parent) = plugin.scoped_parent(&context, scoped::SCOPED_RECEIPT_OPERATION)
+            else {
+                return Ok(Err(scoped::ScopedReceiptError::PermissionDenied));
+            };
+            if !super::valid_name(&request.idempotency_key)
+                || request.idempotency_key.len() > 128
+                || request.task_id.is_empty()
+                || request.agent_session_id.is_empty()
+            {
+                return Ok(Err(scoped::ScopedReceiptError::InvalidRequest));
+            }
+            let prepared = plugin.prepared()?;
+            let current = storage::inspect_session(&prepared.store, &parent.session_id)
+                .await
+                .map_err(runtime)?;
+            if !current.is_some_and(|session| {
+                session.subject == parent.subject
+                    && session.status == "active"
+                    && !session.revoked
+                    && session.expires_at > OffsetDateTime::now_utc()
+                    && session.audience.contains(&lenso_auth_sdk::audience(
+                        scoped::CAPABILITY_ID,
+                        scoped::SCOPED_RECEIPT_OPERATION,
+                    ))
+            }) {
+                return Ok(Err(scoped::ScopedReceiptError::PermissionDenied));
+            }
+            match prepared.store {
+                #[cfg(feature = "postgres")]
+                storage::AccountStore::Postgres(pg) => {
+                    scoped_postgres::receipt(
+                        &pg,
+                        context.caller_instance().unwrap_or_default(),
+                        &parent,
+                        &request,
+                    )
+                    .await
+                }
+                #[cfg(feature = "workers")]
+                storage::AccountStore::D1(_) => {
+                    Ok(Err(scoped::ScopedReceiptError::UnsupportedProfile))
+                }
+            }
+        })
+    }
+}
+fn requested_ceiling(request: &scoped::GrantScopedRequest) -> ManagementCredentialCeiling {
+    ManagementCredentialCeiling {
+        deployment: request.deployment.clone(),
+        permissions: request.permissions.clone(),
+        resource_scopes: request
+            .resource_scopes
+            .iter()
+            .map(|scope| ManagementResourceScope {
+                kind: scope.kind.clone(),
+                id: scope.id.clone(),
+            })
+            .collect(),
+    }
+}
+#[cfg(feature = "postgres")]
+mod scoped_postgres;
+
 fn valid_operation_audience(value: &str) -> bool {
     valid_audience(value)
         && value

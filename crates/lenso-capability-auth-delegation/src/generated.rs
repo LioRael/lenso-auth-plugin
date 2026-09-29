@@ -5,8 +5,8 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.delegation@1";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:a4f285eac16907595b70ef3cdd668e3482c6583d0307703c0af08838f05fe6c0";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:ce408238b123e46d874dd150a9ded79d73c2dccea7ab4e47f3b70cb55d810460";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = false;
 pub const DELEGATION_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,31 +16,33 @@ pub const DELEGATION_CONTRACT: CapabilityReference<DelegationClient> = Capabilit
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_delegation { () => { "{\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"grant\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":false}" }; }
+macro_rules! __lenso_provided_delegation { () => { "{\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"grant\",\"grant_scoped\",\"scoped_receipt\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":false}" }; }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_delegation_client {
-    () => { "{\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_optional_delegation_client {
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_many_delegation_client {
-    () => { "{\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.delegation@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
 }
 
 pub const GRANT_OPERATION: &str = "grant";
+pub const GRANT_SCOPED_OPERATION: &str = "grant_scoped";
+pub const SCOPED_RECEIPT_OPERATION: &str = "scoped_receipt";
 
-pub use lenso_contract_runtime::{Timestamp, UnknownDomainError};
+pub use lenso_contract_runtime::{OptionalValue, Timestamp, UnknownDomainError};
 use lenso_contract_runtime::{decode_portable_json, encode_portable_json};
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -110,9 +112,155 @@ pub enum GrantError {
     Unknown(UnknownDomainError),
 }
 
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GrantScopedRequest {
+    #[serde(rename = "agent_session_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub agent_session_id: String,
+    #[serde(rename = "audience")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub audience: Vec<String>,
+    #[serde(rename = "delegate_caller")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub delegate_caller: String,
+    #[serde(rename = "deployment")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub deployment: String,
+    #[serde(rename = "expires_at")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub expires_at: Timestamp,
+    #[serde(rename = "idempotency_key")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub idempotency_key: String,
+    #[serde(rename = "permissions")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub permissions: Vec<String>,
+    #[serde(rename = "resource_scopes")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub resource_scopes: Vec<ResourceScope>,
+    #[serde(rename = "task_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub task_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ResourceScope {
+    #[serde(rename = "id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub id: String,
+    #[serde(rename = "kind")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub kind: String,
+}
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GrantScopedResponse {
+    #[serde(rename = "credential")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub credential: OptionalValue<String>,
+    #[serde(rename = "delegation")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub delegation: ScopedDelegationMetadata,
+    #[serde(rename = "replayed")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub replayed: bool,
+}
+
+impl fmt::Debug for GrantScopedResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GrantScopedResponse")
+            .field("credential", &"<redacted>")
+            .field("delegation", &self.delegation)
+            .field("replayed", &self.replayed)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScopedDelegationMetadata {
+    #[serde(rename = "active")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub active: bool,
+    #[serde(rename = "agent_session_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub agent_session_id: String,
+    #[serde(rename = "audience")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub audience: Vec<String>,
+    #[serde(rename = "delegate_caller")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub delegate_caller: String,
+    #[serde(rename = "deployment")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub deployment: String,
+    #[serde(rename = "expires_at")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub expires_at: Timestamp,
+    #[serde(rename = "permissions")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub permissions: Vec<String>,
+    #[serde(rename = "resource_scopes")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub resource_scopes: Vec<ResourceScope>,
+    #[serde(rename = "session_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub session_id: String,
+    #[serde(rename = "subject")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub subject: String,
+    #[serde(rename = "task_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub task_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GrantScopedError {
+    Conflict,
+    InvalidRequest,
+    PermissionDenied,
+    UnsupportedProfile,
+    Unknown(UnknownDomainError),
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScopedReceiptRequest {
+    #[serde(rename = "agent_session_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub agent_session_id: String,
+    #[serde(rename = "idempotency_key")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub idempotency_key: String,
+    #[serde(rename = "task_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub task_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ScopedReceiptResponse {
+    #[serde(rename = "delegation")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub delegation: OptionalValue<ScopedDelegationMetadata>,
+    #[serde(rename = "found")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub found: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ScopedReceiptError {
+    InvalidRequest,
+    PermissionDenied,
+    UnsupportedProfile,
+    Unknown(UnknownDomainError),
+}
+
 #[derive(Debug)]
-pub struct Delegation;
-impl RequestCapability for Delegation {
+pub struct DelegationGrant;
+impl RequestCapability for DelegationGrant {
     type Request = GrantRequest;
     type Response = GrantResponse;
     type DomainError = GrantError;
@@ -130,6 +278,52 @@ impl RequestCapability for Delegation {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
         Rc::clone(&typed_endpoint.provider).grant(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct DelegationGrantScoped;
+impl RequestCapability for DelegationGrantScoped {
+    type Request = GrantScopedRequest;
+    type Response = GrantScopedResponse;
+    type DomainError = GrantScopedError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != GRANT_SCOPED_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<DelegationRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).grant_scoped(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct DelegationScopedReceipt;
+impl RequestCapability for DelegationScopedReceipt {
+    type Request = ScopedReceiptRequest;
+    type Response = ScopedReceiptResponse;
+    type DomainError = ScopedReceiptError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != SCOPED_RECEIPT_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<DelegationRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).scoped_receipt(context, request)
     }
 }
 
@@ -190,12 +384,130 @@ impl<'de> serde::Deserialize<'de> for GrantError {
     }
 }
 
+impl serde::Serialize for GrantScopedError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::Conflict => serializer.serialize_str("conflict"),
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::PermissionDenied => serializer.serialize_str("permission_denied"),
+            Self::UnsupportedProfile => serializer.serialize_str("unsupported_profile"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for GrantScopedError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "conflict" => Ok(Self::Conflict),
+                "invalid_request" => Ok(Self::InvalidRequest),
+                "permission_denied" => Ok(Self::PermissionDenied),
+                "unsupported_profile" => Ok(Self::UnsupportedProfile),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
+impl serde::Serialize for ScopedReceiptError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::PermissionDenied => serializer.serialize_str("permission_denied"),
+            Self::UnsupportedProfile => serializer.serialize_str("unsupported_profile"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ScopedReceiptError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "invalid_request" => Ok(Self::InvalidRequest),
+                "permission_denied" => Ok(Self::PermissionDenied),
+                "unsupported_profile" => Ok(Self::UnsupportedProfile),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
 pub fn encode_grant_request(value: &GrantRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_grant_request(wire: &str) -> Result<GrantRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_grant_response(value: &GrantResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_grant_response(wire: &str) -> Result<GrantResponse, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_grant_error(value: &GrantError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_grant_error(wire: &str) -> Result<GrantError, serde_json::Error> { decode_portable_json(wire) }
+
+pub fn encode_grant_scoped_request(value: &GrantScopedRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_grant_scoped_request(wire: &str) -> Result<GrantScopedRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_grant_scoped_response(value: &GrantScopedResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_grant_scoped_response(wire: &str) -> Result<GrantScopedResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_grant_scoped_error(value: &GrantScopedError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_grant_scoped_error(wire: &str) -> Result<GrantScopedError, serde_json::Error> { decode_portable_json(wire) }
+
+pub fn encode_scoped_receipt_request(value: &ScopedReceiptRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_scoped_receipt_request(wire: &str) -> Result<ScopedReceiptRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_scoped_receipt_response(value: &ScopedReceiptResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_scoped_receipt_response(wire: &str) -> Result<ScopedReceiptResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_scoped_receipt_error(value: &ScopedReceiptError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_scoped_receipt_error(wire: &str) -> Result<ScopedReceiptError, serde_json::Error> { decode_portable_json(wire) }
 
 #[doc(hidden)]
 pub trait __LensoIntoDelegationGrantResult {
@@ -216,18 +528,78 @@ impl __LensoIntoDelegationGrantResult for Result<GrantResponse, lenso_plugin_aut
         }
     }
 }
-impl __LensoIntoDelegationGrantResult for Result<GrantResponse, DelegationInvocationError> {
+impl __LensoIntoDelegationGrantResult for Result<GrantResponse, DelegationGrantInvocationError> {
     fn __lenso_into_result(self) -> Result<Result<GrantResponse, GrantError>, RuntimeFailure> {
         match self {
             Ok(value) => Ok(Ok(value)),
-            Err(DelegationInvocationError::Domain(error)) => Ok(Err(error)),
-            Err(DelegationInvocationError::Runtime(error)) => Err(error),
+            Err(DelegationGrantInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(DelegationGrantInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
+pub trait __LensoIntoDelegationGrantScopedResult {
+    fn __lenso_into_result(self) -> Result<Result<GrantScopedResponse, GrantScopedError>, RuntimeFailure>;
+}
+impl __LensoIntoDelegationGrantScopedResult for Result<GrantScopedResponse, GrantScopedError> {
+    fn __lenso_into_result(self) -> Result<Result<GrantScopedResponse, GrantScopedError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoDelegationGrantScopedResult for Result<Result<GrantScopedResponse, GrantScopedError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<GrantScopedResponse, GrantScopedError>, RuntimeFailure> { self }
+}
+impl __LensoIntoDelegationGrantScopedResult for Result<GrantScopedResponse, lenso_plugin_authoring::PluginError<GrantScopedError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<GrantScopedResponse, GrantScopedError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoDelegationGrantScopedResult for Result<GrantScopedResponse, DelegationGrantScopedInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<GrantScopedResponse, GrantScopedError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(DelegationGrantScopedInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(DelegationGrantScopedInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
+pub trait __LensoIntoDelegationScopedReceiptResult {
+    fn __lenso_into_result(self) -> Result<Result<ScopedReceiptResponse, ScopedReceiptError>, RuntimeFailure>;
+}
+impl __LensoIntoDelegationScopedReceiptResult for Result<ScopedReceiptResponse, ScopedReceiptError> {
+    fn __lenso_into_result(self) -> Result<Result<ScopedReceiptResponse, ScopedReceiptError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoDelegationScopedReceiptResult for Result<Result<ScopedReceiptResponse, ScopedReceiptError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<ScopedReceiptResponse, ScopedReceiptError>, RuntimeFailure> { self }
+}
+impl __LensoIntoDelegationScopedReceiptResult for Result<ScopedReceiptResponse, lenso_plugin_authoring::PluginError<ScopedReceiptError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<ScopedReceiptResponse, ScopedReceiptError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoDelegationScopedReceiptResult for Result<ScopedReceiptResponse, DelegationScopedReceiptInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<ScopedReceiptResponse, ScopedReceiptError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(DelegationScopedReceiptInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(DelegationScopedReceiptInvocationError::Runtime(error)) => Err(error),
         }
     }
 }
 
 pub trait DelegationProvider: fmt::Debug + 'static {
-    fn grant(&self, context: InvocationContext, request: GrantRequest) -> NativeRequestFuture<Delegation>;
+    fn grant(&self, context: InvocationContext, request: GrantRequest) -> NativeRequestFuture<DelegationGrant>;
+    fn grant_scoped(&self, context: InvocationContext, request: GrantScopedRequest) -> NativeRequestFuture<DelegationGrantScoped>;
+    fn scoped_receipt(&self, context: InvocationContext, request: ScopedReceiptRequest) -> NativeRequestFuture<DelegationScopedReceipt>;
 }
 
 #[doc(hidden)]
@@ -236,11 +608,25 @@ macro_rules! __lenso_native_lower_delegation {
     ($plugin:ty, $support:path) => {
         use $support as __LensoNativeSupportDelegation;
         impl $crate::DelegationProvider for $plugin {
-        fn grant(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::Delegation> {
+        fn grant(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationGrant> {
             let plugin = self.clone();
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::grant(&plugin, context, request).await;
                 $crate::__LensoIntoDelegationGrantResult::__lenso_into_result(result)
+            })
+        }
+        fn grant_scoped(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantScopedRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationGrantScoped> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::grant_scoped(&plugin, context, request).await;
+                $crate::__LensoIntoDelegationGrantScopedResult::__lenso_into_result(result)
+            })
+        }
+        fn scoped_receipt(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::ScopedReceiptRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationScopedReceipt> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::scoped_receipt(&plugin, context, request).await;
+                $crate::__LensoIntoDelegationScopedReceiptResult::__lenso_into_result(result)
             })
         }
         }
@@ -253,12 +639,28 @@ macro_rules! __lenso_native_lower_object_delegation {
     ($object:ty, $plugin:ty, $support:path) => {
         use $support as __LensoNativeSupportDelegation;
         impl $crate::DelegationProvider for $object {
-        fn grant(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::Delegation> {
+        fn grant(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationGrant> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
                 let plugin = object.get()?;
                 let result = <$plugin>::grant(plugin.as_ref(), context, request).await;
                 $crate::__LensoIntoDelegationGrantResult::__lenso_into_result(result)
+            })
+        }
+        fn grant_scoped(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantScopedRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationGrantScoped> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::grant_scoped(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDelegationGrantScopedResult::__lenso_into_result(result)
+            })
+        }
+        fn scoped_receipt(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::ScopedReceiptRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationScopedReceipt> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::scoped_receipt(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoDelegationScopedReceiptResult::__lenso_into_result(result)
             })
         }
         }
@@ -271,11 +673,25 @@ macro_rules! __lenso_native_lower_trait_object_delegation {
     ($object:ty, $plugin:ty, $support:path) => {
         use $support as __LensoNativeSupportDelegation;
         impl $crate::DelegationProvider for $object {
-        fn grant(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::Delegation> {
+        fn grant(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationGrant> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
                 let plugin = object.get()?;
                 <$plugin as $crate::DelegationProvider>::grant(plugin.as_ref(), context, request).await
+            })
+        }
+        fn grant_scoped(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::GrantScopedRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationGrantScoped> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DelegationProvider>::grant_scoped(plugin.as_ref(), context, request).await
+            })
+        }
+        fn scoped_receipt(&self, context: __LensoNativeSupportDelegation::InvocationContext, request: $crate::ScopedReceiptRequest) -> __LensoNativeSupportDelegation::NativeRequestFuture<$crate::DelegationScopedReceipt> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::DelegationProvider>::scoped_receipt(plugin.as_ref(), context, request).await
             })
         }
         }
@@ -300,6 +716,8 @@ impl<P: DelegationProvider> NativeRequestEndpoint for DelegationEndpoint<P> {
     fn descriptor_version(&self) -> &'static str { DESCRIPTOR_VERSION }
     fn operations(&self) -> &'static [&'static str] { &[
         GRANT_OPERATION,
+        GRANT_SCOPED_OPERATION,
+        SCOPED_RECEIPT_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
     fn invoke(&self, operation: &str, request: Box<dyn std::any::Any>, context: InvocationContext) -> LocalBoxFuture<'static, Result<Result<Box<dyn std::any::Any>, Box<dyn std::any::Any>>, RuntimeFailure>> {
@@ -309,6 +727,32 @@ impl<P: DelegationProvider> NativeRequestEndpoint for DelegationEndpoint<P> {
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).grant(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            GRANT_SCOPED_OPERATION => {
+                let Ok(request) = request.downcast::<GrantScopedRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).grant_scoped(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            SCOPED_RECEIPT_OPERATION => {
+                let Ok(request) = request.downcast::<ScopedReceiptRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).scoped_receipt(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -354,13 +798,11 @@ macro_rules! __lenso_native_provide_delegation {
 
 #[derive(Clone, Debug)]
 pub struct DelegationClient {
-    grant: NativeRequestHandle<Delegation>,
+    grant: NativeRequestHandle<DelegationGrant>,
+    grant_scoped: NativeRequestHandle<DelegationGrantScoped>,
+    scoped_receipt: NativeRequestHandle<DelegationScopedReceipt>,
 }
 impl DelegationClient {
-    pub fn new(handle: NativeRequestHandle<Delegation>) -> Self {
-        Self { grant: handle }
-    }
-
     pub fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         <Self as CapabilityClient>::from_dependencies(dependencies)
     }
@@ -372,16 +814,40 @@ impl DelegationClient {
         <Self as CapabilityClient>::from_requirement(dependencies, requirement_id)
     }
 
-    pub async fn grant(&self, request: GrantRequest) -> Result<GrantResponse, DelegationInvocationError> {
+    pub async fn grant(&self, request: GrantRequest) -> Result<GrantResponse, DelegationGrantInvocationError> {
         self.grant.invoke(GRANT_OPERATION, request).await
-            .map_err(DelegationInvocationError::Runtime)?
-            .map_err(DelegationInvocationError::Domain)
+            .map_err(DelegationGrantInvocationError::Runtime)?
+            .map_err(DelegationGrantInvocationError::Domain)
     }
 
-    pub async fn grant_with_context(&self, context: InvocationContext, request: GrantRequest) -> Result<GrantResponse, DelegationInvocationError> {
+    pub async fn grant_with_context(&self, context: InvocationContext, request: GrantRequest) -> Result<GrantResponse, DelegationGrantInvocationError> {
         self.grant.invoke_with_context(GRANT_OPERATION, context, request).await
-            .map_err(DelegationInvocationError::Runtime)?
-            .map_err(DelegationInvocationError::Domain)
+            .map_err(DelegationGrantInvocationError::Runtime)?
+            .map_err(DelegationGrantInvocationError::Domain)
+    }
+
+    pub async fn grant_scoped(&self, request: GrantScopedRequest) -> Result<GrantScopedResponse, DelegationGrantScopedInvocationError> {
+        self.grant_scoped.invoke(GRANT_SCOPED_OPERATION, request).await
+            .map_err(DelegationGrantScopedInvocationError::Runtime)?
+            .map_err(DelegationGrantScopedInvocationError::Domain)
+    }
+
+    pub async fn grant_scoped_with_context(&self, context: InvocationContext, request: GrantScopedRequest) -> Result<GrantScopedResponse, DelegationGrantScopedInvocationError> {
+        self.grant_scoped.invoke_with_context(GRANT_SCOPED_OPERATION, context, request).await
+            .map_err(DelegationGrantScopedInvocationError::Runtime)?
+            .map_err(DelegationGrantScopedInvocationError::Domain)
+    }
+
+    pub async fn scoped_receipt(&self, request: ScopedReceiptRequest) -> Result<ScopedReceiptResponse, DelegationScopedReceiptInvocationError> {
+        self.scoped_receipt.invoke(SCOPED_RECEIPT_OPERATION, request).await
+            .map_err(DelegationScopedReceiptInvocationError::Runtime)?
+            .map_err(DelegationScopedReceiptInvocationError::Domain)
+    }
+
+    pub async fn scoped_receipt_with_context(&self, context: InvocationContext, request: ScopedReceiptRequest) -> Result<ScopedReceiptResponse, DelegationScopedReceiptInvocationError> {
+        self.scoped_receipt.invoke_with_context(SCOPED_RECEIPT_OPERATION, context, request).await
+            .map_err(DelegationScopedReceiptInvocationError::Runtime)?
+            .map_err(DelegationScopedReceiptInvocationError::Domain)
     }
 }
 
@@ -394,7 +860,9 @@ impl CapabilityClient for DelegationClient {
 
     fn from_dependencies(dependencies: &PluginDependencies) -> Result<Self, RuntimeFailure> {
         Ok(Self {
-            grant: dependencies.one::<Delegation>()?,
+            grant: dependencies.one::<DelegationGrant>()?,
+            grant_scoped: dependencies.one::<DelegationGrantScoped>()?,
+            scoped_receipt: dependencies.one::<DelegationScopedReceipt>()?,
         })
     }
 
@@ -425,7 +893,9 @@ impl CapabilityClientMany for DelegationClient {
                 Ok(BoundCapabilityClient::new(
                     binding.provider_instance(),
                     Self {
-                    grant: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<Delegation>()?,
+                    grant: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<DelegationGrant>()?,
+                    grant_scoped: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<DelegationGrantScoped>()?,
+                    scoped_receipt: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<DelegationScopedReceipt>()?,
                     },
                 ))
             })
@@ -442,7 +912,17 @@ impl CapabilityClientMany for DelegationClient {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum DelegationInvocationError {
+pub enum DelegationGrantInvocationError {
     Domain(GrantError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum DelegationGrantScopedInvocationError {
+    Domain(GrantScopedError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum DelegationScopedReceiptInvocationError {
+    Domain(ScopedReceiptError),
     Runtime(RuntimeFailure),
 }

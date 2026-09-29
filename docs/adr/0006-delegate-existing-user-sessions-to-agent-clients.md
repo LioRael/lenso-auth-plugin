@@ -1,6 +1,6 @@
 # ADR 0006: Delegate existing user sessions to Agent clients
 
-- Status: implementation in progress
+- Status: implemented owner protocols; consumer qualification recorded separately
 - Date: 2026-09-10
 
 ## Decision and ownership
@@ -42,3 +42,45 @@ a redirect URL, HTML, or Tool result. Pending attempts fail closed on restart.
 
 This handoff does not yet implement Agent custody or immutable turn identity.
 These remain required gates before claiming the complete Projects chain works.
+
+## Scoped independent-Agent protocol
+
+Delegation@1 Descriptor 1.1 adds `grant_scoped` and `scoped_receipt` without
+changing the original `grant` operation. The typed grant accepts a stable key,
+fixed task/session/canonical delegate caller, deployment, exact permissions and
+resource scopes, operation audiences and expiration. It accepts no subject,
+parent reference, raw parent credential or arbitrary claims. Account independently
+verifies its own sealed user assertion for the exact operation, derives the
+parent session reference, then checks the live stored parent inside the issuance
+transaction. `delegation_callers` admits exact canonical issuer callers;
+`scoped_delegation_targets` independently admits exact delegate targets. Both
+lists default to empty. Child expiration is at most 15 minutes and never exceeds
+its parent. Nested delegation, scope widening and non-user parents are denied.
+
+Native PostgreSQL migration 4 atomically stores the child verifier, parent link
+and immutable caller/subject/key receipt. Concurrent identical requests produce
+one credential; only the committing call returns its plaintext. Replays and
+`scoped_receipt` return metadata without a credential. A changed intent under the
+same key conflicts. Receipt lookup binds the original parent, task and session.
+The short-lived child uses the existing `session` credential scheme and user
+actor kind. Its signed reserved `lenso.auth.scoped-delegation` claim contains
+`task_id`, `agent_session_id` and `delegate_caller`; the SDK reader rejects unknown
+fields and malformed canonical callers. Ordinary credential issuance rejects
+this reserved claim. Auth and CredentialState both join the current parent,
+intersect the child's stored ceiling with the current parent and Host ceiling,
+and observe parent expiry, revocation and subject disablement on every call.
+The explicit Account operator can only attenuate a stored session ceiling.
+
+An independent Agent receives only this new child through private Host custody.
+Its fixed remote URL and private task/session binding are not Tool arguments.
+Only an explicitly selected server `delegated_session` transport maps a Bearer
+header to Account `session` authentication. It must compare the signed binding
+with all three fixed task/session/delegate headers before reaching Management;
+normal browser cookies and ordinary bearer profiles do not select this scheme.
+Current Management deployment eligibility, ceiling intersection and RBAC remain
+required. This owner protocol's Native generated-port PostgreSQL test covers
+concurrent issuance, one-time disclosure, task binding, target/machine/nested
+denial, stable receipt, conflict, current parent attenuation and revocation.
+Consumer transport, model custody and ordinary Source App/browser proof are
+separate receipts. New scoped operations explicitly reject Workers profiles;
+the existing Workers `grant` operation is unchanged.

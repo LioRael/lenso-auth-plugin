@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["delegation", "replayed"],
+  "properties": {
+    "delegation": {
+      "$ref": "#/$defs/ScopedDelegationMetadata"
+    },
+    "credential": {
+      "type": ["string", "null"],
+      "x-lenso-sensitive": true
+    },
+    "replayed": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ResourceScope": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ScopedDelegationMetadata": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "subject",
+        "task_id",
+        "agent_session_id",
+        "delegate_caller",
+        "deployment",
+        "permissions",
+        "resource_scopes",
+        "audience",
+        "expires_at",
+        "active"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "task_id": {
+          "type": "string"
+        },
+        "agent_session_id": {
+          "type": "string"
+        },
+        "delegate_caller": {
+          "type": "string"
+        },
+        "deployment": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resource_scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResourceScope"
+          }
+        },
+        "audience": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "active": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "title": "GrantScopedResponse"
+}

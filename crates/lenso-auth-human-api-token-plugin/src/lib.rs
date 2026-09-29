@@ -112,7 +112,11 @@ impl HumanApiTokenPlugin {}
 struct User(ActorAssertion);
 impl TypedActor for User {
     fn from_assertion(assertion: &ActorAssertion) -> Result<Self, ActorProjectionError> {
-        if assertion.actor_kind() != "user" {
+        if assertion.actor_kind() != "user"
+            || assertion.to_wire().claims.as_ref().is_some_and(|claims| {
+                claims.contains_key(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM)
+            })
+        {
             return Err(ActorProjectionError::UnexpectedActorKind {
                 expected: "user".into(),
                 actual: assertion.actor_kind().into(),
@@ -491,4 +495,28 @@ fn translate<T: Serialize, R: serde::de::DeserializeOwned>(value: T) -> Result<R
         .map_err(|_| RuntimeFailure::ProtocolViolation {
             capability: human::CAPABILITY_ID,
         })
+}
+
+#[cfg(test)]
+mod scoped_human_tests {
+    use super::*;
+    #[test]
+    fn scoped_agent_user_is_never_a_human_token_operator() {
+        let now = OffsetDateTime::now_utc();
+        let issuer = lenso_auth_sdk::ActorAssertionIssuer::new(
+            "operators.account",
+            b"test-only-owner-signing-key",
+        );
+        let root = issuer.issue(
+            "usr_human",
+            "user",
+            "password",
+            [lenso_auth_sdk::audience(human::CAPABILITY_ID, "issue")],
+            lenso_auth_sdk::Validity::new(now, now + time::Duration::seconds(30)).unwrap(),
+            std::collections::BTreeMap::new(),
+        );
+        assert!(User::from_assertion(&root).is_ok());
+        let delegated=issuer.issue("usr_human","user","password",[lenso_auth_sdk::audience(human::CAPABILITY_ID,"issue")],lenso_auth_sdk::Validity::new(now,now+time::Duration::seconds(30)).unwrap(),std::collections::BTreeMap::from([(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM.into(),serde_json::json!({"task_id":"task_a","agent_session_id":"agent_a","delegate_caller":"lenso.agent/default"}))]));
+        assert!(User::from_assertion(&delegated).is_err());
+    }
 }

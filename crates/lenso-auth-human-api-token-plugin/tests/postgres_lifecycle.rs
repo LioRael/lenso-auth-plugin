@@ -169,6 +169,10 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
         60,
     )
     .unwrap()
+    .with_delegation_callers(vec!["test.human/browser".into()])
+    .unwrap()
+    .with_scoped_delegation_targets(vec!["lenso.agent/default".into()])
+    .unwrap()
     .with_management_session_ceiling(current)
     .unwrap()
     .with_credential_state_callers(vec![HUMAN.into(), "test.human/browser".into()])
@@ -247,7 +251,7 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
         (
             delegation::CAPABILITY_ID,
             delegation::DESCRIPTOR_VERSION,
-            vec!["grant"],
+            vec!["grant", "grant_scoped", "scoped_receipt"],
         ),
         (
             state::CAPABILITY_ID,
@@ -347,6 +351,11 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
             "lenso.auth.human-api-token/human",
         ),
         (auth::CAPABILITY_ID, auth::DESCRIPTOR_VERSION, "account"),
+        (
+            delegation::CAPABILITY_ID,
+            delegation::DESCRIPTOR_VERSION,
+            "account",
+        ),
         (state::CAPABILITY_ID, state::DESCRIPTOR_VERSION, "account"),
         (
             token_admin::CAPABILITY_ID,
@@ -482,6 +491,11 @@ async fn authenticate(
 }
 fn audiences() -> Vec<String> {
     [
+        audience(delegation::CAPABILITY_ID, "grant_scoped"),
+        audience(delegation::CAPABILITY_ID, "scoped_receipt"),
+        audience("lenso.management@1", "catalog"),
+        audience("lenso.management@1", "invoke"),
+        audience("lenso.management@1", "status"),
         audience(human::CAPABILITY_ID, "issue"),
         audience(human::CAPABILITY_ID, "list"),
         audience(human::CAPABILITY_ID, "receipt"),
@@ -1010,4 +1024,267 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
             );
         }))
         .await;
+}
+
+#[tokio::test]
+#[ignore = "requires LENSO_POSTGRES_TEST_URL"]
+async fn scoped_agent_child_is_owner_issued_once_and_tracks_current_parent() {
+    use sqlx::{AssertSqlSafe, Executor};
+    let database = std::env::var("LENSO_POSTGRES_TEST_URL").unwrap();
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let schemas = [
+        format!("scoped_account_{suffix}"),
+        format!("scoped_api_{suffix}"),
+        format!("scoped_acl_{suffix}"),
+    ];
+    AccountAuthOperator::setup(&database, &schemas[0])
+        .await
+        .unwrap();
+    ApiTokenAuthOperator::setup(&database, &schemas[1])
+        .await
+        .unwrap();
+    AccessControlOperator::setup(&database, &schemas[2])
+        .await
+        .unwrap();
+    let operator = AccountAuthOperator::connect(&database, &schemas[0])
+        .await
+        .unwrap();
+    tokio::task::LocalSet::new()
+        .run_until(Box::pin(async {
+            let app = start(&database, &schemas, ceiling()).await;
+            let (subject, parent) = session(&app, "agent-parent", "user").await;
+            let assertion =
+                authenticate(&app, "test.human/browser", "session", &parent.credential).await;
+            let client = delegation::DelegationClient::from_dependencies(
+                &app.dependencies("test.human/browser").unwrap(),
+            )
+            .unwrap();
+            let request = delegation::GrantScopedRequest {
+                idempotency_key: "agent-task-1".into(),
+                task_id: "task_1".into(),
+                agent_session_id: "agent_session_1".into(),
+                delegate_caller: "lenso.agent/default".into(),
+                deployment: DEPLOYMENT.into(),
+                permissions: vec!["notes.write".into()],
+                resource_scopes: vec![delegation::ResourceScope {
+                    kind: "deployment".into(),
+                    id: DEPLOYMENT.into(),
+                }],
+                audience: vec![
+                    audience("lenso.management@1", "catalog"),
+                    audience("lenso.management@1", "invoke"),
+                    audience("lenso.management@1", "status"),
+                ],
+                expires_at: (OffsetDateTime::now_utc() + Duration::minutes(5))
+                    .format(&Rfc3339)
+                    .unwrap(),
+            };
+            let mut invalid = request.clone();
+            invalid.delegate_caller = "unselected.agent/default".into();
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &assertion), invalid)
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::InvalidRequest
+                ))
+            ));
+            let mut wide = request.clone();
+            wide.permissions.push("outside.permission".into());
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &assertion), wide)
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::InvalidRequest
+                ))
+            ));
+            let mut too_long = request.clone();
+            too_long.expires_at = (OffsetDateTime::now_utc() + Duration::minutes(16))
+                .format(&Rfc3339)
+                .unwrap();
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &assertion), too_long)
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::InvalidRequest
+                ))
+            ));
+            let fake = lenso_auth_sdk::ActorAssertionIssuer::new(
+                "operators.account",
+                b"different-verification-authority",
+            )
+            .issue(
+                &subject,
+                "user",
+                "password",
+                audiences(),
+                lenso_auth_sdk::Validity::new(
+                    OffsetDateTime::now_utc(),
+                    OffsetDateTime::now_utc() + Duration::seconds(30),
+                )
+                .unwrap(),
+                assertion.to_wire().claims.unwrap(),
+            );
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &fake), request.clone())
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::PermissionDenied
+                ))
+            ));
+            let (_, machine) = session(&app, "agent-machine", "service-account").await;
+            let machine_assertion =
+                authenticate(&app, "test.human/browser", "session", &machine.credential).await;
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &machine_assertion), request.clone())
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::PermissionDenied
+                ))
+            ));
+            let (first, second) = futures::join!(
+                client.grant_scoped_with_context(context(&app, &assertion), request.clone()),
+                client.grant_scoped_with_context(context(&app, &assertion), request.clone())
+            );
+            let first = first.unwrap();
+            let second = second.unwrap();
+            assert_ne!(first.replayed, second.replayed);
+            assert_eq!(first.delegation.session_id, second.delegation.session_id);
+            let secret = first
+                .credential
+                .clone()
+                .or(second.credential.clone())
+                .flatten()
+                .unwrap();
+            assert_eq!(
+                usize::from(first.credential.clone().flatten().is_some())
+                    + usize::from(second.credential.clone().flatten().is_some()),
+                1
+            );
+            assert!(!format!("{first:?}").contains(&secret));
+            assert!(valid_child(&secret));
+            let child = authenticate(&app, "test.human/browser", "session", &secret).await;
+            let binding =
+                lenso_auth_sdk::delegation::ScopedDelegationBinding::from_assertion(&child)
+                    .unwrap();
+            assert_eq!(binding.task_id, "task_1");
+            assert_eq!(binding.agent_session_id, "agent_session_1");
+            assert_eq!(binding.delegate_caller, "lenso.agent/default");
+            assert_eq!(child.subject(), subject);
+            assert_eq!(
+                ManagementCredentialCeiling::from_assertion(&child)
+                    .unwrap()
+                    .permissions,
+                vec!["notes.write"]
+            );
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &child), request.clone())
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::PermissionDenied
+                ))
+            ));
+            let receipt_request = delegation::ScopedReceiptRequest {
+                idempotency_key: request.idempotency_key.clone(),
+                task_id: request.task_id.clone(),
+                agent_session_id: request.agent_session_id.clone(),
+            };
+            let receipt = client
+                .scoped_receipt_with_context(context(&app, &assertion), receipt_request.clone())
+                .await
+                .unwrap();
+            assert!(receipt.found);
+            assert!(receipt.delegation.flatten().unwrap().active);
+            let mut wrong_receipt = receipt_request.clone();
+            wrong_receipt.agent_session_id = "another_session".into();
+            assert!(matches!(
+                client
+                    .scoped_receipt_with_context(context(&app, &assertion), wrong_receipt)
+                    .await,
+                Err(delegation::DelegationScopedReceiptInvocationError::Domain(
+                    delegation::ScopedReceiptError::PermissionDenied
+                ))
+            ));
+            let mut conflicting = request.clone();
+            conflicting.task_id = "task_2".into();
+            assert!(matches!(
+                client
+                    .grant_scoped_with_context(context(&app, &assertion), conflicting)
+                    .await,
+                Err(delegation::DelegationGrantScopedInvocationError::Domain(
+                    delegation::GrantScopedError::Conflict
+                ))
+            ));
+            let mut narrowed = ceiling();
+            narrowed.permissions.retain(|p| p != "notes.write");
+            assert!(
+                operator
+                    .attenuate_session_ceiling(&parent.session_id, &narrowed)
+                    .await
+                    .unwrap()
+            );
+            let child = authenticate(&app, "test.human/browser", "session", &secret).await;
+            assert!(ManagementCredentialCeiling::from_assertion(&child).is_err());
+            let inspected = state::CredentialStateClient::from_dependencies(
+                &app.dependencies("test.human/browser").unwrap(),
+            )
+            .unwrap()
+            .inspect(state::InspectRequest {
+                credential_id: first.delegation.session_id.clone(),
+                session_id: first.delegation.session_id.clone(),
+            })
+            .await
+            .unwrap();
+            assert!(ManagementCredentialCeiling::from_claims(&inspected.claims).is_err());
+            let session_issuer = issuer::CredentialIssuerClient::from_dependencies(
+                &app.dependencies("test.human/bootstrap").unwrap(),
+            )
+            .unwrap();
+            session_issuer
+                .revoke(issuer::RevokeRequest {
+                    session_id: parent.session_id,
+                })
+                .await
+                .unwrap();
+            let response = app
+                .invoke::<auth::Auth>(
+                    "test.human/browser",
+                    "authenticate",
+                    authenticate_request(Some(CredentialEvidence::new("session", &secret))),
+                )
+                .await
+                .unwrap();
+            assert!(matches!(response, Err(auth::AuthenticateError::Revoked)));
+            assert!(matches!(
+                client
+                    .scoped_receipt_with_context(context(&app, &assertion), receipt_request)
+                    .await,
+                Err(delegation::DelegationScopedReceiptInvocationError::Domain(
+                    delegation::ScopedReceiptError::PermissionDenied
+                ))
+            ));
+            assert_eq!(
+                app.shutdown(StdDuration::from_secs(2)).await,
+                ShutdownOutcome::Clean
+            );
+        }))
+        .await;
+    let pool = sqlx::PgPool::connect(&database).await.unwrap();
+    for schema in &schemas {
+        pool.execute(AssertSqlSafe(format!("DROP SCHEMA \"{schema}\" CASCADE")))
+            .await
+            .unwrap();
+    }
+    pool.close().await;
+}
+fn valid_child(credential: &str) -> bool {
+    credential.starts_with("lenso_st_") && credential.len() == 52
 }

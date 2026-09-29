@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "idempotency_key",
+    "task_id",
+    "agent_session_id",
+    "delegate_caller",
+    "deployment",
+    "permissions",
+    "resource_scopes",
+    "audience",
+    "expires_at"
+  ],
+  "properties": {
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "agent_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "delegate_caller": {
+      "type": "string"
+    },
+    "deployment": {
+      "type": "string"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resource_scopes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ResourceScope"
+      }
+    },
+    "audience": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ResourceScope": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "title": "GrantScopedRequest"
+}

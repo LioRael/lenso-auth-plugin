@@ -77,6 +77,8 @@ pub struct AccountAuthConfig {
     #[serde(default)]
     delegation_callers: Vec<String>,
     #[serde(default)]
+    scoped_delegation_targets: Vec<String>,
+    #[serde(default)]
     credential_state_callers: Vec<String>,
     #[serde(default)]
     management_session_ceiling: Option<ManagementCredentialCeiling>,
@@ -104,6 +106,7 @@ impl AccountAuthConfig {
             assertion_ttl_seconds,
             admin_callers: Vec::new(),
             delegation_callers: Vec::new(),
+            scoped_delegation_targets: Vec::new(),
             credential_state_callers: Vec::new(),
             management_session_ceiling: None,
         };
@@ -122,6 +125,15 @@ impl AccountAuthConfig {
         callers: Vec<String>,
     ) -> Result<Self, AccountConfigError> {
         self.delegation_callers = callers;
+        self.validate()?;
+        Ok(self)
+    }
+
+    pub fn with_scoped_delegation_targets(
+        mut self,
+        callers: Vec<String>,
+    ) -> Result<Self, AccountConfigError> {
+        self.scoped_delegation_targets = callers;
         self.validate()?;
         Ok(self)
     }
@@ -223,6 +235,13 @@ impl AccountAuthConfig {
             || self.assertion_signing_key_secret == self.token_pepper_secret
         {
             return Err(AccountConfigError::DuplicateSecretReference);
+        }
+        if self
+            .scoped_delegation_targets
+            .iter()
+            .any(|value| !value.contains('/') || !valid_caller(value))
+        {
+            return Err(AccountConfigError::InvalidDelegationCaller);
         }
         if self.admin_callers.iter().any(|value| !valid_caller(value)) {
             return Err(AccountConfigError::InvalidAdminCaller);
@@ -417,6 +436,9 @@ impl AccountAuthPlugin {
             let prepared = prepared?;
             if request.claims.contains_key(CREDENTIAL_BINDING_CLAIM)
                 || request.claims.contains_key(MANAGEMENT_CEILING_CLAIM)
+                || request
+                    .claims
+                    .contains_key(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM)
             {
                 return Ok(Err(IssueError::InvalidAuthority));
             }
@@ -671,6 +693,7 @@ impl AccountAuthPlugin {
     ) -> NativeRequestFuture<Auth> {
         let prepared = self.prepared();
         let current_ceiling = self.config.management_session_ceiling.clone();
+        let current_targets = self.config.scoped_delegation_targets.clone();
         Box::pin(async move {
             let prepared = prepared?;
             let Some(credential) = request.credential else {
@@ -690,7 +713,10 @@ impl AccountAuthPlugin {
             else {
                 return Ok(Err(AuthenticateError::Invalid));
             };
-            if session.status == "disabled" || session.revoked {
+            if session.status == "disabled"
+                || session.revoked
+                || !scoped_target_admitted(&session.claims, &current_targets)
+            {
                 return Ok(Err(AuthenticateError::Revoked));
             }
             let now = OffsetDateTime::now_utc();
@@ -743,6 +769,7 @@ impl AccountAuthPlugin {
         });
         let prepared = self.prepared();
         let current_ceiling = self.config.management_session_ceiling.clone();
+        let current_targets = self.config.scoped_delegation_targets.clone();
         Box::pin(async move {
             if !admitted {
                 return Ok(Err(credential_state::InspectError::PermissionDenied));
@@ -764,7 +791,8 @@ impl AccountAuthPlugin {
             else {
                 return Ok(Err(credential_state::InspectError::NotFound));
             };
-            let active = session.status == "active"
+            let active = scoped_target_admitted(&session.claims, &current_targets)
+                && session.status == "active"
                 && !session.revoked
                 && session.expires_at > OffsetDateTime::now_utc();
             let mut claims = session.claims;
@@ -900,6 +928,15 @@ fn runtime(error: impl fmt::Display) -> RuntimeFailure {
     RuntimeFailure::PluginFailure {
         detail: error.to_string(),
     }
+}
+
+fn scoped_target_admitted(
+    claims: &std::collections::BTreeMap<String, serde_json::Value>,
+    targets: &[String],
+) -> bool {
+    !claims.contains_key(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM)
+        || lenso_auth_sdk::delegation::ScopedDelegationBinding::from_claims(claims)
+            .is_ok_and(|binding| targets.contains(&binding.delegate_caller))
 }
 
 fn constrain_management_claim(
@@ -1059,6 +1096,36 @@ mod tests {
         ] {
             assert!(!valid_caller(invalid));
         }
+    }
+
+    #[test]
+    fn scoped_targets_are_current_exact_host_admission() {
+        let binding = lenso_auth_sdk::delegation::ScopedDelegationBinding {
+            task_id: "task_1".into(),
+            agent_session_id: "session_1".into(),
+            delegate_caller: "lenso.agent/default".into(),
+        };
+        let mut claims = BTreeMap::from([(
+            lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM.into(),
+            serde_json::json!(binding),
+        )]);
+        assert!(scoped_target_admitted(
+            &claims,
+            &["lenso.agent/default".into()]
+        ));
+        assert!(!scoped_target_admitted(&claims, &[]));
+        assert!(!scoped_target_admitted(
+            &claims,
+            &["lenso.agent/other".into()]
+        ));
+        claims
+            .get_mut(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM)
+            .unwrap()["subject"] = serde_json::json!("forged");
+        assert!(!scoped_target_admitted(
+            &claims,
+            &["lenso.agent/default".into()]
+        ));
+        assert!(scoped_target_admitted(&BTreeMap::new(), &[]));
     }
 
     pub(super) async fn test_postgres(label: &str) -> (String, String, OwnedPostgres) {

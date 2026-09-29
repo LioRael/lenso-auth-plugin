@@ -26,6 +26,9 @@ fn main() {
         });
     }
 
+    if env::var_os("LENSO_UPDATE_CONTRACT_SNAPSHOT").is_some() {
+        return;
+    }
     check_projection(
         Path::new("capability.json"),
         ProjectionLanguage::Rust,

@@ -127,6 +127,13 @@
           }
         }
       }
+    },
+    "scoped_delegation_targets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
     }
   }
 }

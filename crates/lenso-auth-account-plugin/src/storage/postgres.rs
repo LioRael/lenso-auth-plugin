@@ -37,12 +37,12 @@ const LOCK_SUBJECT_STATUS_QUERY: &str = concat!(
 const LOAD_SESSION_QUERY: &str = concat!(
     "SELECT s.session_id, s.subject_id, ",
     effective_subject_status_sql!(),
-    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.token_digest = $1"
+    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, p.claims AS parent_claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.token_digest = $1"
 );
 const INSPECT_SESSION_QUERY: &str = concat!(
     "SELECT s.session_id, s.subject_id, ",
     effective_subject_status_sql!(),
-    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.session_id = $1"
+    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, p.claims AS parent_claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.session_id = $1"
 );
 
 pub(crate) async fn ensure_identity(
@@ -214,7 +214,7 @@ pub(crate) async fn load_session(
         actor_kind: row.try_get("actor_kind").map_err(db("decode actor kind"))?,
         assurance: row.try_get("assurance").map_err(db("decode assurance"))?,
         audience: row.try_get("audience").map_err(db("decode audience"))?,
-        claims: claims.0,
+        claims: constrain_child_claims(claims.0, &row)?,
         expires_at: row.try_get("expires_at").map_err(db("decode expiry"))?,
         revoked: row.try_get("revoked").map_err(db("decode revocation"))?,
     }))
@@ -243,7 +243,7 @@ pub(crate) async fn inspect_session(
         actor_kind: row.try_get("actor_kind").map_err(db("decode actor kind"))?,
         assurance: row.try_get("assurance").map_err(db("decode assurance"))?,
         audience: row.try_get("audience").map_err(db("decode audience"))?,
-        claims: claims.0,
+        claims: constrain_child_claims(claims.0, &row)?,
         expires_at: row.try_get("expires_at").map_err(db("decode expiry"))?,
         revoked: row.try_get("revoked").map_err(db("decode revocation"))?,
     }))
@@ -459,4 +459,20 @@ pub(crate) async fn create_grant(
 
 fn grant_db(_: sqlx::Error) -> RuntimeFailure {
     runtime("delegated session storage failed")
+}
+
+fn constrain_child_claims(
+    mut claims: BTreeMap<String, Value>,
+    row: &sqlx::postgres::PgRow,
+) -> Result<BTreeMap<String, Value>, AccountError> {
+    if claims.contains_key(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM) {
+        let parent: Option<sqlx::types::Json<BTreeMap<String, Value>>> = row
+            .try_get("parent_claims")
+            .map_err(db("decode parent ceiling"))?;
+        let ceiling = parent.and_then(|claims| {
+            lenso_auth_sdk::credential::ManagementCredentialCeiling::from_claims(&claims.0).ok()
+        });
+        crate::constrain_management_claim(&mut claims, ceiling.as_ref());
+    }
+    Ok(claims)
 }

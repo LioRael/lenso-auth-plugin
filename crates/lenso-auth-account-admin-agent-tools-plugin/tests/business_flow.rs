@@ -158,7 +158,7 @@ fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
         .with_capability(endpoint(
             delegation::CAPABILITY_ID,
             delegation::DESCRIPTOR_VERSION,
-            &["grant"],
+            &["grant", "grant_scoped", "scoped_receipt"],
         ))
         .with_requirement(CapabilityRequirementPlan::one(
             secrets::CAPABILITY_ID,

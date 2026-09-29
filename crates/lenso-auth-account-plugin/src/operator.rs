@@ -35,6 +35,54 @@ impl AccountAuthOperator {
             postgres: OwnedPostgres::prepare(database_url, schema_plan(schema)?).await?,
         })
     }
+    /// Narrows an existing session's stored ceiling without issuing another credential.
+    pub async fn attenuate_session_ceiling(
+        &self,
+        session_id: &str,
+        ceiling: &lenso_auth_sdk::credential::ManagementCredentialCeiling,
+    ) -> Result<bool, AccountOperatorError> {
+        use sqlx::Row;
+        let mut tx = self
+            .postgres
+            .pool()
+            .begin()
+            .await
+            .map_err(db("begin session attenuation"))?;
+        let row = sqlx::query("SELECT claims FROM auth_sessions WHERE session_id=$1 FOR UPDATE")
+            .bind(session_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(db("lock session ceiling"))?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let mut claims: std::collections::BTreeMap<String, serde_json::Value> = row
+            .try_get::<sqlx::types::Json<_>, _>("claims")
+            .map_err(db("decode session ceiling"))?
+            .0;
+        let Ok(parent) =
+            lenso_auth_sdk::credential::ManagementCredentialCeiling::from_claims(&claims)
+        else {
+            return Ok(false);
+        };
+        if !ceiling.is_attenuation_of(&parent) {
+            return Ok(false);
+        }
+        claims.insert(
+            lenso_auth_sdk::credential::MANAGEMENT_CEILING_CLAIM.into(),
+            serde_json::json!(ceiling),
+        );
+        sqlx::query("UPDATE auth_sessions SET claims=$2 WHERE session_id=$1")
+            .bind(session_id)
+            .bind(sqlx::types::Json(&claims))
+            .execute(&mut *tx)
+            .await
+            .map_err(db("attenuate session ceiling"))?;
+        tx.commit()
+            .await
+            .map_err(db("commit session attenuation"))?;
+        Ok(true)
+    }
     /// Disables an identity and revokes all of its sessions in one transaction.
     pub async fn disable_subject(&self, subject: &str) -> Result<bool, AccountOperatorError> {
         let mut transaction = self

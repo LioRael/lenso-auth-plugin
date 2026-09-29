@@ -1,9 +1,23 @@
 {
   "id": "lenso.auth.delegation@1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "portable": true,
   "cross_lane_transfer": false,
   "operations": [
+    {
+      "name": "grant_scoped",
+      "interaction": "request",
+      "request_schema": "schemas/grant-scoped-request.schema.json",
+      "response_schema": "schemas/grant-scoped-response.schema.json",
+      "domain_error_schema": "schemas/grant-scoped-error.schema.json"
+    },
+    {
+      "name": "scoped_receipt",
+      "interaction": "request",
+      "request_schema": "schemas/scoped-receipt-request.schema.json",
+      "response_schema": "schemas/scoped-receipt-response.schema.json",
+      "domain_error_schema": "schemas/scoped-receipt-error.schema.json"
+    },
     {
       "name": "grant",
       "interaction": "request",
