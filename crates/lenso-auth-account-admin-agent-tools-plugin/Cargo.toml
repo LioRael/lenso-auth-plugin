@@ -26,6 +26,7 @@ lenso-app-plan.workspace = true
 lenso-auth-account-plugin = { path = "../lenso-auth-account-plugin" }
 lenso-capability-auth = { path = "../lenso-capability-auth" }
 lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer" }
+lenso-capability-credential-state = { path = "../lenso-capability-credential-state" }
 lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory" }
 lenso-capability-secrets.workspace = true
 lenso-native-adapter.workspace = true

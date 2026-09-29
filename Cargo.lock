@@ -1122,6 +1122,7 @@ dependencies = [
  "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",
+ "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
  "lenso-capability-secrets",
  "lenso-kernel",

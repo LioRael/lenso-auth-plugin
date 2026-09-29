@@ -11,6 +11,7 @@ use lenso_capability_agent_tool_provider as tool;
 use lenso_capability_auth as auth;
 use lenso_capability_auth_delegation as delegation;
 use lenso_capability_credential_issuer as issuer;
+use lenso_capability_credential_state as credential_state;
 use lenso_capability_identity_directory as directory;
 use lenso_capability_secrets::{
     self as secrets, ResolveError, ResolveRequest, ResolveResponse, Secrets, SecretsEndpoint,
@@ -182,6 +183,11 @@ fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
             admin::CAPABILITY_ID,
             admin::DESCRIPTOR_VERSION,
             &["list_subjects", "list_sessions", "set_subject_status"],
+        ))
+        .with_capability(endpoint(
+            credential_state::CAPABILITY_ID,
+            credential_state::DESCRIPTOR_VERSION,
+            &[credential_state::INSPECT_OPERATION],
         ));
     let mut caller = PluginInstancePlan::new("caller", CALLER_PACKAGE_ID);
     let mut bindings = vec![CapabilityBinding::new(

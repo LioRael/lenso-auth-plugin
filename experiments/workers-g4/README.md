@@ -76,7 +76,7 @@ Source dependencies must be unified, including HTTP Capability crates. A registr
 and path copy of the same Capability crate produces distinct native Rust type IDs.
 
 ```sh
-CARGO="cargo +1.94.0" bash build.sh
+RUSTUP_TOOLCHAIN=1.94.0 bash build.sh
 pnpm install --frozen-lockfile
 node_modules/.bin/wrangler d1 migrations apply ACCOUNT_DB --remote
 node_modules/.bin/wrangler d1 migrations apply OAUTH_DB --remote
