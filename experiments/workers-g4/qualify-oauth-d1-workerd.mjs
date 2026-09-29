@@ -17,7 +17,7 @@ const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const output = resolve(root, ".oauth-d1-proof.bundle.mjs");
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"));
-const { Miniflare } = wranglerRequire("miniflare");
+const { Miniflare, convertV4MiniflareOptions } = wranglerRequire("miniflare");
 const { build } = wranglerRequire("esbuild");
 const outputIndex = process.argv.indexOf("--output");
 
@@ -84,7 +84,7 @@ try {
   });
 
   const createLocalWorkerd = () =>
-    new Miniflare({
+    new Miniflare(convertV4MiniflareOptions({
       d1Persist: persistenceDirectory,
       workers: [{
       name: "oauth-d1-proof",
@@ -107,7 +107,7 @@ try {
         PROVIDER_JWKS: "{}",
       },
       }],
-    });
+    }));
   mf = createLocalWorkerd();
 
   let oauthDb = await mf.getD1Database("OAUTH_DB");

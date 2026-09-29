@@ -18,7 +18,7 @@ const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 const output = resolve(root, ".fused-session-proof.bundle.mjs");
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve("wrangler/package.json"));
-const { Miniflare } = wranglerRequire("miniflare");
+const { Miniflare, convertV4MiniflareOptions } = wranglerRequire("miniflare");
 const { build } = wranglerRequire("esbuild");
 const outputIndex = process.argv.indexOf("--output");
 
@@ -105,7 +105,7 @@ try {
   const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const idpJwk = JSON.stringify(privateKey.export({ format: "jwk" }));
   const createLocalWorkerd = () =>
-    new Miniflare({
+    new Miniflare(convertV4MiniflareOptions({
       d1Persist: persistenceDirectory,
       workers: [
         {
@@ -131,7 +131,7 @@ try {
           bindings: { ...fixedBindings, IDP_JWK: idpJwk },
         },
       ],
-    });
+    }));
   mf = createLocalWorkerd();
   let accountDb = await mf.getD1Database("ACCOUNT_DB", "fused-session-main");
   let oauthDb = await mf.getD1Database("OAUTH_DB", "fused-session-main");

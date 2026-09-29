@@ -12,7 +12,7 @@ const root=fileURLToPath(new URL(".",import.meta.url));
 const repository=fileURLToPath(new URL("../../",import.meta.url));
 const require=createRequire(import.meta.url);
 const wranglerRequire=createRequire(require.resolve("wrangler/package.json"));
-const {Miniflare}=wranglerRequire("miniflare");
+const {Miniflare,convertV4MiniflareOptions}=wranglerRequire("miniflare");
 const {build}=wranglerRequire("esbuild");
 const output=resolve(root,".credential-state-proof.bundle.mjs");
 const receiptPath=process.argv[2];
@@ -28,7 +28,7 @@ try {
   if(process.env.LENSO_CARGO_CONFIG)args.push("--config",process.env.LENSO_CARGO_CONFIG);
   execFileSync("bash",args,{cwd:root,stdio:"inherit"});
   await build({entryPoints:[resolve(root,"credential-state-proof-worker.mjs")],outfile:output,bundle:true,format:"esm",platform:"browser",target:"es2022",plugins:[{name:"wasm",setup(b){b.onResolve({filter:/\.wasm$/},a=>({path:a.path,external:true}));}}]});
-  const start=()=>new Miniflare({d1Persist:persistence,workers:[{name:"credential-state-proof",modules:true,scriptPath:output,modulesRoot:root,modulesRules:[{type:"CompiledWasm",include:["**/*.wasm"]}],compatibilityDate:"2026-07-08",d1Databases:{ACCOUNT_DB:"credential-account",OAUTH_DB:"credential-oauth",API_TOKEN_DB:"credential-token"},bindings:{SIGNING_KEY:"0123456789abcdef0123456789abcdef",TOKEN_PEPPER:"fedcba9876543210fedcba9876543210",OAUTH_KEY:"0123456789abcdef0123456789abcdef",OIDC_SECRET:"local-oidc-secret",OTP_SECRET:"local-otp-secret",PROVIDER_SIGNING_KEY:"local-provider-signing",PROVIDER_JWKS:"{}"}}]});
+  const start=()=>new Miniflare(convertV4MiniflareOptions({d1Persist:persistence,workers:[{name:"credential-state-proof",modules:true,scriptPath:output,modulesRoot:root,modulesRules:[{type:"CompiledWasm",include:["**/*.wasm"]}],compatibilityDate:"2026-07-08",d1Databases:{ACCOUNT_DB:"credential-account",OAUTH_DB:"credential-oauth",API_TOKEN_DB:"credential-token"},bindings:{SIGNING_KEY:"0123456789abcdef0123456789abcdef",TOKEN_PEPPER:"fedcba9876543210fedcba9876543210",OAUTH_KEY:"0123456789abcdef0123456789abcdef",OIDC_SECRET:"local-oidc-secret",OTP_SECRET:"local-otp-secret",PROVIDER_SIGNING_KEY:"local-provider-signing",PROVIDER_JWKS:"{}"}}]}));
   mf=start();
   for(const [owner,binding] of [["account","ACCOUNT_DB"],["oauth-flow","OAUTH_DB"],["api-token","API_TOKEN_DB"]]) {
     const response=await mf.dispatchFetch(`http://local/migration?owner=${owner}&binding=${binding}&action=setup`);
