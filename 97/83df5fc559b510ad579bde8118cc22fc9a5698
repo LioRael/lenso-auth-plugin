@@ -1,0 +1,75 @@
+crates/lenso-auth-account-admin-agent-tools-plugin/tests/business_flow.rs
+  s_f4202e28c6b5b1::t_e8bbf9f3c5ca20 161
+crates/lenso-auth-account-plugin/configuration.schema.json
+  s_f4202e28c6b5b1::t_b4fb67e2e3dd85 130-136
+crates/lenso-auth-account-plugin/migrations/postgres/004_add_scoped_delegation_receipts.sql
+  s_f4202e28c6b5b1::t_6a9c2b19d517d9 1-11
+crates/lenso-auth-account-plugin/src/delegation.rs
+  s_f4202e28c6b5b1::t_f5397b4d451ecb 84-312
+crates/lenso-auth-account-plugin/src/delegation/scoped_postgres.rs
+  s_f4202e28c6b5b1::t_9619e4840d2105 1-183
+crates/lenso-auth-account-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_69a7e43b9a9624 80-81,109,132-140,239-245,439-441,696,716-719,772,794-795,933-941,1101-1130
+crates/lenso-auth-account-plugin/src/operator.rs
+  s_f4202e28c6b5b1::t_117311efcc270d 38-85
+crates/lenso-auth-account-plugin/src/schema.rs
+  s_f4202e28c6b5b1::t_bd28090bd6385d 19-23
+crates/lenso-auth-account-plugin/src/storage/postgres.rs
+  s_f4202e28c6b5b1::t_0ce382a5d529e8 40,45,217,246,463-478
+crates/lenso-auth-human-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_82cddab798fd50 115-119,499-522
+crates/lenso-auth-human-api-token-plugin/tests/postgres_lifecycle.rs
+  s_f4202e28c6b5b1::t_f58d33faea4558 172-175,254,354-358,494-498,1028-1290
+crates/lenso-auth-sdk/src/delegation.rs
+  s_f4202e28c6b5b1::t_06c36fe5ef2660 1-77
+crates/lenso-auth-sdk/src/lib.rs
+  s_f4202e28c6b5b1::t_091de9455f31e2 4
+crates/lenso-capability-auth-delegation/build.rs
+  s_f4202e28c6b5b1::t_02b9d9db70ed20 29-31
+crates/lenso-capability-auth-delegation/capability.json
+  s_7d146975368699::t_d12d4993bdcade 3,7-20
+crates/lenso-capability-auth-delegation/schemas/grant-scoped-error.schema.json
+  s_7d146975368699::t_c36e3fc3b597e9 1-9
+crates/lenso-capability-auth-delegation/schemas/grant-scoped-request.schema.json
+  s_7d146975368699::t_96c5e11411b4eb 1-77
+crates/lenso-capability-auth-delegation/schemas/grant-scoped-response.schema.json
+  s_7d146975368699::t_0533b1af10f95b 1-96
+crates/lenso-capability-auth-delegation/schemas/scoped-receipt-error.schema.json
+  s_7d146975368699::t_111e6bbedca19d 1-8
+crates/lenso-capability-auth-delegation/schemas/scoped-receipt-request.schema.json
+  s_7d146975368699::t_28e67e35e55522 1-18
+crates/lenso-capability-auth-delegation/schemas/scoped-receipt-response.schema.json
+  s_7d146975368699::t_a44d94a171744d 1-99
+crates/lenso-capability-auth-delegation/src/contract.rs
+  s_f4202e28c6b5b1::t_a2ded238bb1b9c 39-118,122,127-136
+crates/lenso-capability-auth-delegation/src/generated.rs
+  s_f4202e28c6b5b1::t_6bd49046468f40 8-9,19,24-25,31,37-38,42-43,45,115-260,262-263,284-329,387-490,498-511,531,535-594,600-602,611,618-631,642,650-665,676,683-696,719-720,737-762,801-803,817,819-820,823,825-850,863-865,896-898,915,919-928
+crates/lenso-capability-auth-delegation/src/lib.rs
+  s_f4202e28c6b5b1::t_707ad1d8d10467 5-10
+docs/adr/0006-delegate-existing-user-sessions-to-agent-clients.md
+  s_f4202e28c6b5b1::t_376356664be88e 3,45-86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9783df5fc559b510ad579bde8118cc22fc9a5698",
+  "prompts": {},
+  "sessions": {
+    "s_7d146975368699": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c54a-381f-7362-9b4d-95aea89e2437",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    },
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
