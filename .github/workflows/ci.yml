@@ -38,6 +38,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      - name: Verify portable public-key actor binding
+        run: node --test crates/lenso-auth-sdk/typescript/actor.test.ts
       - name: Install released Runtime package
         run: npm ci --ignore-scripts --prefix workers
       - name: Check generated private D1 bridges

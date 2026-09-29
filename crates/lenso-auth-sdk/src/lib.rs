@@ -1,5 +1,7 @@
 //! Portable Auth semantics shared by ingress Adapters and target Plugins.
 
+pub mod realm;
+
 use std::{collections::BTreeMap, fmt};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -470,7 +472,8 @@ impl ActorAssertionVerifier {
         T::from_assertion(&assertion)
     }
 
-    fn verify_for(
+    /// Verifies signature, issuer, exact operation audience, and current validity.
+    pub fn verify_for(
         &self,
         assertion: &ActorAssertion,
         expected_audience: &str,
