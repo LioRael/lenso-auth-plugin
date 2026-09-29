@@ -1,0 +1,45 @@
+.github/workflows/ci.yml
+  s_f4202e28c6b5b1::t_8b9831ba7a4586 41-42
+Cargo.lock
+  s_7d146975368699::t_40ab930e25c432 1468,1479,1481,1485,1487,1490,1502,1517,1532,1547,1562,1577,1595,1598,1615,1618,1643,1658,1673,1688,1703,1732,1857
+Cargo.toml
+  s_7d146975368699::t_29d2549b6dcdcd 51,54,56-57,61
+crates/lenso-auth-sdk/src/lib.rs
+  s_f4202e28c6b5b1::t_5f438080f31359 3-4,475-476
+crates/lenso-auth-sdk/src/realm.rs
+  s_f4202e28c6b5b1::t_6b3dcbd4d3fd52 1-204
+crates/lenso-auth-sdk/typescript/actor.test.ts
+  s_f4202e28c6b5b1::t_f732d02fbdf55b 1-35
+crates/lenso-auth-sdk/typescript/actor.ts
+  s_f4202e28c6b5b1::t_fae637b1cf62ce 25-37,44,49-50,53-54,72-73,76,80,96,104,111-125
+crates/lenso-capability-oauth-flow/src/generated.rs
+  s_f4202e28c6b5b1::t_5a48735b736ccf 183
+crates/lenso-capability-oidc-provider/src/generated.rs
+  s_f4202e28c6b5b1::t_ee061c1ba2e903 196
+docs/management-realm-admission.md
+  s_f4202e28c6b5b1::t_7ca4fe8bb9f8f1 1-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b4fbcf5f4470847ae376d7f7e98f85cd8fefd3e7",
+  "prompts": {},
+  "sessions": {
+    "s_7d146975368699": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0c54a-381f-7362-9b4d-95aea89e2437",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    },
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
