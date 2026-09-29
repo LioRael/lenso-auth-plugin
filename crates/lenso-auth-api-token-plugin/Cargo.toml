@@ -28,7 +28,7 @@ base64.workspace = true
 futures.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
-lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.3" }
+lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.4" }
 lenso-capability-api-token-admin = { path = "../lenso-capability-api-token-admin", version = "0.1.0" }
 lenso-capability-credential-state = { path = "../lenso-capability-credential-state", version = "0.1.0" }
 lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }

@@ -2,9 +2,12 @@
 
 Contribution and candidate-landing rules are in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-The default branch contains six public vNext Rust crates:
+The source candidate contains nine public vNext Rust crates:
 
 - `lenso-capability-auth`
+- `lenso-capability-credential-state`
+- `lenso-capability-api-token-admin`
+- `lenso-capability-human-api-token`
 - `lenso-auth-sdk`
 - `lenso-capability-credential-issuer`
 - `lenso-capability-identity-directory`
@@ -13,6 +16,17 @@ The default branch contains six public vNext Rust crates:
 
 All other workspace members are private implementation crates and must keep
 `publish = false`.
+
+The three credential lifecycle/state contracts are new, unpublished packages.
+They are consumed through one exact source revision until a separately approved
+first publication. Their candidate archives do not prove registry availability.
+The changed Auth SDK is version `0.2.4`; its Auth wire contract remains
+`lenso.auth@1` from the unchanged published `lenso-capability-auth` `0.2.0`.
+CI packages the changed public cohort with `--locked` and actual verification.
+It must not substitute a repacked archive for an unchanged, already published
+name/version: Cargo's synthetic local registry would conflict with the immutable
+registry checksum. The extracted Workers cohort separately compiles candidate
+archives together without publishing or rewriting registry checksums.
 
 Release planning is not automatic: this repository does not create Release-plz
 PRs and pushes do not trigger release workflows. Publication is manual-only and
@@ -57,7 +71,7 @@ not a release-plz workflow run. Later unpublished versions enter the exact
 Do not store that bootstrap token in Cargo credentials, repository secrets,
 workflow logs, or shell history. After the first release, configure the same
 Trusted Publisher for each new crate. Do not run the live workflow until all
-six Trusted Publishers match the repository and workflow above.
+nine Trusted Publishers match the repository and workflow above.
 
 With the temporary token supplied by a credential helper, the bootstrap
 commands are:
@@ -124,7 +138,7 @@ Local checks are focused on the changed files; do not treat a full local suite a
 a substitute for candidate CI. The candidate `Check` job is the required
 lifecycle, session, credential, authorization, native, WASM, and database proof.
 A release-plz dry-run for future versions remains blocked until the API Token
-crate has been bootstrapped, all six public crates have Trusted Publishers
+crate and the three new contracts have been bootstrapped, all nine public crates have Trusted Publishers
 configured, and the exact dependency and version set has been reviewed. No
 release or package publication is authorized by ordinary contribution or
 landing.

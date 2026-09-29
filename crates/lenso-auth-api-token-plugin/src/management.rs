@@ -89,6 +89,42 @@ impl ApiTokenAuthPlugin {
         })
     }
     #[allow(clippy::needless_pass_by_value)]
+    pub(crate) fn receipt(
+        &self,
+        context: InvocationContext,
+        request: admin::ReceiptRequest,
+    ) -> NativeRequestFuture<admin::ApiTokenAdminReceipt> {
+        let allowed = self.management_permitted(&context);
+        let prepared = self.state.borrow().clone();
+        Box::pin(async move {
+            if !allowed {
+                return Ok(Err(admin::ReceiptError::PermissionDenied));
+            }
+            let prepared = prepared.ok_or_else(unprepared)?;
+            #[cfg(feature = "postgres")]
+            #[allow(irrefutable_let_patterns)]
+            if let ApiTokenStore::Postgres(postgres) = &prepared.store {
+                if !crate::valid_identity(&request.subject)
+                    || !crate::valid_identity(&request.deployment)
+                    || !crate::valid_identity(&request.idempotency_key)
+                    || request.idempotency_key.len() > 128
+                {
+                    return Ok(Err(admin::ReceiptError::InvalidRequest));
+                }
+                let row = sqlx::query("SELECT t.token_id,i.name,s.claims,LEAST(s.expires_at,t.expires_at) AS expires_at,(s.revoked_at IS NOT NULL OR t.revoked_at IS NOT NULL) AS revoked FROM management_token_issuances i JOIN api_tokens t ON t.token_id=i.token_id JOIN auth_sessions s ON s.session_id=t.session_id WHERE i.caller_instance=$1 AND i.subject=$2 AND i.idempotency_key=$3 AND s.actor_kind='user' AND s.claims->'lenso.auth.management-ceiling'->>'deployment'=$4")
+                    .bind(context.caller_instance().expect("permitted exact caller"))
+                    .bind(&request.subject).bind(&request.idempotency_key).bind(&request.deployment)
+                    .fetch_optional(postgres.pool()).await.map_err(database)?;
+                return Ok(Ok(admin::ReceiptResponse {
+                    found: row.is_some(),
+                    credential: Some(row.as_ref().map(metadata).transpose()?),
+                }));
+            }
+            let _ = (prepared, request);
+            Ok(Err(admin::ReceiptError::UnsupportedProfile))
+        })
+    }
+    #[allow(clippy::needless_pass_by_value)]
     pub(crate) fn revoke(
         &self,
         context: InvocationContext,

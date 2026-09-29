@@ -75,6 +75,27 @@ pub enum ListError {
 #[derive(lenso::JsonSchema, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 #[schemars(deny_unknown_fields)]
+pub struct ReceiptRequest {
+    pub deployment: String,
+    #[schemars(length(min = 1, max = 128))]
+    pub idempotency_key: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct ReceiptResponse {
+    pub found: bool,
+    pub credential: Option<CredentialMetadata>,
+}
+#[derive(lenso::DomainError)]
+pub enum ReceiptError {
+    PermissionDenied,
+    InvalidRequest,
+    UnsupportedProfile,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 pub struct RevokeRequest {
     pub deployment: String,
     pub credential_id: String,
@@ -110,6 +131,11 @@ pub trait HumanApiToken {
         context: lenso::Ctx<'_>,
         request: ListRequest,
     ) -> Result<ListResponse, ListError>;
+    async fn receipt(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: ReceiptRequest,
+    ) -> Result<ReceiptResponse, ReceiptError>;
     async fn revoke(
         &self,
         context: lenso::Ctx<'_>,

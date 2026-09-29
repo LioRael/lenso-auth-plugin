@@ -1088,7 +1088,7 @@ dependencies = [
 
 [[package]]
 name = "lenso-auth-sdk"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "base64",
  "ed25519-dalek 3.0.0",

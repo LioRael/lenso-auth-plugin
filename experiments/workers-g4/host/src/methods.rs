@@ -147,7 +147,7 @@ pub(super) fn extend_plan(
         plugin = plugin.with_capability(CapabilityEndpointPlan::new(
             lenso_capability_api_token_admin::CAPABILITY_ID,
             lenso_capability_api_token_admin::DESCRIPTOR_VERSION,
-            ["issue", "list", "revoke"],
+            ["issue", "list", "receipt", "revoke"],
         ));
         plugin = plugin.with_capability(CapabilityEndpointPlan::new(
             credential_state::CAPABILITY_ID,

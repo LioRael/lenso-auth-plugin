@@ -6,7 +6,7 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.api-token-admin@1";
 pub const DESCRIPTOR_VERSION: &str = "1.0.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:fe35a8682bd1a4047e79d53c9f26e50ba5e7460eec88a571b66df3a278ced20c";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:6faac0aecccc3b4ab7c18be1ceb4e2dfea94eb3ecde696eb91f8a13afae6b8bc";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = false;
 pub const API_TOKEN_ADMIN_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,7 +16,7 @@ pub const API_TOKEN_ADMIN_CONTRACT: CapabilityReference<ApiTokenAdminClient> = C
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_api_token_admin { () => { "{\"capability_id\":\"lenso.auth.api-token-admin@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"issue\",\"list\",\"revoke\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":false}" }; }
+macro_rules! __lenso_provided_api_token_admin { () => { "{\"capability_id\":\"lenso.auth.api-token-admin@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"issue\",\"list\",\"receipt\",\"revoke\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":false}" }; }
 
 #[doc(hidden)]
 #[macro_export]
@@ -40,6 +40,7 @@ macro_rules! __lenso_required_many_api_token_admin_client {
 
 pub const ISSUE_OPERATION: &str = "issue";
 pub const LIST_OPERATION: &str = "list";
+pub const RECEIPT_OPERATION: &str = "receipt";
 pub const REVOKE_OPERATION: &str = "revoke";
 
 pub use lenso_contract_runtime::{OptionalValue, Timestamp, UnknownDomainError};
@@ -177,6 +178,39 @@ pub enum ListError {
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReceiptRequest {
+    #[serde(rename = "deployment")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub deployment: String,
+    #[serde(rename = "idempotency_key")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub idempotency_key: String,
+    #[serde(rename = "subject")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub subject: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReceiptResponse {
+    #[serde(rename = "credential")]
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_optional_value")]
+    pub credential: OptionalValue<CredentialMetadata>,
+    #[serde(rename = "found")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub found: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ReceiptError {
+    InvalidRequest,
+    PermissionDenied,
+    UnsupportedProfile,
+    Unknown(UnknownDomainError),
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RevokeRequest {
     #[serde(rename = "credential_id")]
     #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
@@ -248,6 +282,29 @@ impl RequestCapability for ApiTokenAdminList {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
         Rc::clone(&typed_endpoint.provider).list(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct ApiTokenAdminReceipt;
+impl RequestCapability for ApiTokenAdminReceipt {
+    type Request = ReceiptRequest;
+    type Response = ReceiptResponse;
+    type DomainError = ReceiptError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != RECEIPT_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<ApiTokenAdminRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).receipt(context, request)
     }
 }
 
@@ -378,6 +435,57 @@ impl<'de> serde::Deserialize<'de> for ListError {
     }
 }
 
+impl serde::Serialize for ReceiptError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::PermissionDenied => serializer.serialize_str("permission_denied"),
+            Self::UnsupportedProfile => serializer.serialize_str("unsupported_profile"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ReceiptError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "invalid_request" => Ok(Self::InvalidRequest),
+                "permission_denied" => Ok(Self::PermissionDenied),
+                "unsupported_profile" => Ok(Self::UnsupportedProfile),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
 impl serde::Serialize for RevokeError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -445,6 +553,13 @@ pub fn decode_list_response(wire: &str) -> Result<ListResponse, serde_json::Erro
 pub fn encode_list_error(value: &ListError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_list_error(wire: &str) -> Result<ListError, serde_json::Error> { decode_portable_json(wire) }
 
+pub fn encode_receipt_request(value: &ReceiptRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_receipt_request(wire: &str) -> Result<ReceiptRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_receipt_response(value: &ReceiptResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_receipt_response(wire: &str) -> Result<ReceiptResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_receipt_error(value: &ReceiptError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_receipt_error(wire: &str) -> Result<ReceiptError, serde_json::Error> { decode_portable_json(wire) }
+
 pub fn encode_revoke_request(value: &RevokeRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_revoke_request(wire: &str) -> Result<RevokeRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_revoke_response(value: &RevokeResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
@@ -511,6 +626,35 @@ impl __LensoIntoApiTokenAdminListResult for Result<ListResponse, ApiTokenAdminLi
 }
 
 #[doc(hidden)]
+pub trait __LensoIntoApiTokenAdminReceiptResult {
+    fn __lenso_into_result(self) -> Result<Result<ReceiptResponse, ReceiptError>, RuntimeFailure>;
+}
+impl __LensoIntoApiTokenAdminReceiptResult for Result<ReceiptResponse, ReceiptError> {
+    fn __lenso_into_result(self) -> Result<Result<ReceiptResponse, ReceiptError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoApiTokenAdminReceiptResult for Result<Result<ReceiptResponse, ReceiptError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<ReceiptResponse, ReceiptError>, RuntimeFailure> { self }
+}
+impl __LensoIntoApiTokenAdminReceiptResult for Result<ReceiptResponse, lenso_plugin_authoring::PluginError<ReceiptError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<ReceiptResponse, ReceiptError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoApiTokenAdminReceiptResult for Result<ReceiptResponse, ApiTokenAdminReceiptInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<ReceiptResponse, ReceiptError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(ApiTokenAdminReceiptInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(ApiTokenAdminReceiptInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
 pub trait __LensoIntoApiTokenAdminRevokeResult {
     fn __lenso_into_result(self) -> Result<Result<RevokeResponse, RevokeError>, RuntimeFailure>;
 }
@@ -542,6 +686,7 @@ impl __LensoIntoApiTokenAdminRevokeResult for Result<RevokeResponse, ApiTokenAdm
 pub trait ApiTokenAdminProvider: fmt::Debug + 'static {
     fn issue(&self, context: InvocationContext, request: IssueRequest) -> NativeRequestFuture<ApiTokenAdminIssue>;
     fn list(&self, context: InvocationContext, request: ListRequest) -> NativeRequestFuture<ApiTokenAdminList>;
+    fn receipt(&self, context: InvocationContext, request: ReceiptRequest) -> NativeRequestFuture<ApiTokenAdminReceipt>;
     fn revoke(&self, context: InvocationContext, request: RevokeRequest) -> NativeRequestFuture<ApiTokenAdminRevoke>;
 }
 
@@ -563,6 +708,13 @@ macro_rules! __lenso_native_lower_api_token_admin {
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::list(&plugin, context, request).await;
                 $crate::__LensoIntoApiTokenAdminListResult::__lenso_into_result(result)
+            })
+        }
+        fn receipt(&self, context: __LensoNativeSupportApiTokenAdmin::InvocationContext, request: $crate::ReceiptRequest) -> __LensoNativeSupportApiTokenAdmin::NativeRequestFuture<$crate::ApiTokenAdminReceipt> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::receipt(&plugin, context, request).await;
+                $crate::__LensoIntoApiTokenAdminReceiptResult::__lenso_into_result(result)
             })
         }
         fn revoke(&self, context: __LensoNativeSupportApiTokenAdmin::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportApiTokenAdmin::NativeRequestFuture<$crate::ApiTokenAdminRevoke> {
@@ -598,6 +750,14 @@ macro_rules! __lenso_native_lower_object_api_token_admin {
                 $crate::__LensoIntoApiTokenAdminListResult::__lenso_into_result(result)
             })
         }
+        fn receipt(&self, context: __LensoNativeSupportApiTokenAdmin::InvocationContext, request: $crate::ReceiptRequest) -> __LensoNativeSupportApiTokenAdmin::NativeRequestFuture<$crate::ApiTokenAdminReceipt> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::receipt(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoApiTokenAdminReceiptResult::__lenso_into_result(result)
+            })
+        }
         fn revoke(&self, context: __LensoNativeSupportApiTokenAdmin::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportApiTokenAdmin::NativeRequestFuture<$crate::ApiTokenAdminRevoke> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -630,6 +790,13 @@ macro_rules! __lenso_native_lower_trait_object_api_token_admin {
                 <$plugin as $crate::ApiTokenAdminProvider>::list(plugin.as_ref(), context, request).await
             })
         }
+        fn receipt(&self, context: __LensoNativeSupportApiTokenAdmin::InvocationContext, request: $crate::ReceiptRequest) -> __LensoNativeSupportApiTokenAdmin::NativeRequestFuture<$crate::ApiTokenAdminReceipt> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::ApiTokenAdminProvider>::receipt(plugin.as_ref(), context, request).await
+            })
+        }
         fn revoke(&self, context: __LensoNativeSupportApiTokenAdmin::InvocationContext, request: $crate::RevokeRequest) -> __LensoNativeSupportApiTokenAdmin::NativeRequestFuture<$crate::ApiTokenAdminRevoke> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -660,6 +827,7 @@ impl<P: ApiTokenAdminProvider> NativeRequestEndpoint for ApiTokenAdminEndpoint<P
     fn operations(&self) -> &'static [&'static str] { &[
         ISSUE_OPERATION,
         LIST_OPERATION,
+        RECEIPT_OPERATION,
         REVOKE_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
@@ -683,6 +851,19 @@ impl<P: ApiTokenAdminProvider> NativeRequestEndpoint for ApiTokenAdminEndpoint<P
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).list(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            RECEIPT_OPERATION => {
+                let Ok(request) = request.downcast::<ReceiptRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).receipt(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -743,6 +924,7 @@ macro_rules! __lenso_native_provide_api_token_admin {
 pub struct ApiTokenAdminClient {
     issue: NativeRequestHandle<ApiTokenAdminIssue>,
     list: NativeRequestHandle<ApiTokenAdminList>,
+    receipt: NativeRequestHandle<ApiTokenAdminReceipt>,
     revoke: NativeRequestHandle<ApiTokenAdminRevoke>,
 }
 impl ApiTokenAdminClient {
@@ -781,6 +963,18 @@ impl ApiTokenAdminClient {
             .map_err(ApiTokenAdminListInvocationError::Domain)
     }
 
+    pub async fn receipt(&self, request: ReceiptRequest) -> Result<ReceiptResponse, ApiTokenAdminReceiptInvocationError> {
+        self.receipt.invoke(RECEIPT_OPERATION, request).await
+            .map_err(ApiTokenAdminReceiptInvocationError::Runtime)?
+            .map_err(ApiTokenAdminReceiptInvocationError::Domain)
+    }
+
+    pub async fn receipt_with_context(&self, context: InvocationContext, request: ReceiptRequest) -> Result<ReceiptResponse, ApiTokenAdminReceiptInvocationError> {
+        self.receipt.invoke_with_context(RECEIPT_OPERATION, context, request).await
+            .map_err(ApiTokenAdminReceiptInvocationError::Runtime)?
+            .map_err(ApiTokenAdminReceiptInvocationError::Domain)
+    }
+
     pub async fn revoke(&self, request: RevokeRequest) -> Result<RevokeResponse, ApiTokenAdminRevokeInvocationError> {
         self.revoke.invoke(REVOKE_OPERATION, request).await
             .map_err(ApiTokenAdminRevokeInvocationError::Runtime)?
@@ -805,6 +999,7 @@ impl CapabilityClient for ApiTokenAdminClient {
         Ok(Self {
             issue: dependencies.one::<ApiTokenAdminIssue>()?,
             list: dependencies.one::<ApiTokenAdminList>()?,
+            receipt: dependencies.one::<ApiTokenAdminReceipt>()?,
             revoke: dependencies.one::<ApiTokenAdminRevoke>()?,
         })
     }
@@ -838,6 +1033,7 @@ impl CapabilityClientMany for ApiTokenAdminClient {
                     Self {
                     issue: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<ApiTokenAdminIssue>()?,
                     list: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<ApiTokenAdminList>()?,
+                    receipt: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<ApiTokenAdminReceipt>()?,
                     revoke: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<ApiTokenAdminRevoke>()?,
                     },
                 ))
@@ -862,6 +1058,11 @@ pub enum ApiTokenAdminIssueInvocationError {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ApiTokenAdminListInvocationError {
     Domain(ListError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum ApiTokenAdminReceiptInvocationError {
+    Domain(ReceiptError),
     Runtime(RuntimeFailure),
 }
 #[derive(Clone, Debug, PartialEq)]

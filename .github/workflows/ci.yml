@@ -66,5 +66,5 @@ jobs:
         run: node --test workers/d1-binding.test.mjs
       - name: Check extracted Workers Auth packages
         run: python3 workers/check-packages.py
-      - name: Package public crates
-        run: cargo package --locked -p lenso-capability-auth -p lenso-capability-credential-state -p lenso-capability-api-token-admin -p lenso-capability-human-api-token -p lenso-auth-sdk -p lenso-capability-credential-issuer -p lenso-capability-identity-directory -p lenso-capability-password-auth
+      - name: Package changed public cohort
+        run: cargo package --locked -p lenso-capability-credential-state -p lenso-capability-api-token-admin -p lenso-capability-human-api-token -p lenso-auth-sdk

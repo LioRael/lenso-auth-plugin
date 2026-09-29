@@ -19,6 +19,13 @@
       "domain_error_schema": "schemas/list-error.schema.json"
     },
     {
+      "name": "receipt",
+      "interaction": "request",
+      "request_schema": "schemas/receipt-request.schema.json",
+      "response_schema": "schemas/receipt-response.schema.json",
+      "domain_error_schema": "schemas/receipt-error.schema.json"
+    },
+    {
       "name": "revoke",
       "interaction": "request",
       "request_schema": "schemas/revoke-request.schema.json",

@@ -393,6 +393,50 @@ impl HumanApiTokenPlugin {
             }
         })
     }
+    fn receipt(
+        &self,
+        context: InvocationContext,
+        request: human::ReceiptRequest,
+    ) -> NativeRequestFuture<human::HumanApiTokenReceipt> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            let Some(user) = plugin
+                .current_user(&context, human::RECEIPT_OPERATION, "auth.pat.list")
+                .await?
+            else {
+                return Ok(Err(human::ReceiptError::PermissionDenied));
+            };
+            if request.deployment != plugin.config.deployment {
+                return Ok(Err(human::ReceiptError::InvalidRequest));
+            }
+            match plugin
+                .api_tokens
+                .receipt_with_context(
+                    context,
+                    admin::ReceiptRequest {
+                        subject: user.subject,
+                        deployment: request.deployment,
+                        idempotency_key: request.idempotency_key,
+                    },
+                )
+                .await
+            {
+                Ok(response) => Ok(Ok(translate(response)?)),
+                Err(admin::ApiTokenAdminReceiptInvocationError::Domain(error)) => {
+                    Ok(Err(match error {
+                        admin::ReceiptError::PermissionDenied => {
+                            human::ReceiptError::PermissionDenied
+                        }
+                        admin::ReceiptError::UnsupportedProfile => {
+                            human::ReceiptError::UnsupportedProfile
+                        }
+                        _ => human::ReceiptError::InvalidRequest,
+                    }))
+                }
+                Err(admin::ApiTokenAdminReceiptInvocationError::Runtime(error)) => Err(error),
+            }
+        })
+    }
     fn revoke(
         &self,
         context: InvocationContext,

@@ -276,7 +276,7 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
         (
             token_admin::CAPABILITY_ID,
             token_admin::DESCRIPTOR_VERSION,
-            vec!["issue", "list", "revoke"],
+            vec!["issue", "list", "receipt", "revoke"],
         ),
     ] {
         tokens = endpoint(tokens, cap, version, &ops);
@@ -320,7 +320,7 @@ fn plan(schemas: &[String; 3], current: ManagementCredentialCeiling) -> Resolved
         .with_configuration(serde_json::to_string(&human_config).unwrap()),
         human::CAPABILITY_ID,
         human::DESCRIPTOR_VERSION,
-        &["issue", "list", "revoke"],
+        &["issue", "list", "receipt", "revoke"],
     );
     for (cap, version, target) in [
         (state::CAPABILITY_ID, state::DESCRIPTOR_VERSION, "account"),
@@ -484,6 +484,7 @@ fn audiences() -> Vec<String> {
     [
         audience(human::CAPABILITY_ID, "issue"),
         audience(human::CAPABILITY_ID, "list"),
+        audience(human::CAPABILITY_ID, "receipt"),
         audience(human::CAPABILITY_ID, "revoke"),
         audience(access_admin::CAPABILITY_ID, "assign_role"),
         audience(access_admin::CAPABILITY_ID, "create_role"),
@@ -714,6 +715,16 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
             )
             .unwrap();
             let request = issue_request("one-time");
+            let receipt_request = human::ReceiptRequest {
+                deployment: DEPLOYMENT.into(),
+                idempotency_key: request.idempotency_key.clone(),
+            };
+            let missing = human
+                .receipt_with_context(context(&app, &alice_assertion), receipt_request.clone())
+                .await
+                .unwrap();
+            assert!(!missing.found);
+            assert!(missing.credential.flatten().is_none());
             let issued = human
                 .issue_with_context(context(&app, &alice_assertion), request.clone())
                 .await
@@ -724,6 +735,36 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
                 .flatten()
                 .expect("secret only first time");
             assert!(!format!("{issued:?}").contains(&token));
+            let receipt = human
+                .receipt_with_context(context(&app, &alice_assertion), receipt_request.clone())
+                .await
+                .unwrap();
+            assert!(receipt.found);
+            assert_eq!(
+                receipt.credential.clone().flatten(),
+                Some(issued.credential.clone())
+            );
+            assert!(!serde_json::to_string(&receipt).unwrap().contains(&token));
+            let other_subject = human
+                .receipt_with_context(context(&app, &bob_assertion), receipt_request.clone())
+                .await
+                .unwrap();
+            assert!(!other_subject.found);
+            assert!(other_subject.credential.flatten().is_none());
+            assert!(matches!(
+                human
+                    .receipt_with_context(
+                        context(&app, &alice_assertion),
+                        human::ReceiptRequest {
+                            deployment: "different-deployment".into(),
+                            idempotency_key: receipt_request.idempotency_key.clone(),
+                        }
+                    )
+                    .await,
+                Err(human::HumanApiTokenReceiptInvocationError::Domain(
+                    human::ReceiptError::InvalidRequest
+                ))
+            ));
             let replay = human
                 .issue_with_context(context(&app, &alice_assertion), request.clone())
                 .await
@@ -760,6 +801,14 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
                 list(&app, &machine).await,
                 Err(human::HumanApiTokenListInvocationError::Domain(
                     human::ListError::PermissionDenied
+                ))
+            ));
+            assert!(matches!(
+                human
+                    .receipt_with_context(context(&app, &machine), receipt_request.clone())
+                    .await,
+                Err(human::HumanApiTokenReceiptInvocationError::Domain(
+                    human::ReceiptError::PermissionDenied
                 ))
             ));
             let alice_list = list(&app, &alice_assertion).await.unwrap();
@@ -817,6 +866,18 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
                     token_admin::ListError::PermissionDenied
                 ))
             ));
+            assert!(matches!(
+                admin
+                    .receipt(token_admin::ReceiptRequest {
+                        subject: alice.clone(),
+                        deployment: DEPLOYMENT.into(),
+                        idempotency_key: "one-time".into(),
+                    })
+                    .await,
+                Err(token_admin::ApiTokenAdminReceiptInvocationError::Domain(
+                    token_admin::ReceiptError::PermissionDenied
+                ))
+            ));
             human
                 .revoke_with_context(
                     context(&app, &alice_assertion),
@@ -837,6 +898,12 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
                 .unwrap()
                 .is_err()
             );
+            let revoked_receipt = human
+                .receipt_with_context(context(&app, &alice_assertion), receipt_request)
+                .await
+                .unwrap();
+            assert!(revoked_receipt.found);
+            assert!(!revoked_receipt.credential.flatten().unwrap().active);
             let mut expiring = issue_request("expired-receipt");
             expiring.expires_at = (OffsetDateTime::now_utc() + Duration::seconds(2))
                 .format(&Rfc3339)
@@ -854,6 +921,21 @@ async fn real_account_session_owns_live_human_pat_lifecycle() {
             assert!(expired.replayed);
             assert!(expired.token.is_none());
             assert!(!expired.credential.active);
+            let expired_receipt = human
+                .receipt_with_context(
+                    context(&app, &alice_assertion),
+                    human::ReceiptRequest {
+                        deployment: DEPLOYMENT.into(),
+                        idempotency_key: "expired-receipt".into(),
+                    },
+                )
+                .await
+                .unwrap();
+            assert!(expired_receipt.found);
+            assert_eq!(
+                expired_receipt.credential.flatten(),
+                Some(expired.credential)
+            );
             let session_issuer = issuer::CredentialIssuerClient::from_dependencies(
                 &app.dependencies("test.human/bootstrap").unwrap(),
             )

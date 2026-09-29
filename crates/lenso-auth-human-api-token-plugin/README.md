@@ -16,7 +16,7 @@ credential-binding or management-ceiling claim.
 `HumanApiTokenConfig::new` selects the exact Account realm issuer/public key,
 maximum assertion TTL, maximum token TTL, deployment and lifecycle scope,
 and the fixed audiences issued to new PATs. Account assertions need exact
-`lenso.auth.human-api-token@1:issue`, `:list` and `:revoke` audiences. The caller
+`lenso.auth.human-api-token@1:issue`, `:list`, `:receipt` and `:revoke` audiences. The caller
 also needs current `auth.pat.issue`, `auth.pat.list` or `auth.pat.revoke` RBAC
 permission in that fixed scope. Issuance intersects requested permissions and
 resources with signed and live ceilings and checks each permission/resource
@@ -38,10 +38,17 @@ starting an existing deployment. Runtime activation never runs migrations.
 Issuance records session, peppered verifier and receipt in one transaction.
 Only the first committed call returns the raw token. Same-key/same-intent
 replay returns current secret-free metadata, including revoked/expired status;
-a changed intent conflicts. After an uncertain response, query/retry the same
-key or list and explicitly revoke the credential before requesting a fresh
-key. Raw token recovery is unavailable. Token list/revoke predicates include
+a changed intent conflicts. After an uncertain response, use `receipt` with the
+original deployment and idempotency key. It reads the exact caller/derived-subject
+committed issuance record and returns current metadata without a secret or write.
+A missing record does not prove an in-flight transaction failed and must not
+trigger automatic reissuance. Raw token recovery is unavailable. Token list/revoke predicates include
 both the derived subject and the exact deployment.
+
+Both lifecycle contracts remain unreleased initial `@1` Descriptor drafts.
+The initial role includes issue, list, receipt and revoke; candidate consumers
+and providers must use the same exact source revision. This does not claim
+compatibility for an already published provider missing receipt.
 
 The real Native PostgreSQL fixture is
 `tests/postgres_lifecycle.rs`: it composes Account, API Token, Human facade and
