@@ -533,6 +533,11 @@ fn plan(schema: &str, public_key_secret: &str) -> ResolvedAppPlan {
         credential_state::DESCRIPTOR_VERSION,
         [credential_state::INSPECT_OPERATION],
     ));
+    let auth = auth.with_capability(CapabilityEndpointPlan::new(
+        lenso_capability_api_token_admin::CAPABILITY_ID,
+        lenso_capability_api_token_admin::DESCRIPTOR_VERSION,
+        ["issue", "list", "revoke"],
+    ));
     let secrets = PluginInstancePlan::new("secrets", SECRETS_PACKAGE_ID).with_capability(
         CapabilityEndpointPlan::new(
             SECRETS_CAPABILITY_ID,

@@ -1,5 +1,6 @@
 //! Opaque API-token Auth Plugin with privately owned persistence.
 
+mod management;
 #[cfg(feature = "workers")]
 pub mod migration;
 mod operator;
@@ -14,6 +15,7 @@ use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
 use lenso_auth_sdk::credential::{CREDENTIAL_BINDING_CLAIM, CredentialBinding};
 use lenso_auth_sdk::{ActorAssertionIssuer, Validity, absent_response, authenticated_response};
+use lenso_capability_api_token_admin as token_admin;
 use lenso_capability_auth as auth;
 use lenso_capability_auth::{
     Auth, AuthInvocationError, AuthRequest, AuthResponse, AuthenticateError,
@@ -62,6 +64,9 @@ pub struct ApiTokenAuthConfig {
     #[serde(default)]
     #[lenso(default = [])]
     credential_state_callers: Vec<String>,
+    #[serde(default)]
+    #[lenso(default = [])]
+    management_callers: Vec<String>,
 }
 
 impl ApiTokenAuthConfig {
@@ -85,6 +90,7 @@ impl ApiTokenAuthConfig {
             token_pepper_secret: token_pepper_secret.into(),
             assertion_ttl_seconds,
             credential_state_callers: Vec::new(),
+            management_callers: Vec::new(),
         };
         config.validate()?;
         Ok(config)
@@ -111,7 +117,30 @@ impl ApiTokenAuthConfig {
         Ok(self)
     }
 
+    pub fn with_management_callers(
+        mut self,
+        callers: Vec<String>,
+    ) -> Result<Self, AuthConfigError> {
+        self.management_callers = callers;
+        self.validate()?;
+        Ok(self)
+    }
+
     fn validate(&self) -> Result<(), AuthConfigError> {
+        if self.management_callers.len() > 64
+            || self
+                .management_callers
+                .iter()
+                .any(|caller| !valid_caller(caller))
+            || self
+                .management_callers
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.management_callers.len()
+        {
+            return Err(AuthConfigError::InvalidCredentialStateCallers);
+        }
         if self.credential_state_callers.len() > 64
             || self
                 .credential_state_callers
@@ -193,6 +222,7 @@ impl fmt::Debug for ApiTokenAuthConfig {
             .field("schema", &self.schema)
             .field("issuer", &self.issuer)
             .field("credential_state_callers", &self.credential_state_callers)
+            .field("management_callers", &self.management_callers)
             .field("assertion_public_key", &self.assertion_public_key)
             .field("database_url_secret", &self.database_url_secret)
             .field(
@@ -277,7 +307,11 @@ impl fmt::Debug for ApiTokenAuthPlugin {
     }
 }
 
-#[provides(auth::Auth, credential_state::CredentialState)]
+#[provides(
+    auth::Auth,
+    credential_state::CredentialState,
+    token_admin::ApiTokenAdmin
+)]
 impl ApiTokenAuthPlugin {}
 
 impl ApiTokenAuthPlugin {

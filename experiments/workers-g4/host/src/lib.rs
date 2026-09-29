@@ -195,6 +195,11 @@ fn plan_parts(
         bindings.push(CapabilityBinding::new("caller", cap, version, provider));
         bindings.push(CapabilityBinding::new("denied", cap, version, provider));
     }
+    account = account.with_capability(CapabilityEndpointPlan::new(
+        lenso_capability_credential_state::CAPABILITY_ID,
+        lenso_capability_credential_state::DESCRIPTOR_VERSION,
+        [lenso_capability_credential_state::INSPECT_OPERATION],
+    ));
     let router = PluginInstancePlan::new("router", lenso_auth_router_plugin::PACKAGE_ID)
         .with_configuration(json!({"routes":{"session":"lenso.auth.account/account"}}).to_string())
         .with_requirement(CapabilityRequirementPlan::many(

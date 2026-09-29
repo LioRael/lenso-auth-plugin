@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["subject", "deployment", "credential_id"],
+  "properties": {
+    "subject": {
+      "type": "string"
+    },
+    "deployment": {
+      "type": "string"
+    },
+    "credential_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "title": "RevokeRequest"
+}

@@ -11,6 +11,10 @@ use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
+use lenso_auth_sdk::credential::{
+    CREDENTIAL_BINDING_CLAIM, CredentialBinding, MANAGEMENT_CEILING_CLAIM,
+    ManagementCredentialCeiling,
+};
 use lenso_auth_sdk::{ActorAssertionIssuer, Validity, absent_response, authenticated_response};
 use lenso_capability_account_admin as account_admin;
 use lenso_capability_account_admin::{
@@ -29,6 +33,7 @@ use lenso_capability_credential_issuer::{
     IssueRequest, IssueResponse, RevokeCredentialError, RevokeCredentialRequest,
     RevokeCredentialResponse, RevokeError, RevokeRequest, RevokeResponse,
 };
+use lenso_capability_credential_state as credential_state;
 use lenso_capability_identity_directory as directory;
 use lenso_capability_identity_directory::{
     DirectoryEnsureIdentity, DirectoryReadStatus, EnsureIdentityError, EnsureIdentityRequest,
@@ -54,27 +59,27 @@ pub use operator::{AccountAuthOperator, AccountOperatorError};
 
 const DEPENDENCY_TIMEOUT: StdDuration = StdDuration::from_secs(10);
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, lenso::PluginConfig)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AccountAuthConfig {
     schema: String,
     issuer: String,
     assertion_public_key: String,
     #[serde(default)]
-    #[lenso(default = "")]
     database_url_secret: String,
     #[serde(default)]
-    #[lenso(default = "")]
     d1_binding: String,
     assertion_signing_key_secret: String,
     token_pepper_secret: String,
     assertion_ttl_seconds: u64,
     #[serde(default)]
-    #[lenso(default = [])]
     admin_callers: Vec<String>,
     #[serde(default)]
-    #[lenso(default = [])]
     delegation_callers: Vec<String>,
+    #[serde(default)]
+    credential_state_callers: Vec<String>,
+    #[serde(default)]
+    management_session_ceiling: Option<ManagementCredentialCeiling>,
 }
 
 impl AccountAuthConfig {
@@ -99,6 +104,8 @@ impl AccountAuthConfig {
             assertion_ttl_seconds,
             admin_callers: Vec::new(),
             delegation_callers: Vec::new(),
+            credential_state_callers: Vec::new(),
+            management_session_ceiling: None,
         };
         value.validate()?;
         Ok(value)
@@ -119,6 +126,28 @@ impl AccountAuthConfig {
         Ok(self)
     }
 
+    pub fn with_credential_state_callers(
+        mut self,
+        callers: Vec<String>,
+    ) -> Result<Self, AccountConfigError> {
+        self.credential_state_callers = callers;
+        self.validate()?;
+        Ok(self)
+    }
+
+    /// An explicit operators Account Instance fixes the session ceiling at issue time.
+    pub fn with_management_session_ceiling(
+        mut self,
+        ceiling: ManagementCredentialCeiling,
+    ) -> Result<Self, AccountConfigError> {
+        ceiling
+            .validate()
+            .map_err(|_| AccountConfigError::InvalidManagementCeiling)?;
+        self.management_session_ceiling = Some(ceiling);
+        self.validate()?;
+        Ok(self)
+    }
+
     /// Select an explicit D1 binding for the Workers implementation.
     pub fn with_d1_binding(
         mut self,
@@ -131,6 +160,25 @@ impl AccountAuthConfig {
     }
 
     fn validate(&self) -> Result<(), AccountConfigError> {
+        if self.credential_state_callers.len() > 64
+            || self
+                .credential_state_callers
+                .iter()
+                .any(|caller| !valid_caller(caller))
+            || self
+                .credential_state_callers
+                .iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .len()
+                != self.credential_state_callers.len()
+        {
+            return Err(AccountConfigError::InvalidCredentialStateCaller);
+        }
+        if let Some(ceiling) = &self.management_session_ceiling {
+            ceiling
+                .validate()
+                .map_err(|_| AccountConfigError::InvalidManagementCeiling)?;
+        }
         if self.schema.is_empty()
             || !self
                 .schema
@@ -192,6 +240,10 @@ impl AccountAuthConfig {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum AccountConfigError {
+    #[error("invalid current credential state caller")]
+    InvalidCredentialStateCaller,
+    #[error("invalid operators session ceiling")]
+    InvalidManagementCeiling,
     #[error("invalid owned PostgreSQL schema")]
     InvalidSchema,
     #[error("invalid assertion issuer")]
@@ -224,6 +276,7 @@ fn validate_config(config: &AccountAuthConfig) -> Result<(), RuntimeFailure> {
 
 #[lenso::plugin(
     lifecycle,
+    configuration_schema = "configuration.schema.json",
     validate = validate_config
 )]
 #[derive(Clone)]
@@ -266,7 +319,8 @@ impl fmt::Debug for AccountAuthPlugin {
     directory::Directory,
     credential_issuer::CredentialIssuer,
     account_admin::AccountAdmin,
-    auth_delegation::Delegation
+    auth_delegation::Delegation,
+    credential_state::CredentialState
 )]
 impl AccountAuthPlugin {}
 
@@ -358,8 +412,14 @@ impl AccountAuthPlugin {
         request: IssueRequest,
     ) -> NativeRequestFuture<CredentialIssuerIssue> {
         let prepared = self.prepared();
+        let management_ceiling = self.config.management_session_ceiling.clone();
         Box::pin(async move {
             let prepared = prepared?;
+            if request.claims.contains_key(CREDENTIAL_BINDING_CLAIM)
+                || request.claims.contains_key(MANAGEMENT_CEILING_CLAIM)
+            {
+                return Ok(Err(IssueError::InvalidAuthority));
+            }
             if !valid_name(&request.subject) {
                 return Ok(Err(IssueError::InvalidSubject));
             }
@@ -384,6 +444,12 @@ impl AccountAuthPlugin {
             let token = random_token().map_err(runtime)?;
             let digest = storage::token_digest(&prepared.pepper, &token).map_err(runtime)?;
             let session_id = random_id("ses_").map_err(runtime)?;
+            let mut claims = request.claims;
+            if request.actor_kind == "user"
+                && let Some(ceiling) = management_ceiling
+            {
+                claims.insert(MANAGEMENT_CEILING_CLAIM.into(), serde_json::json!(ceiling));
+            }
             let session = storage::NewSession {
                 session_id: session_id.clone(),
                 digest,
@@ -391,7 +457,7 @@ impl AccountAuthPlugin {
                 actor_kind: request.actor_kind,
                 assurance: request.assurance,
                 audience: request.audience,
-                claims: request.claims,
+                claims,
                 expires_at,
             };
             match storage::issue_session(&prepared.store, &session)
@@ -604,6 +670,7 @@ impl AccountAuthPlugin {
         request: AuthRequest,
     ) -> NativeRequestFuture<Auth> {
         let prepared = self.prepared();
+        let current_ceiling = self.config.management_session_ceiling.clone();
         Box::pin(async move {
             let prepared = prepared?;
             let Some(credential) = request.credential else {
@@ -643,9 +710,77 @@ impl AccountAuthPlugin {
                 session.assurance,
                 session.audience,
                 validity,
-                session.claims,
+                {
+                    let mut claims = session.claims;
+                    constrain_management_claim(&mut claims, current_ceiling.as_ref());
+                    claims.insert(
+                        CREDENTIAL_BINDING_CLAIM.into(),
+                        serde_json::json!(CredentialBinding {
+                            credential_id: session.session_id.clone(),
+                            session_id: session.session_id
+                        }),
+                    );
+                    claims
+                },
             );
             Ok(Ok(authenticated_response(&assertion)))
+        })
+    }
+}
+
+impl AccountAuthPlugin {
+    #[allow(clippy::needless_pass_by_value)]
+    fn inspect(
+        &self,
+        context: InvocationContext,
+        request: credential_state::InspectRequest,
+    ) -> NativeRequestFuture<credential_state::CredentialState> {
+        let admitted = context.caller_instance().is_some_and(|caller| {
+            self.config
+                .credential_state_callers
+                .iter()
+                .any(|allowed| allowed == caller)
+        });
+        let prepared = self.prepared();
+        let current_ceiling = self.config.management_session_ceiling.clone();
+        Box::pin(async move {
+            if !admitted {
+                return Ok(Err(credential_state::InspectError::PermissionDenied));
+            }
+            let binding = CredentialBinding {
+                credential_id: request.credential_id,
+                session_id: request.session_id,
+            };
+            if binding.validate().is_err() {
+                return Ok(Err(credential_state::InspectError::InvalidReference));
+            }
+            if binding.credential_id != binding.session_id {
+                return Ok(Err(credential_state::InspectError::NotFound));
+            }
+            let prepared = prepared?;
+            let Some(session) = storage::inspect_session(&prepared.store, &binding.session_id)
+                .await
+                .map_err(runtime)?
+            else {
+                return Ok(Err(credential_state::InspectError::NotFound));
+            };
+            let active = session.status == "active"
+                && !session.revoked
+                && session.expires_at > OffsetDateTime::now_utc();
+            let mut claims = session.claims;
+            constrain_management_claim(&mut claims, current_ceiling.as_ref());
+            claims.insert(CREDENTIAL_BINDING_CLAIM.into(), serde_json::json!(&binding));
+            Ok(Ok(credential_state::InspectResponse {
+                credential_id: binding.credential_id,
+                session_id: binding.session_id,
+                subject: session.subject,
+                actor_kind: session.actor_kind,
+                assurance: session.assurance,
+                audience: session.audience,
+                claims,
+                expires_at: format_time(session.expires_at)?,
+                active,
+            }))
         })
     }
 }
@@ -764,6 +899,29 @@ enum AccountError {
 fn runtime(error: impl fmt::Display) -> RuntimeFailure {
     RuntimeFailure::PluginFailure {
         detail: error.to_string(),
+    }
+}
+
+fn constrain_management_claim(
+    claims: &mut std::collections::BTreeMap<String, serde_json::Value>,
+    configured: Option<&ManagementCredentialCeiling>,
+) {
+    let stored = ManagementCredentialCeiling::from_claims(claims).ok();
+    claims.remove(MANAGEMENT_CEILING_CLAIM);
+    let (Some(mut stored), Some(configured)) = (stored, configured) else {
+        return;
+    };
+    if stored.deployment != configured.deployment {
+        return;
+    }
+    stored
+        .permissions
+        .retain(|permission| configured.permissions.contains(permission));
+    stored
+        .resource_scopes
+        .retain(|scope| configured.resource_scopes.contains(scope));
+    if stored.validate().is_ok() {
+        claims.insert(MANAGEMENT_CEILING_CLAIM.into(), serde_json::json!(stored));
     }
 }
 

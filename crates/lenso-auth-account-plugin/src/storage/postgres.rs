@@ -35,9 +35,14 @@ const LOCK_SUBJECT_STATUS_QUERY: &str = concat!(
     " FROM identity_subjects i WHERE i.subject_id = $1 FOR UPDATE OF i"
 );
 const LOAD_SESSION_QUERY: &str = concat!(
-    "SELECT s.subject_id, ",
+    "SELECT s.session_id, s.subject_id, ",
     effective_subject_status_sql!(),
     " AS status, s.actor_kind, s.assurance, s.audience, s.claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.token_digest = $1"
+);
+const INSPECT_SESSION_QUERY: &str = concat!(
+    "SELECT s.session_id, s.subject_id, ",
+    effective_subject_status_sql!(),
+    " AS status, s.actor_kind, s.assurance, s.audience, s.claims, LEAST(s.expires_at, p.expires_at) AS expires_at, (s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id = s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id = s.session_id LEFT JOIN auth_sessions p ON p.session_id = d.parent_session_id WHERE s.session_id = $1"
 );
 
 pub(crate) async fn ensure_identity(
@@ -201,6 +206,38 @@ pub(crate) async fn load_session(
     let claims: sqlx::types::Json<BTreeMap<String, Value>> =
         row.try_get("claims").map_err(db("decode claims"))?;
     Ok(Some(StoredSession {
+        session_id: row
+            .try_get("session_id")
+            .map_err(db("decode session reference"))?,
+        subject: row.try_get("subject_id").map_err(db("decode subject"))?,
+        status: row.try_get("status").map_err(db("decode status"))?,
+        actor_kind: row.try_get("actor_kind").map_err(db("decode actor kind"))?,
+        assurance: row.try_get("assurance").map_err(db("decode assurance"))?,
+        audience: row.try_get("audience").map_err(db("decode audience"))?,
+        claims: claims.0,
+        expires_at: row.try_get("expires_at").map_err(db("decode expiry"))?,
+        revoked: row.try_get("revoked").map_err(db("decode revocation"))?,
+    }))
+}
+
+pub(crate) async fn inspect_session(
+    postgres: &OwnedPostgres,
+    session_id: &str,
+) -> Result<Option<StoredSession>, AccountError> {
+    let row = sqlx::query(INSPECT_SESSION_QUERY)
+        .bind(session_id)
+        .fetch_optional(postgres.pool())
+        .await
+        .map_err(db("inspect session"))?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let claims: sqlx::types::Json<BTreeMap<String, Value>> =
+        row.try_get("claims").map_err(db("decode claims"))?;
+    Ok(Some(StoredSession {
+        session_id: row
+            .try_get("session_id")
+            .map_err(db("decode session reference"))?,
         subject: row.try_get("subject_id").map_err(db("decode subject"))?,
         status: row.try_get("status").map_err(db("decode status"))?,
         actor_kind: row.try_get("actor_kind").map_err(db("decode actor kind"))?,

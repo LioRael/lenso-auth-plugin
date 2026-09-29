@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["credentials"],
+  "properties": {
+    "credentials": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CredentialMetadata"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "CredentialMetadata": {
+      "type": "object",
+      "required": [
+        "credential_id",
+        "name",
+        "deployment",
+        "permissions",
+        "resource_scopes",
+        "expires_at",
+        "active"
+      ],
+      "properties": {
+        "credential_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "deployment": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resource_scopes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResourceScope"
+          }
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "active": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ResourceScope": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "title": "ListResponse"
+}

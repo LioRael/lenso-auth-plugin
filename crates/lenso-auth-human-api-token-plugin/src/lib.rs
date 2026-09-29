@@ -1,0 +1,450 @@
+//! Personal token lifecycle authenticated by one bound Account realm.
+use lenso::{Port, provides};
+use lenso_auth_sdk::credential::{
+    CredentialBinding, ManagementCredentialCeiling, ManagementResourceScope,
+};
+use lenso_auth_sdk::realm::RealmAssertionVerifier;
+use lenso_auth_sdk::{ActorAssertion, ActorProjectionError, AssertionClock, TypedActor};
+use lenso_capability_access_control as access;
+use lenso_capability_api_token_admin as admin;
+use lenso_capability_credential_state as state;
+use lenso_capability_human_api_token as human;
+use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
+use serde::{Deserialize, Serialize};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, lenso::PluginConfig)]
+#[serde(deny_unknown_fields)]
+pub struct HumanApiTokenConfig {
+    realm: String,
+    account_issuer: String,
+    account_public_key: String,
+    maximum_assertion_ttl_seconds: u32,
+    maximum_token_ttl_seconds: u32,
+    deployment: String,
+    scope_kind: String,
+    scope_id: String,
+    token_audience: Vec<String>,
+}
+impl HumanApiTokenConfig {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        realm: impl Into<String>,
+        account_issuer: impl Into<String>,
+        account_public_key: impl Into<String>,
+        maximum_assertion_ttl_seconds: u32,
+        maximum_token_ttl_seconds: u32,
+        deployment: impl Into<String>,
+        scope_kind: impl Into<String>,
+        scope_id: impl Into<String>,
+        token_audience: Vec<String>,
+    ) -> Result<Self, RuntimeFailure> {
+        let config = Self {
+            realm: realm.into(),
+            account_issuer: account_issuer.into(),
+            account_public_key: account_public_key.into(),
+            maximum_assertion_ttl_seconds,
+            maximum_token_ttl_seconds,
+            deployment: deployment.into(),
+            scope_kind: scope_kind.into(),
+            scope_id: scope_id.into(),
+            token_audience,
+        };
+        validate_config(&config)?;
+        Ok(config)
+    }
+    fn verifier(&self) -> Result<RealmAssertionVerifier, RuntimeFailure> {
+        RealmAssertionVerifier::new(
+            &self.realm,
+            &self.account_issuer,
+            &self.account_public_key,
+            self.maximum_assertion_ttl_seconds,
+            None,
+        )
+        .map_err(|_| invalid_plan())
+    }
+}
+fn label(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
+}
+fn invalid_plan() -> RuntimeFailure {
+    RuntimeFailure::InvalidResolvedPlan { detail:"Human API Token requires an explicit Account realm, deployment scope, token audiences and bounded TTL".into() }
+}
+fn validate_config(config: &HumanApiTokenConfig) -> Result<(), RuntimeFailure> {
+    config.verifier()?;
+    if !label(&config.deployment)
+        || !label(&config.scope_kind)
+        || !label(&config.scope_id)
+        || !(1..=31_536_000).contains(&config.maximum_token_ttl_seconds)
+        || config.token_audience.is_empty()
+        || config.token_audience.len() > 64
+        || config
+            .token_audience
+            .iter()
+            .any(|aud| aud.is_empty() || aud.len() > 256 || aud.contains('*'))
+        || config
+            .token_audience
+            .iter()
+            .collect::<std::collections::BTreeSet<_>>()
+            .len()
+            != config.token_audience.len()
+    {
+        return Err(invalid_plan());
+    }
+    Ok(())
+}
+#[lenso::plugin(validate=validate_config)]
+#[derive(Clone, Debug)]
+struct HumanApiTokenPlugin {
+    #[config]
+    config: HumanApiTokenConfig,
+    account_state: Port<state::CredentialStateClient>,
+    api_tokens: Port<admin::ApiTokenAdminClient>,
+    access: Port<access::AccessControlClient>,
+}
+#[provides(human::HumanApiToken)]
+impl HumanApiTokenPlugin {}
+#[derive(Debug)]
+struct User(ActorAssertion);
+impl TypedActor for User {
+    fn from_assertion(assertion: &ActorAssertion) -> Result<Self, ActorProjectionError> {
+        if assertion.actor_kind() != "user" {
+            return Err(ActorProjectionError::UnexpectedActorKind {
+                expected: "user".into(),
+                actual: assertion.actor_kind().into(),
+            });
+        }
+        Ok(Self(assertion.clone()))
+    }
+}
+#[derive(Debug)]
+struct WallClock;
+impl AssertionClock for WallClock {
+    fn now(&self) -> OffsetDateTime {
+        OffsetDateTime::now_utc()
+    }
+}
+struct CurrentUser {
+    subject: String,
+    signed: ManagementCredentialCeiling,
+    current: ManagementCredentialCeiling,
+}
+impl HumanApiTokenPlugin {
+    async fn current_user(
+        &self,
+        context: &InvocationContext,
+        operation: &str,
+        permission: &str,
+    ) -> Result<Option<CurrentUser>, RuntimeFailure> {
+        let Ok(User(assertion)) = self.config.verifier()?.project_context::<User>(
+            context,
+            human::CAPABILITY_ID,
+            operation,
+            &WallClock,
+        ) else {
+            return Ok(None);
+        };
+        let (Ok(binding), Ok(signed)) = (
+            CredentialBinding::from_assertion(&assertion),
+            ManagementCredentialCeiling::from_assertion(&assertion),
+        ) else {
+            return Ok(None);
+        };
+        let inspected = match self
+            .account_state
+            .inspect_with_context(
+                context.clone(),
+                state::InspectRequest {
+                    credential_id: binding.credential_id.clone(),
+                    session_id: binding.session_id.clone(),
+                },
+            )
+            .await
+        {
+            Ok(inspected) => inspected,
+            Err(state::CredentialStateInvocationError::Domain(_)) => return Ok(None),
+            Err(state::CredentialStateInvocationError::Runtime(error)) => return Err(error),
+        };
+        let (Ok(current), Ok(current_binding), Ok(expiry)) = (
+            ManagementCredentialCeiling::from_claims(&inspected.claims),
+            CredentialBinding::from_claims(&inspected.claims),
+            OffsetDateTime::parse(&inspected.expires_at, &Rfc3339),
+        ) else {
+            return Ok(None);
+        };
+        let target = lenso_auth_sdk::audience(human::CAPABILITY_ID, operation);
+        if !inspected.active
+            || inspected.subject != assertion.subject()
+            || inspected.actor_kind != "user"
+            || inspected.credential_id != binding.credential_id
+            || inspected.session_id != binding.session_id
+            || current_binding != binding
+            || expiry <= OffsetDateTime::now_utc()
+            || !inspected.audience.contains(&target)
+            || !signed.allows(
+                &self.config.deployment,
+                permission,
+                &self.config.scope_kind,
+                &self.config.scope_id,
+            )
+            || !current.allows(
+                &self.config.deployment,
+                permission,
+                &self.config.scope_kind,
+                &self.config.scope_id,
+            )
+        {
+            return Ok(None);
+        }
+        let user = CurrentUser {
+            subject: inspected.subject,
+            signed,
+            current,
+        };
+        if !self
+            .permission(
+                context,
+                &user.subject,
+                permission,
+                &self.config.scope_kind,
+                &self.config.scope_id,
+            )
+            .await?
+        {
+            return Ok(None);
+        }
+        Ok(Some(user))
+    }
+    async fn permission(
+        &self,
+        context: &InvocationContext,
+        subject: &str,
+        permission: &str,
+        kind: &str,
+        id: &str,
+    ) -> Result<bool, RuntimeFailure> {
+        match self
+            .access
+            .check_permission_with_context(
+                context.clone(),
+                access::CheckPermissionRequest {
+                    subject: subject.into(),
+                    permission: permission.into(),
+                    scope: access::CheckPermissionRequestScope {
+                        kind: kind.into(),
+                        id: id.into(),
+                    },
+                },
+            )
+            .await
+        {
+            Ok(decision) => Ok(decision.allowed),
+            Err(access::AccessControlInvocationError::Domain(_)) => Ok(false),
+            Err(access::AccessControlInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+    fn issue(
+        &self,
+        context: InvocationContext,
+        request: human::IssueRequest,
+    ) -> NativeRequestFuture<human::HumanApiTokenIssue> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            let Some(user) = plugin
+                .current_user(&context, human::ISSUE_OPERATION, "auth.pat.issue")
+                .await?
+            else {
+                return Ok(Err(human::IssueError::PermissionDenied));
+            };
+            let ceiling = ManagementCredentialCeiling {
+                deployment: request.deployment.clone(),
+                permissions: request.permissions.clone(),
+                resource_scopes: request
+                    .resource_scopes
+                    .iter()
+                    .map(|scope| ManagementResourceScope {
+                        kind: scope.kind.clone(),
+                        id: scope.id.clone(),
+                    })
+                    .collect(),
+            };
+            let Ok(expiry) = OffsetDateTime::parse(&request.expires_at, &Rfc3339) else {
+                return Ok(Err(human::IssueError::InvalidRequest));
+            };
+            let now = OffsetDateTime::now_utc();
+            if !ceiling.is_attenuation_of(&user.signed)
+                || !ceiling.is_attenuation_of(&user.current)
+                || ceiling.deployment != plugin.config.deployment
+                || expiry
+                    > now
+                        + time::Duration::seconds(i64::from(
+                            plugin.config.maximum_token_ttl_seconds,
+                        ))
+            {
+                return Ok(Err(human::IssueError::InvalidRequest));
+            }
+            for scope in &ceiling.resource_scopes {
+                for permission in &ceiling.permissions {
+                    if !plugin
+                        .permission(&context, &user.subject, permission, &scope.kind, &scope.id)
+                        .await?
+                    {
+                        return Ok(Err(human::IssueError::PermissionDenied));
+                    }
+                }
+            }
+            // Reinspect after asynchronous policy reads so revocation and ceiling
+            // changes are observed immediately before the owning issuer is called.
+            let Some(fresh) = plugin
+                .current_user(&context, human::ISSUE_OPERATION, "auth.pat.issue")
+                .await?
+            else {
+                return Ok(Err(human::IssueError::PermissionDenied));
+            };
+            if fresh.subject != user.subject
+                || !ceiling.is_attenuation_of(&fresh.signed)
+                || !ceiling.is_attenuation_of(&fresh.current)
+            {
+                return Ok(Err(human::IssueError::PermissionDenied));
+            }
+            let result = plugin
+                .api_tokens
+                .issue_with_context(
+                    context,
+                    admin::IssueRequest {
+                        subject: user.subject,
+                        idempotency_key: request.idempotency_key,
+                        name: request.name,
+                        deployment: ceiling.deployment,
+                        permissions: ceiling.permissions,
+                        resource_scopes: ceiling
+                            .resource_scopes
+                            .into_iter()
+                            .map(|scope| admin::ResourceScope {
+                                kind: scope.kind,
+                                id: scope.id,
+                            })
+                            .collect(),
+                        expires_at: request.expires_at,
+                        audience: plugin.config.token_audience.clone(),
+                    },
+                )
+                .await;
+            match result {
+                Ok(response) => Ok(Ok(translate(response)?)),
+                Err(admin::ApiTokenAdminIssueInvocationError::Domain(error)) => {
+                    Ok(Err(match error {
+                        admin::IssueError::PermissionDenied => human::IssueError::PermissionDenied,
+                        admin::IssueError::Conflict => human::IssueError::Conflict,
+                        admin::IssueError::UnsupportedProfile => {
+                            human::IssueError::UnsupportedProfile
+                        }
+                        _ => human::IssueError::InvalidRequest,
+                    }))
+                }
+                Err(admin::ApiTokenAdminIssueInvocationError::Runtime(error)) => Err(error),
+            }
+        })
+    }
+    fn list(
+        &self,
+        context: InvocationContext,
+        request: human::ListRequest,
+    ) -> NativeRequestFuture<human::HumanApiTokenList> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            let Some(user) = plugin
+                .current_user(&context, human::LIST_OPERATION, "auth.pat.list")
+                .await?
+            else {
+                return Ok(Err(human::ListError::PermissionDenied));
+            };
+            if request.deployment != plugin.config.deployment {
+                return Ok(Err(human::ListError::InvalidRequest));
+            }
+            match plugin
+                .api_tokens
+                .list_with_context(
+                    context,
+                    admin::ListRequest {
+                        subject: user.subject,
+                        deployment: request.deployment,
+                        limit: request.limit,
+                        after_credential_id: request.after_credential_id,
+                    },
+                )
+                .await
+            {
+                Ok(response) => Ok(Ok(translate(response)?)),
+                Err(admin::ApiTokenAdminListInvocationError::Domain(error)) => {
+                    Ok(Err(match error {
+                        admin::ListError::PermissionDenied => human::ListError::PermissionDenied,
+                        admin::ListError::UnsupportedProfile => {
+                            human::ListError::UnsupportedProfile
+                        }
+                        _ => human::ListError::InvalidRequest,
+                    }))
+                }
+                Err(admin::ApiTokenAdminListInvocationError::Runtime(error)) => Err(error),
+            }
+        })
+    }
+    fn revoke(
+        &self,
+        context: InvocationContext,
+        request: human::RevokeRequest,
+    ) -> NativeRequestFuture<human::HumanApiTokenRevoke> {
+        let plugin = self.clone();
+        Box::pin(async move {
+            let Some(user) = plugin
+                .current_user(&context, human::REVOKE_OPERATION, "auth.pat.revoke")
+                .await?
+            else {
+                return Ok(Err(human::RevokeError::PermissionDenied));
+            };
+            if request.deployment != plugin.config.deployment {
+                return Ok(Err(human::RevokeError::InvalidRequest));
+            }
+            match plugin
+                .api_tokens
+                .revoke_with_context(
+                    context,
+                    admin::RevokeRequest {
+                        subject: user.subject,
+                        deployment: request.deployment,
+                        credential_id: request.credential_id,
+                    },
+                )
+                .await
+            {
+                Ok(response) => Ok(Ok(human::RevokeResponse {
+                    revoked: response.revoked,
+                })),
+                Err(admin::ApiTokenAdminRevokeInvocationError::Domain(error)) => {
+                    Ok(Err(match error {
+                        admin::RevokeError::PermissionDenied => {
+                            human::RevokeError::PermissionDenied
+                        }
+                        admin::RevokeError::NotFound => human::RevokeError::NotFound,
+                        admin::RevokeError::UnsupportedProfile => {
+                            human::RevokeError::UnsupportedProfile
+                        }
+                        _ => human::RevokeError::InvalidRequest,
+                    }))
+                }
+                Err(admin::ApiTokenAdminRevokeInvocationError::Runtime(error)) => Err(error),
+            }
+        })
+    }
+}
+fn translate<T: Serialize, R: serde::de::DeserializeOwned>(value: T) -> Result<R, RuntimeFailure> {
+    serde_json::to_value(value)
+        .and_then(serde_json::from_value)
+        .map_err(|_| RuntimeFailure::ProtocolViolation {
+            capability: human::CAPABILITY_ID,
+        })
+}

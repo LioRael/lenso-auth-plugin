@@ -869,6 +869,7 @@ dependencies = [
  "lenso-capability-auth",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",
+ "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -897,6 +898,7 @@ dependencies = [
  "js-sys",
  "lenso",
  "lenso-auth-sdk",
+ "lenso-capability-api-token-admin",
  "lenso-capability-auth",
  "lenso-capability-credential-state",
  "lenso-capability-secrets",
@@ -1116,6 +1118,21 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-account-admin"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-api-token-admin"
 version = "0.1.0"
 dependencies = [
  "futures",
@@ -1629,6 +1646,7 @@ dependencies = [
  "lenso-auth-sdk",
  "lenso-auth-web-session-plugin",
  "lenso-capability-account-admin",
+ "lenso-capability-api-token-admin",
  "lenso-capability-auth",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",

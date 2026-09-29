@@ -1,0 +1,42 @@
+[package]
+name = "lenso-auth-human-api-token-plugin"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+repository.workspace = true
+description = "Human Account guarded personal API token lifecycle."
+[package.metadata.lenso]
+plugin-id = "lenso.auth.human-api-token"
+root-slot = "human-api-token"
+[dependencies]
+lenso.workspace = true
+lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.3" }
+lenso-capability-credential-state = { path = "../lenso-capability-credential-state", version = "0.1.0" }
+lenso-capability-api-token-admin = { path = "../lenso-capability-api-token-admin", version = "0.1.0" }
+lenso-capability-human-api-token = { path = "../lenso-capability-human-api-token", version = "0.1.0" }
+lenso-capability-access-control = { git = "https://github.com/LioRael/lenso-access-control-plugin", rev = "62ed6b9a100242e6932a46cb369b21f1c26ab765", version = "0.2.0" }
+lenso-kernel.workspace = true
+lenso-native-adapter.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+[dev-dependencies]
+lenso-app-plan.workspace = true
+lenso-runner.workspace = true
+lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
+lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.3.0" }
+lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.3.0" }
+lenso-capability-account-admin = { path = "../lenso-capability-account-admin", version = "0.1.0" }
+lenso-capability-auth-delegation = { path = "../lenso-capability-auth-delegation", version = "0.1.0" }
+lenso-auth-account-plugin = { path = "../lenso-auth-account-plugin" }
+lenso-auth-api-token-plugin = { path = "../lenso-auth-api-token-plugin", version = "0.1.2" }
+lenso-capability-secrets.workspace = true
+lenso-access-control-postgres-plugin = { git = "https://github.com/LioRael/lenso-access-control-plugin", rev = "62ed6b9a100242e6932a46cb369b21f1c26ab765", version = "0.2.1" }
+lenso-capability-access-control-admin = { git = "https://github.com/LioRael/lenso-access-control-plugin", rev = "62ed6b9a100242e6932a46cb369b21f1c26ab765", version = "0.2.0" }
+lenso-capability-access-control-directory = { git = "https://github.com/LioRael/lenso-access-control-plugin", rev = "62ed6b9a100242e6932a46cb369b21f1c26ab765", version = "0.2.0" }
+futures.workspace = true
+sqlx.workspace = true
+tokio = { version = "1.52", features = ["macros", "rt"] }
+[lints]
+workspace = true

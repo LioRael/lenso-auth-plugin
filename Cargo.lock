@@ -1058,6 +1058,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-access-control-core"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+dependencies = [
+ "lenso",
+ "lenso-auth-sdk 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lenso-capability-access-control",
+ "lenso-capability-access-control-admin",
+ "lenso-capability-access-control-directory",
+ "lenso-kernel",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "time",
+]
+
+[[package]]
+name = "lenso-access-control-postgres-plugin"
+version = "0.2.1"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+dependencies = [
+ "futures",
+ "lenso",
+ "lenso-access-control-core",
+ "lenso-auth-sdk 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lenso-capability-access-control",
+ "lenso-capability-access-control-admin",
+ "lenso-capability-access-control-directory",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-postgres-kit",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror",
+ "time",
+ "zeroize",
+]
+
+[[package]]
 name = "lenso-app-plan"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1078,7 +1119,7 @@ dependencies = [
  "lenso-auth-account-plugin",
  "lenso-capability-account-admin",
  "lenso-capability-agent-tool-provider",
- "lenso-capability-auth",
+ "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",
  "lenso-capability-identity-directory",
@@ -1104,11 +1145,12 @@ dependencies = [
  "hmac 0.12.1",
  "js-sys",
  "lenso",
- "lenso-auth-sdk",
+ "lenso-auth-sdk 0.2.3",
  "lenso-capability-account-admin",
- "lenso-capability-auth",
+ "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",
+ "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -1137,8 +1179,8 @@ dependencies = [
  "lenso",
  "lenso-app-plan",
  "lenso-auth-account-plugin",
- "lenso-auth-sdk",
- "lenso-capability-auth",
+ "lenso-auth-sdk 0.2.3",
+ "lenso-capability-auth 0.2.0",
  "lenso-capability-auth-delegation",
  "lenso-capability-credential-issuer",
  "lenso-capability-http-endpoint",
@@ -1187,8 +1229,9 @@ dependencies = [
  "js-sys",
  "lenso",
  "lenso-app-plan",
- "lenso-auth-sdk",
- "lenso-capability-auth",
+ "lenso-auth-sdk 0.2.3",
+ "lenso-capability-api-token-admin",
+ "lenso-capability-auth 0.2.0",
  "lenso-capability-credential-state",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -1253,6 +1296,39 @@ dependencies = [
  "time",
  "url",
  "zeroize",
+]
+
+[[package]]
+name = "lenso-auth-human-api-token-plugin"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso",
+ "lenso-access-control-postgres-plugin",
+ "lenso-app-plan",
+ "lenso-auth-account-plugin",
+ "lenso-auth-api-token-plugin",
+ "lenso-auth-sdk 0.2.3",
+ "lenso-capability-access-control",
+ "lenso-capability-access-control-admin",
+ "lenso-capability-access-control-directory",
+ "lenso-capability-account-admin",
+ "lenso-capability-api-token-admin",
+ "lenso-capability-auth 0.2.0",
+ "lenso-capability-auth-delegation",
+ "lenso-capability-credential-issuer",
+ "lenso-capability-credential-state",
+ "lenso-capability-human-api-token",
+ "lenso-capability-identity-directory",
+ "lenso-capability-secrets",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-runner",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "tokio",
 ]
 
 [[package]]
@@ -1416,7 +1492,7 @@ dependencies = [
  "futures",
  "lenso",
  "lenso-app-plan",
- "lenso-capability-auth",
+ "lenso-capability-auth 0.2.0",
  "lenso-kernel",
  "lenso-native-adapter",
  "lenso-runner",
@@ -1431,7 +1507,23 @@ version = "0.2.3"
 dependencies = [
  "base64",
  "ed25519-dalek 3.0.0",
- "lenso-capability-auth",
+ "lenso-capability-auth 0.2.0",
+ "lenso-kernel",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "time",
+]
+
+[[package]]
+name = "lenso-auth-sdk"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa8dee2b5f2481cfeea9c19c1da001c67e07576ea7758ff7278b5562a53e5a58"
+dependencies = [
+ "base64",
+ "ed25519-dalek 3.0.0",
+ "lenso-capability-auth 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lenso-kernel",
  "serde",
  "serde_json",
@@ -1458,6 +1550,45 @@ dependencies = [
  "time",
  "tokio",
  "url",
+]
+
+[[package]]
+name = "lenso-capability-access-control"
+version = "0.2.0"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+dependencies = [
+ "futures",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-access-control-admin"
+version = "0.2.0"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+dependencies = [
+ "futures",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-access-control-directory"
+version = "0.2.0"
+source = "git+https://github.com/LioRael/lenso-access-control-plugin?rev=62ed6b9a100242e6932a46cb369b21f1c26ab765#62ed6b9a100242e6932a46cb369b21f1c26ab765"
+dependencies = [
+ "futures",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1510,12 +1641,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-api-token-admin"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-auth"
 version = "0.2.0"
 dependencies = [
  "futures",
  "lenso-contract-authoring",
  "lenso-contract-codegen 0.10.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-auth"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9324c6abadbd68088c7cdd269b2335ccf7fe561788f25ec675f133fad3724de"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.9.0",
  "lenso-contract-runtime",
  "lenso-kernel",
  "lenso-plugin-authoring",
@@ -1648,6 +1811,21 @@ dependencies = [
  "quote",
  "serde_json",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "lenso-capability-human-api-token"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

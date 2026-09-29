@@ -57,3 +57,5 @@ lenso-capability-oidc-provider={path="../../../crates/lenso-capability-oidc-prov
 lenso-capability-sms-delivery={path="../../../crates/lenso-capability-sms-delivery"}
 
 lenso-capability-credential-state={path="../../../crates/lenso-capability-credential-state",version="0.1.0"}
+
+lenso-capability-api-token-admin={path="../../../crates/lenso-capability-api-token-admin",version="0.1.0"}

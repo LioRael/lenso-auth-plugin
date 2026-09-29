@@ -359,7 +359,7 @@ pub enum AuthOperatorError {
     },
 }
 
-fn random_identifier(prefix: &str, bytes: usize) -> Result<String, AuthOperatorError> {
+pub(crate) fn random_identifier(prefix: &str, bytes: usize) -> Result<String, AuthOperatorError> {
     let mut random = Zeroizing::new(vec![0_u8; bytes]);
     getrandom::fill(&mut random).map_err(|_| AuthOperatorError::RandomUnavailable)?;
     Ok(format!("{prefix}{}", URL_SAFE_NO_PAD.encode(random)))

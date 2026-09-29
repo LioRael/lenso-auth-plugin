@@ -92,11 +92,25 @@ pub(crate) async fn load_session(
     db: &D1Binding,
     digest: &[u8],
 ) -> Result<Option<StoredSession>, AccountError> {
-    let r=db.run(vec![statement(format!("SELECT s.subject_id,{STATUS} AS status,s.actor_kind,s.assurance,s.audience,s.claims,CASE WHEN p.expires_at IS NULL OR s.expires_at<p.expires_at THEN s.expires_at ELSE p.expires_at END AS expires_at,(s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id=s.session_id LEFT JOIN auth_sessions p ON p.session_id=d.parent_session_id WHERE s.token_digest=?1"),vec![digest_value(digest)])]).await.map_err(fail)?;
+    load_session_by(db, "s.token_digest=?1", digest_value(digest)).await
+}
+pub(crate) async fn inspect_session(
+    db: &D1Binding,
+    session_id: &str,
+) -> Result<Option<StoredSession>, AccountError> {
+    load_session_by(db, "s.session_id=?1", json!(session_id)).await
+}
+async fn load_session_by(
+    db: &D1Binding,
+    predicate: &str,
+    reference: Value,
+) -> Result<Option<StoredSession>, AccountError> {
+    let r=db.run(vec![statement(format!("SELECT s.session_id,s.subject_id,{STATUS} AS status,s.actor_kind,s.assurance,s.audience,s.claims,CASE WHEN p.expires_at IS NULL OR s.expires_at<p.expires_at THEN s.expires_at ELSE p.expires_at END AS expires_at,(s.revoked_at IS NOT NULL OR p.revoked_at IS NOT NULL) AS revoked FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id LEFT JOIN auth_session_delegations d ON d.session_id=s.session_id LEFT JOIN auth_sessions p ON p.session_id=d.parent_session_id WHERE {predicate}"),vec![reference])]).await.map_err(fail)?;
     let Some(row) = r[0].results.first() else {
         return Ok(None);
     };
     Ok(Some(StoredSession {
+        session_id: decode(row, "session_id")?,
         subject: decode(row, "subject_id")?,
         status: decode(row, "status")?,
         actor_kind: decode(row, "actor_kind")?,

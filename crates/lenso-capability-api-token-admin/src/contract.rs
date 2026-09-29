@@ -1,0 +1,121 @@
+use lenso_contract_authoring as lenso;
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct ResourceScope {
+    pub kind: String,
+    pub id: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct CredentialMetadata {
+    pub credential_id: String,
+    pub name: String,
+    pub deployment: String,
+    pub permissions: Vec<String>,
+    pub resource_scopes: Vec<ResourceScope>,
+    #[schemars(extend("format"="date-time"))]
+    pub expires_at: String,
+    pub active: bool,
+}
+
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct IssueRequest {
+    pub subject: String,
+    #[schemars(length(min = 1, max = 128))]
+    pub idempotency_key: String,
+    #[schemars(length(min = 1, max = 128))]
+    pub name: String,
+    pub deployment: String,
+    pub permissions: Vec<String>,
+    pub resource_scopes: Vec<ResourceScope>,
+    pub audience: Vec<String>,
+    #[schemars(extend("format"="date-time"))]
+    pub expires_at: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct IssueResponse {
+    pub credential: CredentialMetadata,
+    #[schemars(extend("x-lenso-sensitive"=true))]
+    pub token: Option<String>,
+    pub replayed: bool,
+}
+#[derive(lenso::DomainError)]
+pub enum IssueError {
+    PermissionDenied,
+    InvalidRequest,
+    Conflict,
+    UnsupportedProfile,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct ListRequest {
+    pub subject: String,
+    pub deployment: String,
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: u32,
+    pub after_credential_id: Option<String>,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct ListResponse {
+    pub credentials: Vec<CredentialMetadata>,
+}
+#[derive(lenso::DomainError)]
+pub enum ListError {
+    PermissionDenied,
+    InvalidRequest,
+    UnsupportedProfile,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct RevokeRequest {
+    pub subject: String,
+    pub deployment: String,
+    pub credential_id: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct RevokeResponse {
+    pub revoked: bool,
+}
+#[derive(lenso::DomainError)]
+pub enum RevokeError {
+    PermissionDenied,
+    InvalidRequest,
+    NotFound,
+    UnsupportedProfile,
+}
+#[lenso::capability(
+    id = "lenso.auth.api-token-admin",
+    major = 1,
+    version = "1.0.0",
+    portable = true,
+    cross_lane_transfer = false
+)]
+pub trait ApiTokenAdmin {
+    async fn issue(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: IssueRequest,
+    ) -> Result<IssueResponse, IssueError>;
+    async fn list(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: ListRequest,
+    ) -> Result<ListResponse, ListError>;
+    async fn revoke(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: RevokeRequest,
+    ) -> Result<RevokeResponse, RevokeError>;
+}

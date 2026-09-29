@@ -11,6 +11,7 @@ mod d1;
 pub(crate) mod postgres;
 #[derive(Clone, Debug)]
 pub(crate) struct StoredSession {
+    pub session_id: String,
     pub subject: String,
     pub status: String,
     pub actor_kind: String,
@@ -144,6 +145,18 @@ pub(crate) async fn load_session(
         AccountStore::Postgres(pg) => postgres::load_session(pg, digest).await,
         #[cfg(feature = "workers")]
         AccountStore::D1(binding) => d1::load_session(binding, digest).await,
+    }
+}
+
+pub(crate) async fn inspect_session(
+    store: &AccountStore,
+    session_id: &str,
+) -> Result<Option<StoredSession>, AccountError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        AccountStore::Postgres(pg) => postgres::inspect_session(pg, session_id).await,
+        #[cfg(feature = "workers")]
+        AccountStore::D1(binding) => d1::inspect_session(binding, session_id).await,
     }
 }
 

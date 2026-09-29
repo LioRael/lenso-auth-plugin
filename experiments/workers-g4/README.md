@@ -71,13 +71,12 @@ for the exact composition boundary.
 
 ## Build and run
 
-The workspace intentionally uses the reviewed Runtime and Web owner worktrees
-shown in Cargo.toml and the JS imports. Assemble these exact owners before building;
-source dependencies must be unified, including HTTP Capability crates. A registry
+The workspace pins the published Runtime/Web cohort in Cargo.toml and the JS imports.
+Source dependencies must be unified, including HTTP Capability crates. A registry
 and path copy of the same Capability crate produces distinct native Rust type IDs.
 
 ```sh
-CARGO=/Users/leosouthey/Projects/framework/.lenso-tools/bin/lenso-cargo bash build.sh
+CARGO="cargo +1.94.0" bash build.sh
 pnpm install --frozen-lockfile
 node_modules/.bin/wrangler d1 migrations apply ACCOUNT_DB --remote
 node_modules/.bin/wrangler d1 migrations apply OAUTH_DB --remote
@@ -91,7 +90,7 @@ G4_SECRETS=/private/path/g4-secrets.json python3 qualify-session.py
 G4_SECRETS=/private/path/g4-secrets.json python3 qualify-failure.py
 ```
 
-Wrangler is pinned to 4.107.0, Rust to 1.94.0, wasm-bindgen CLI to 0.2.127. The
+Wrangler is pinned to 4.143.1, Rust to 1.94.0, wasm-bindgen CLI to 0.2.127. The
 migration commands target the two named task-owned D1 databases in wrangler.jsonc.
 Create separate resources and change those IDs when reproducing elsewhere; never
 point this fixture at production. `qualify-failure.py` temporarily changes the

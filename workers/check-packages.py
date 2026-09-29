@@ -18,12 +18,18 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 CARGO = shlex.split(os.environ.get("CARGO", "cargo"))
 OWNERS = {
-    "account": ("account-admin", "auth-delegation"), "oauth-flow": ("oauth-flow",),
+    "account": ("account-admin", "auth-delegation", "credential-state"), "oauth-flow": ("oauth-flow",),
     "password": ("credential-issuer", "identity-directory", "password-auth"),
     "phone": ("credential-issuer", "identity-directory", "phone-auth", "sms-delivery"),
-    "device": ("device-auth",), "api-token": ("auth", "credential-state"),
+    "device": ("device-auth",), "api-token": ("auth", "credential-state", "api-token-admin"),
     "oidc": ("credential-issuer", "identity-directory", "oidc-provider"),
 }
+selected = os.environ.get("LENSO_AUTH_PACKAGE_OWNERS")
+if selected:
+    names = selected.split(",")
+    if len(set(names)) != len(names) or any(name not in OWNERS for name in names):
+        raise SystemExit("LENSO_AUTH_PACKAGE_OWNERS must contain distinct supported owner names")
+    OWNERS = {name: OWNERS[name] for name in names}
 CAPABILITIES = tuple(sorted({name for dependencies in OWNERS.values() for name in dependencies}))
 
 
@@ -46,6 +52,12 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
     for name in ("Cargo.toml", "Cargo.lock"):
         shutil.copy2(ROOT / name, staging / name)
     shutil.copytree(ROOT / "crates", staging / "crates", ignore=shutil.ignore_patterns("target"))
+    # The Native-only human facade is a separate source consumer. Resolving its
+    # Git-backed RBAC dev graph while patching an extracted SDK would collide
+    # with the SDK workspace member, outside this Workers artifact cohort.
+    workspace = staging / "Cargo.toml"
+    workspace.write_text(workspace.read_text().replace(
+        '    "crates/lenso-auth-human-api-token-plugin",\n', ""))
     archives = task / "artifacts"
     extracted = task / "extracted"
     extracted.mkdir()
