@@ -122,8 +122,7 @@ try {
         },
         {
           name: "fused-session-idp",
-          modules: true,
-          scriptPath: resolve(root, "idp-service-worker.mjs"),
+          modules: [{type: "ESModule", path: resolve(root, "idp-service-worker.mjs")}, {type: "ESModule", path: resolve(root, "idp-fixture.mjs")}],
           modulesRoot: root,
           compatibilityDate: "2026-07-08",
           bindings: { ...fixedBindings, IDP_JWK: idpJwk },
