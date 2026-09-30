@@ -341,27 +341,38 @@ fn plan_cache(
             "lenso.auth.human-api-token/human",
             lenso_auth_human_api_token_plugin::PACKAGE_ID,
         )
+        .with_authoring(2, "lenso.native-authoring@2")
         .with_configuration(serde_json::to_string(&human_config).unwrap()),
         human::CAPABILITY_ID,
         human::DESCRIPTOR_VERSION,
         &["issue", "list", "receipt", "revoke"],
     );
-    for (cap, version, target) in [
-        (state::CAPABILITY_ID, state::DESCRIPTOR_VERSION, "account"),
+    for (id, cap, version, target) in [
         (
+            "account_state",
+            state::CAPABILITY_ID,
+            state::DESCRIPTOR_VERSION,
+            "account",
+        ),
+        (
+            "api_tokens",
             token_admin::CAPABILITY_ID,
             token_admin::DESCRIPTOR_VERSION,
             "tokens",
         ),
-        (access::CAPABILITY_ID, access::DESCRIPTOR_VERSION, "access"),
+        (
+            "access",
+            access::CAPABILITY_ID,
+            access::DESCRIPTOR_VERSION,
+            "access",
+        ),
     ] {
-        facade = requirement(facade, cap, version);
-        bindings.push(CapabilityBinding::new(
-            "lenso.auth.human-api-token/human",
-            cap,
-            version,
-            target,
-        ));
+        facade = facade
+            .with_requirement(CapabilityRequirementPlan::one(cap, version).with_requirement_id(id));
+        bindings.push(
+            CapabilityBinding::new("lenso.auth.human-api-token/human", cap, version, target)
+                .with_requirement_id(id),
+        );
     }
     let mut browser = PluginInstancePlan::new("test.human/browser", CALLER_PACKAGE_ID);
     for (cap, version, target) in [

@@ -4,6 +4,14 @@ Select this removable Native Plugin only for the operators browser profile.
 It binds one Account CredentialState provider, one API Token Admin provider and
 one Access Control provider. It owns no users, sessions, token records or RBAC.
 
+The source Plugin declares named dependencies `account_state`, `api_tokens`
+and `access`. Select the Account live-state instance, the API Token Admin
+instance, and the human Account realm's Access Control instance explicitly.
+Deployments using the earlier private descriptor must replace its synthetic
+`~capability` choices with these names before resolution; provider discovery
+does not pick between Account/API state or human/PAT policy instances.
+The public Human API Token capability and configuration are unchanged.
+
 Configure the Account instance with an independent issuer/key, an explicit
 `management_session_ceiling`, and exact `credential_state_callers`. Account
 adds references for its actual stored session to signed Auth assertions.

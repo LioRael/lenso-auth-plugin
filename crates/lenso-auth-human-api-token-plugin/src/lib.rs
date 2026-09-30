@@ -1,5 +1,5 @@
 //! Personal token lifecycle authenticated by one bound Account realm.
-use lenso::{Port, provides};
+use lenso::provides;
 use lenso_auth_sdk::credential::{
     CredentialBinding, ManagementCredentialCeiling, ManagementResourceScope,
 };
@@ -102,9 +102,12 @@ fn validate_config(config: &HumanApiTokenConfig) -> Result<(), RuntimeFailure> {
 struct HumanApiTokenPlugin {
     #[config]
     config: HumanApiTokenConfig,
-    account_state: Port<state::CredentialStateClient>,
-    api_tokens: Port<admin::ApiTokenAdminClient>,
-    access: Port<access::AccessControlClient>,
+    #[dependency(id = "account_state")]
+    account_state: state::CredentialStateClient,
+    #[dependency(id = "api_tokens")]
+    api_tokens: admin::ApiTokenAdminClient,
+    #[dependency(id = "access")]
+    access: access::AccessControlClient,
 }
 #[provides(human::HumanApiToken)]
 impl HumanApiTokenPlugin {}
