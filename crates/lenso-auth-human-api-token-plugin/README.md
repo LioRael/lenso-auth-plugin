@@ -32,6 +32,10 @@ pair against current RBAC. The Console's human route additionally checks current
 Management-owned deployment qualification and the Host's admitted EntryPolicy
 pairs before forwarding to this bound port.
 
+Live-state, policy and API Token replies retain runtime failures. Unrecognized
+domain replies are unavailable outcomes, including during inspection or policy
+checks; they do not become permission denials or confirmed failed mutations.
+
 The public source-first `lenso.auth.human-api-token@1` contract accepts no
 subject or target URL. List and revoke derive the subject from a currently
 verified Account assertion. The internal `lenso.auth.api-token-admin@1` port

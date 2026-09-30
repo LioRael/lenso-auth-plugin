@@ -161,20 +161,19 @@ impl HumanApiTokenPlugin {
         ) else {
             return Ok(None);
         };
-        let inspected = match self
-            .account_state
-            .inspect_with_context(
-                context.clone(),
-                state::InspectRequest {
-                    credential_id: binding.credential_id.clone(),
-                    session_id: binding.session_id.clone(),
-                },
-            )
-            .await
-        {
-            Ok(inspected) => inspected,
-            Err(state::CredentialStateInvocationError::Domain(_)) => return Ok(None),
-            Err(state::CredentialStateInvocationError::Runtime(error)) => return Err(error),
+        let Some(inspected) = live_inspection(
+            self.account_state
+                .inspect_with_context(
+                    context.clone(),
+                    state::InspectRequest {
+                        credential_id: binding.credential_id.clone(),
+                        session_id: binding.session_id.clone(),
+                    },
+                )
+                .await,
+        )?
+        else {
+            return Ok(None);
         };
         let (Ok(current), Ok(current_binding), Ok(expiry)) = (
             ManagementCredentialCeiling::from_claims(&inspected.claims),
@@ -234,25 +233,21 @@ impl HumanApiTokenPlugin {
         kind: &str,
         id: &str,
     ) -> Result<bool, RuntimeFailure> {
-        match self
-            .access
-            .check_permission_with_context(
-                context.clone(),
-                access::CheckPermissionRequest {
-                    subject: subject.into(),
-                    permission: permission.into(),
-                    scope: access::CheckPermissionRequestScope {
-                        kind: kind.into(),
-                        id: id.into(),
+        live_permission(
+            self.access
+                .check_permission_with_context(
+                    context.clone(),
+                    access::CheckPermissionRequest {
+                        subject: subject.into(),
+                        permission: permission.into(),
+                        scope: access::CheckPermissionRequestScope {
+                            kind: kind.into(),
+                            id: id.into(),
+                        },
                     },
-                },
-            )
-            .await
-        {
-            Ok(decision) => Ok(decision.allowed),
-            Err(access::AccessControlInvocationError::Domain(_)) => Ok(false),
-            Err(access::AccessControlInvocationError::Runtime(error)) => Err(error),
-        }
+                )
+                .await,
+        )
     }
     fn issue(
         &self,
@@ -467,6 +462,30 @@ fn unknown_owner_result() -> RuntimeFailure {
         capability: human::CAPABILITY_ID,
     }
 }
+fn live_inspection(
+    result: Result<state::InspectResponse, state::CredentialStateInvocationError>,
+) -> Result<Option<state::InspectResponse>, RuntimeFailure> {
+    match result {
+        Ok(inspected) => Ok(Some(inspected)),
+        Err(state::CredentialStateInvocationError::Domain(state::InspectError::Unknown(_))) => {
+            Err(unknown_owner_result())
+        }
+        Err(state::CredentialStateInvocationError::Domain(_)) => Ok(None),
+        Err(state::CredentialStateInvocationError::Runtime(error)) => Err(error),
+    }
+}
+fn live_permission(
+    result: Result<access::CheckPermissionResponse, access::AccessControlInvocationError>,
+) -> Result<bool, RuntimeFailure> {
+    match result {
+        Ok(decision) => Ok(decision.allowed),
+        Err(access::AccessControlInvocationError::Domain(
+            access::CheckPermissionError::Unknown(_),
+        )) => Err(unknown_owner_result()),
+        Err(access::AccessControlInvocationError::Domain(_)) => Ok(false),
+        Err(access::AccessControlInvocationError::Runtime(error)) => Err(error),
+    }
+}
 fn issue_error(error: &admin::IssueError) -> Result<human::IssueError, RuntimeFailure> {
     Ok(match error {
         admin::IssueError::PermissionDenied => human::IssueError::PermissionDenied,
@@ -518,20 +537,34 @@ mod scoped_human_tests {
             "code": "future_owner_outcome",
             "payload": {"receipt": "not-confirmed"}
         });
+        let wire = unknown.to_string();
         assert_eq!(
-            issue_error(&serde_json::from_value(unknown.clone()).unwrap()),
+            live_inspection(Err(state::CredentialStateInvocationError::Domain(
+                state::decode_inspect_error(&wire).unwrap(),
+            )))
+            .unwrap_err(),
+            unknown_owner_result(),
+        );
+        assert_eq!(
+            live_permission(Err(access::AccessControlInvocationError::Domain(
+                access::decode_check_permission_error(&wire).unwrap(),
+            ))),
+            Err(unknown_owner_result()),
+        );
+        assert_eq!(
+            issue_error(&admin::decode_issue_error(&wire).unwrap()),
             Err(unknown_owner_result())
         );
         assert_eq!(
-            list_error(&serde_json::from_value(unknown.clone()).unwrap()),
+            list_error(&admin::decode_list_error(&wire).unwrap()),
             Err(unknown_owner_result())
         );
         assert_eq!(
-            receipt_error(&serde_json::from_value(unknown.clone()).unwrap()),
+            receipt_error(&admin::decode_receipt_error(&wire).unwrap()),
             Err(unknown_owner_result())
         );
         assert_eq!(
-            revoke_error(&serde_json::from_value(unknown).unwrap()),
+            revoke_error(&admin::decode_revoke_error(&wire).unwrap()),
             Err(unknown_owner_result())
         );
         assert_eq!(
@@ -542,6 +575,54 @@ mod scoped_human_tests {
             revoke_error(&admin::RevokeError::PermissionDenied),
             Ok(human::RevokeError::PermissionDenied)
         );
+    }
+    #[test]
+    fn known_live_guard_denials_and_runtime_failures_keep_their_meaning() {
+        for error in [
+            state::InspectError::InvalidReference,
+            state::InspectError::NotFound,
+            state::InspectError::PermissionDenied,
+        ] {
+            assert!(matches!(
+                live_inspection(Err(state::CredentialStateInvocationError::Domain(error))),
+                Ok(None)
+            ));
+        }
+        assert_eq!(
+            live_permission(Err(access::AccessControlInvocationError::Domain(
+                access::CheckPermissionError::InvalidRequest
+            ))),
+            Ok(false)
+        );
+        assert_eq!(
+            live_permission(Ok(access::CheckPermissionResponse {
+                allowed: false,
+                policy_revision: "current".into()
+            })),
+            Ok(false)
+        );
+        for error in [
+            RuntimeFailure::Unavailable {
+                capability: state::CAPABILITY_ID,
+            },
+            RuntimeFailure::ProtocolViolation {
+                capability: state::CAPABILITY_ID,
+            },
+        ] {
+            assert_eq!(
+                live_inspection(Err(state::CredentialStateInvocationError::Runtime(
+                    error.clone()
+                )))
+                .unwrap_err(),
+                error
+            );
+            assert_eq!(
+                live_permission(Err(access::AccessControlInvocationError::Runtime(
+                    error.clone()
+                ))),
+                Err(error)
+            );
+        }
     }
     #[test]
     fn scoped_agent_user_is_never_a_human_token_operator() {
