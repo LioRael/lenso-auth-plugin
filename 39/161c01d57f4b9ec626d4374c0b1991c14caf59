@@ -1,0 +1,27 @@
+crates/lenso-auth-human-api-token-plugin/tests/postgres_lifecycle.rs
+  s_f4202e28c6b5b1::t_0fa28d1c7997aa 344,350-356,358,363-366,372,375
+  s_f4202e28c6b5b1::t_a083b7790b5e1e 367-368,370-371,373-374
+crates/lenso-auth-human-api-token-plugin/tests/source_dependencies.rs
+  s_f4202e28c6b5b1::t_c4988d91c48516 1-120
+  s_f4202e28c6b5b1::t_4eacce4ecfd621 121-128
+crates/lenso-auth-human-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_0fa28d1c7997aa 2,105-110
+crates/lenso-auth-human-api-token-plugin/README.md
+  s_f4202e28c6b5b1::t_c4988d91c48516 7-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "39161c01d57f4b9ec626d4374c0b1991c14caf59",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
