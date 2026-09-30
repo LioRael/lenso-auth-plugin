@@ -1,5 +1,6 @@
 //! Opaque API-token Auth Plugin with privately owned persistence.
 
+pub mod host_facilities;
 mod management;
 #[cfg(feature = "workers")]
 pub mod migration;
@@ -294,7 +295,8 @@ struct ApiTokenAuthPlugin {
     secrets: Port<secrets::SecretsClient>,
     state: Rc<RefCell<Option<PreparedAuth>>>,
     #[allow(dead_code)]
-    d1: EventStorageBinding,
+    #[facility(id = "state")]
+    d1: Option<EventStorageBinding>,
 }
 
 #[allow(clippy::missing_fields_in_debug)]
@@ -604,9 +606,9 @@ fn valid_token(token: &str) -> bool {
 }
 
 #[cfg(feature = "workers")]
-type EventStorageBinding = Option<workers::D1Binding>;
+pub type EventStorageBinding = workers::D1Binding;
 #[cfg(not(feature = "workers"))]
-type EventStorageBinding = ();
+pub type EventStorageBinding = ();
 #[cfg(feature = "workers")]
 pub fn workers_factory(
     binding_name: impl Into<Rc<str>>,

@@ -11,6 +11,11 @@ description = "PostgreSQL-backed opaque API token Auth Plugin for Lenso vNext."
 plugin-id = "lenso.auth.api-token"
 root-slot = "auth"
 
+[package.metadata.lenso.host-facilities.state]
+native = "host_facilities::state"
+workers = "host_facilities::state"
+workers-adapter = "src/host_facilities/state.mjs"
+
 [features]
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:lenso-postgres-kit"]

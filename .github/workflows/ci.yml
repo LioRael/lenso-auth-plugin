@@ -64,6 +64,8 @@ jobs:
           python3 workers/test-migration-generation.py
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
+      - name: Verify source-selected D1 facility
+        run: node --test crates/lenso-auth-api-token-plugin/tests/source-facility.test.mjs
       - name: Check extracted Workers Auth packages
         run: python3 workers/check-packages.py
       - name: Package changed public cohort
