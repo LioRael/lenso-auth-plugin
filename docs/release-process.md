@@ -2,7 +2,7 @@
 
 Contribution and candidate-landing rules are in [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-The source candidate contains nine public vNext Rust crates:
+The source candidate contains nine public Rust crates:
 
 - `lenso-capability-auth`
 - `lenso-capability-credential-state`

@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 publish = true
 repository.workspace = true
-description = "PostgreSQL-backed opaque API token Auth Plugin for Lenso vNext."
+description = "PostgreSQL-backed opaque API token Auth Plugin for Lenso."
 
 [package.metadata.lenso]
 plugin-id = "lenso.auth.api-token"

@@ -1,7 +1,8 @@
 # Lenso Auth Plugin
 
-Portable Auth Capability contracts and assertion semantics for Lenso vNext.
-The default `main` branch is vNext-only. The final mixed v0.3 workspace is
+Portable Auth Capability contracts and assertion semantics for Lenso.
+The default `main` branch owns the current Auth Capability and Plugins. The final
+mixed v0.3 workspace is
 retained on the `v0.3` branch and by its existing package tags and releases.
 
 ## Contributing
@@ -183,8 +184,8 @@ explicit Capability endpoints remain Plugin-owned implementation details.
 
 ## Branches
 
-- `main`: Lenso vNext Auth Interface and portable semantics.
+- `main`: Lenso Auth Interface and portable semantics.
 - `v0.3`: maintenance reference for the previously released v0.3 Auth modules.
 
 Do not copy v0.3 crates or Console packages back into `main`. Reuse a behavior
-only after naming its vNext Interface and owning Plugin or Adapter.
+only after naming its Capability Interface and owning Plugin or Adapter.

@@ -1,10 +1,12 @@
-# vNext Auth backend capability matrix
+<a id="vnext-auth-backend-capability-matrix"></a>
+
+# Auth backend capability matrix
 
 This matrix uses the crates on `origin/v0.3` as the restoration baseline. HTTP
 route extraction/response mapping, Console manifests/artifacts, and frontend
 packages are intentionally excluded. Those are Adapter or UI responsibilities.
 
-| v0.3 owner | Restored behavior | vNext owner | Status |
+| v0.3 owner | Restored behavior | Current owner | Status |
 | --- | --- | --- | --- |
 | `auth` | canonical users, identities, sessions, disable/enable, session revocation, administrative reads | Account Plugin plus Account Admin Capability | complete |
 | `auth-anonymous` | anonymous subject and session creation, stable device-scoped identity | Anonymous Auth Plugin | complete |
@@ -18,7 +20,7 @@ packages are intentionally excluded. Those are Adapter or UI responsibilities.
 | browser OIDC session | start/callback/logout routes, secure opaque session Cookie, local return redirect, credential-based logout | Auth Web Session Endpoint Plugin plus Web Ingress Cookie/CSRF policy | complete |
 | `auth-phone` | normalized phone identities, OTP start/verify/resend limits, phone password set/login | Phone Auth Plugin plus bound SMS Delivery Capability | complete |
 
-The existing API Token Plugin is additional vNext behavior and remains a peer
+The existing API Token Plugin is additional current behavior and remains a peer
 credential provider. The Auth Router provides explicit scheme-to-provider
 instance selection when a caller accepts more than one `lenso.auth@1`
 provider; it never tries another provider after a rejection.
