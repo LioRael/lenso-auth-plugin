@@ -1,14 +1,15 @@
 use lenso_app_plan::{
     CapabilityEndpointPlan,
     authoring::{
-        HostCatalog, HostDefaultPlugin, HostPluginRelease, HostSlot, PluginDescriptor,
-        PluginRootSnapshot, resolve_plugin_root,
+        HostBinding, HostCatalog, HostDefaultPlugin, HostPluginRelease, HostSlot, PluginDescriptor,
+        PluginInstanceId, PluginRootSnapshot, resolve_plugin_root,
     },
 };
 use lenso_auth_account_plugin::{
     AccountAuthConfig, ManagedSessionConfig, ManagedSessionPolicy, assertion_public_key,
 };
 use lenso_auth_sdk::credential::{ManagementCredentialCeiling, ManagementResourceScope};
+use lenso_capability_identity_directory as directory;
 use lenso_capability_secrets as secrets;
 
 fn resolves(config: &AccountAuthConfig) -> bool {
@@ -22,7 +23,11 @@ fn resolves(config: &AccountAuthConfig) -> bool {
             [secrets::RESOLVE_OPERATION],
         ));
     let host = HostCatalog::new(
-        [HostSlot::one("identity"), HostSlot::one("secrets")],
+        [
+            HostSlot::one("identity"),
+            HostSlot::one("secrets"),
+            HostSlot::optional("source_accounts"),
+        ],
         [
             HostPluginRelease::new(descriptor),
             HostPluginRelease::new(secret),
@@ -32,13 +37,20 @@ fn resolves(config: &AccountAuthConfig) -> bool {
                 .with_configuration(serde_json::to_value(config).unwrap()),
             HostDefaultPlugin::new("test.secrets", "secrets"),
         ],
-    );
+    )
+    .with_bindings([HostBinding::new(
+        PluginInstanceId::new(lenso_auth_account_plugin::PACKAGE_ID, "account"),
+        directory::CAPABILITY_ID,
+        "source_accounts",
+    )]);
+    // A declared empty optional source Slot prevents automatic self-binding.
+    // Enabled operator assembly instead selects the exact source Account instance.
     resolve_plugin_root(&host, &PluginRootSnapshot::default())
         .inspect_err(|error| eprintln!("{error:?}"))
         .is_ok()
 }
 #[test]
-fn source_catalog_accepts_both_explicit_operators_ceiling_and_default_session_profile() {
+fn source_catalog_with_explicit_empty_source_slot_accepts_existing_profiles() {
     let default = AccountAuthConfig::new(
         "auth_account",
         "operators.account",

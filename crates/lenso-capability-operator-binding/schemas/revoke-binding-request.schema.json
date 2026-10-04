@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["binding_id", "actor_subject"],
+  "properties": {
+    "binding_id": {
+      "type": "string"
+    },
+    "actor_subject": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "title": "RevokeBindingRequest"
+}

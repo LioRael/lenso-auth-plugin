@@ -1,4 +1,5 @@
 use crate::AccountError;
+pub(crate) mod operator_binding;
 pub(crate) use crate::ManagedSessionPolicy;
 use hmac::{Hmac, Mac};
 use serde_json::Value;

@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/lenso-auth-operator-session-plugin",
+    "crates/lenso-capability-operator-binding",
+    "crates/lenso-capability-operator-session",
     "crates/lenso-capability-managed-session",
     "crates/lenso-auth-session-renewal-plugin",
     "crates/lenso-auth-account-plugin",

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    { "const": "unauthenticated" },
+    { "const": "permission_denied" },
+    { "const": "not_enabled" },
+    { "const": "not_found" },
+    { "const": "not_active" },
+    { "const": "bootstrap_expired" },
+    { "const": "bootstrap_consumed" },
+    { "const": "invalid_request" },
+    { "const": "audit_unavailable" },
+    { "const": "access_unavailable" }
+  ]
+}

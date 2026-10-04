@@ -4,6 +4,8 @@ pub use host_facilities::EventStorageBinding;
 
 mod delegation;
 mod managed;
+mod operator_binding;
+pub use operator_binding::OperatorBindingConfig;
 #[cfg(feature = "postgres")]
 mod operator;
 mod profile;
@@ -15,7 +17,7 @@ pub use managed::{ManagedSessionConfig, ManagedSessionPolicy};
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
+use lenso::{ActivateContext, DeactivateContext, Lifecycle, ManyPort, Port, provides};
 use lenso_auth_sdk::credential::{
     CREDENTIAL_BINDING_CLAIM, CredentialBinding, MANAGEMENT_CEILING_CLAIM,
     ManagementCredentialCeiling,
@@ -46,6 +48,7 @@ use lenso_capability_identity_directory::{
     ReadStatusResponseStatus,
 };
 use lenso_capability_managed_session as managed_session;
+use lenso_capability_operator_binding as operator_binding_contract;
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
@@ -92,6 +95,8 @@ pub struct AccountAuthConfig {
     management_session_ceiling: Option<ManagementCredentialCeiling>,
     #[serde(default)]
     managed_sessions: Option<ManagedSessionConfig>,
+    #[serde(default)]
+    operator_bindings: Option<OperatorBindingConfig>,
 }
 
 impl AccountAuthConfig {
@@ -130,6 +135,7 @@ impl AccountAuthConfig {
             credential_state_callers: Vec::new(),
             management_session_ceiling: None,
             managed_sessions: None,
+            operator_bindings: None,
         };
         value.validate()?;
         Ok(value)
@@ -324,12 +330,15 @@ impl AccountAuthConfig {
         {
             return Err(AccountConfigError::InvalidDelegationCaller);
         }
+        operator_binding::validate_mode(self)?;
         Ok(())
     }
 }
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum AccountConfigError {
+    #[error("invalid optional operator binding policy")]
+    InvalidOperatorBinding,
     #[error("invalid managed session policy or caller allowlist")]
     InvalidManagedSessionPolicy,
     #[error("invalid current credential state caller")]
@@ -376,6 +385,7 @@ struct AccountAuthPlugin {
     #[config]
     config: AccountAuthConfig,
     secrets: Port<secrets::SecretsClient>,
+    source_accounts: ManyPort<directory::DirectoryClient>,
     state: Rc<RefCell<Option<PreparedAccount>>>,
     #[cfg_attr(not(feature = "workers"), allow(dead_code))]
     #[facility(id = "state")]
@@ -414,7 +424,8 @@ impl fmt::Debug for AccountAuthPlugin {
     account_admin::AccountAdmin,
     auth_delegation::Delegation,
     credential_state::CredentialState,
-    managed_session::ManagedSession
+    managed_session::ManagedSession,
+    operator_binding_contract::OperatorBinding
 )]
 impl AccountAuthPlugin {}
 
@@ -502,13 +513,32 @@ impl AccountAuthPlugin {
 impl AccountAuthPlugin {
     fn issue(
         &self,
-        _context: InvocationContext,
-        request: IssueRequest,
+        context: InvocationContext,
+        mut request: IssueRequest,
     ) -> NativeRequestFuture<CredentialIssuerIssue> {
         let prepared = self.prepared();
+        let source_accounts = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
+        let operator_binding = self.config.operator_bindings.clone();
         let management_ceiling = self.config.management_session_ceiling.clone();
         Box::pin(async move {
             let prepared = prepared?;
+            if !operator_binding::admit_issue(
+                &prepared.store,
+                operator_binding.as_ref(),
+                &context,
+                &request.subject,
+                &mut request.claims,
+                source_accounts.as_ref(),
+                management_ceiling.as_ref(),
+            )
+            .await?
+            {
+                return Ok(Err(IssueError::InvalidAuthority));
+            }
             if request.claims.contains_key(CREDENTIAL_BINDING_CLAIM)
                 || request.claims.contains_key(MANAGEMENT_CEILING_CLAIM)
                 || request
@@ -761,12 +791,20 @@ impl AccountAuthPlugin {
 }
 
 impl AccountAuthPlugin {
+    // Keep ordered credential rejection and current-policy checks auditable in one flow.
+    #[allow(clippy::too_many_lines)]
     fn authenticate(
         &self,
-        _context: InvocationContext,
+        context: InvocationContext,
         request: AuthRequest,
     ) -> NativeRequestFuture<Auth> {
         let prepared = self.prepared();
+        let source_accounts = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
+        let operator_binding = self.config.operator_bindings.clone();
         let current_ceiling = self.config.management_session_ceiling.clone();
         let current_targets = self.config.scoped_delegation_targets.clone();
         let managed_policy = self
@@ -793,7 +831,16 @@ impl AccountAuthPlugin {
             else {
                 return Ok(Err(AuthenticateError::Invalid));
             };
-            if session.status == "disabled"
+            if !operator_binding::session_admitted(
+                &prepared.store,
+                operator_binding.as_ref(),
+                &session.subject,
+                &session.claims,
+                source_accounts.as_ref(),
+                &context,
+            )
+            .await?
+                || session.status == "disabled"
                 || session.revoked
                 || !scoped_target_admitted(&session.claims, &current_targets)
             {
@@ -883,6 +930,12 @@ impl AccountAuthPlugin {
                 .any(|allowed| allowed == caller)
         });
         let prepared = self.prepared();
+        let source_accounts = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
+        let operator_binding = self.config.operator_bindings.clone();
         let current_ceiling = self.config.management_session_ceiling.clone();
         let current_targets = self.config.scoped_delegation_targets.clone();
         let managed_policy = self
@@ -919,7 +972,17 @@ impl AccountAuthPlugin {
             {
                 session.expires_at = session.expires_at.min(expiry);
             }
-            let active = scoped_target_admitted(&session.claims, &current_targets)
+            let binding_active = operator_binding::session_admitted(
+                &prepared.store,
+                operator_binding.as_ref(),
+                &session.subject,
+                &session.claims,
+                source_accounts.as_ref(),
+                &context,
+            )
+            .await?;
+            let active = binding_active
+                && scoped_target_admitted(&session.claims, &current_targets)
                 && session.status == "active"
                 && !session.revoked
                 && session.expires_at > OffsetDateTime::now_utc();
@@ -944,6 +1007,19 @@ impl AccountAuthPlugin {
 impl Lifecycle for AccountAuthPlugin {
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
+        if let Some(cfg) = &config.operator_bindings
+            && (self.source_accounts.len() != 1
+                || self
+                    .source_accounts
+                    .first()
+                    .is_none_or(|client| client.provider_instance() != cfg.source_account_instance))
+        {
+            return Err(RuntimeFailure::InvalidResolvedPlan {
+                detail:
+                    "Operator Account requires its one exact source accounts Directory instance"
+                        .into(),
+            });
+        }
         let state = self.state.clone();
         let selected = config.select_storage(self.d1.as_ref())?;
         let dependencies = context.dependencies().clone();
@@ -984,10 +1060,11 @@ impl Lifecycle for AccountAuthPlugin {
                         database_url_secret,
                     )
                     .await?;
-                    let postgres = crate::schema::prepare(
+                    let postgres = crate::schema::prepare_features(
                         &database_url,
                         &config.schema,
                         config.managed_sessions.is_some(),
+                        config.operator_bindings.is_some(),
                     )
                     .await
                     .map_err(runtime)?;
@@ -1001,10 +1078,13 @@ impl Lifecycle for AccountAuthPlugin {
             }
             #[cfg(feature = "workers")]
             host_facilities::StorageSelection::D1(binding) => {
-                let managed_schema =
-                    migration::verify_compatible(binding, config.managed_sessions.is_some())
-                        .await
-                        .map_err(|_| runtime("Account D1 migration verification failed"))?;
+                let managed_schema = migration::verify_features(
+                    binding,
+                    config.managed_sessions.is_some(),
+                    config.operator_bindings.is_some(),
+                )
+                .await
+                .map_err(|_| runtime("Account D1 migration verification failed"))?;
                 storage::AccountStore::D1 {
                     binding: binding.clone(),
                     managed_schema,

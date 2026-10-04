@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["binding_id", "revision", "audit_event_id", "policy_revision"],
+  "properties": {
+    "binding_id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "audit_event_id": {
+      "type": "string"
+    },
+    "policy_revision": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "title": "ActivateBindingRequest"
+}

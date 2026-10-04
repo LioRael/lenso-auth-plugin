@@ -74,6 +74,12 @@ impl AccountAuthPlugin {
         request: contract::ReadManagedRequest,
     ) -> NativeRequestFuture<contract::ManagedSessionReadManaged> {
         let config = self.config.managed_sessions.clone();
+        let binding_config = self.config.operator_bindings.clone();
+        let source_accounts = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
         let prepared = self.prepared();
         Box::pin(async move {
             let Some(config) = config else {
@@ -92,12 +98,48 @@ impl AccountAuthPlugin {
                 .await
                 .map_err(runtime)?
             {
-                Ok(meta) => Ok(Ok(contract::ReadManagedResponse {
-                    session_id: meta.session_id,
-                    expires_at: format_time(meta.expires_at)?,
-                    absolute_expires_at: format_time(meta.absolute_expires_at)?,
-                    renew_after: format_time(meta.renew_after)?,
-                })),
+                Ok(meta) => {
+                    let Some(session) = storage::load_session(&prepared.store, &digest)
+                        .await
+                        .map_err(runtime)?
+                    else {
+                        return Ok(Err(
+                            match storage::session_metadata(
+                                &prepared.store,
+                                &digest,
+                                &config.policy,
+                            )
+                            .await
+                            .map_err(runtime)?
+                            {
+                                Err(Outcome::StaleCredential) => {
+                                    contract::ReadManagedError::StaleCredential
+                                }
+                                Err(Outcome::Expired) => contract::ReadManagedError::Expired,
+                                Err(Outcome::Revoked) => contract::ReadManagedError::Revoked,
+                                _ => contract::ReadManagedError::InvalidCredential,
+                            },
+                        ));
+                    };
+                    if !super::operator_binding::session_admitted(
+                        &prepared.store,
+                        binding_config.as_ref(),
+                        &session.subject,
+                        &session.claims,
+                        source_accounts.as_ref(),
+                        &context,
+                    )
+                    .await?
+                    {
+                        return Ok(Err(contract::ReadManagedError::Revoked));
+                    }
+                    Ok(Ok(contract::ReadManagedResponse {
+                        session_id: meta.session_id,
+                        expires_at: format_time(meta.expires_at)?,
+                        absolute_expires_at: format_time(meta.absolute_expires_at)?,
+                        renew_after: format_time(meta.renew_after)?,
+                    }))
+                }
                 Err(Outcome::InvalidCredential) => {
                     Ok(Err(contract::ReadManagedError::InvalidCredential))
                 }
@@ -116,12 +158,20 @@ impl AccountAuthPlugin {
         })
     }
     #[allow(clippy::needless_pass_by_value)]
+    // Issuance checks and durable credential creation remain one ordered security flow.
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn issue_managed(
         &self,
         context: InvocationContext,
-        request: contract::IssueManagedRequest,
+        mut request: contract::IssueManagedRequest,
     ) -> NativeRequestFuture<contract::ManagedSessionIssueManaged> {
         let config = self.config.managed_sessions.clone();
+        let binding_config = self.config.operator_bindings.clone();
+        let source_accounts = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
         let prepared = self.prepared();
         let ceiling = self.config.management_session_ceiling.clone();
         Box::pin(async move {
@@ -146,6 +196,19 @@ impl AccountAuthPlugin {
                 || request
                     .claims
                     .contains_key(lenso_auth_sdk::delegation::SCOPED_DELEGATION_CLAIM)
+            {
+                return Ok(Err(contract::IssueManagedError::InvalidAuthority));
+            }
+            if !super::operator_binding::admit_issue(
+                &prepared.store,
+                binding_config.as_ref(),
+                &context,
+                &request.subject,
+                &mut request.claims,
+                source_accounts.as_ref(),
+                ceiling.as_ref(),
+            )
+            .await?
             {
                 return Ok(Err(contract::IssueManagedError::InvalidAuthority));
             }
@@ -215,6 +278,12 @@ impl AccountAuthPlugin {
         request: contract::RenewRequest,
     ) -> NativeRequestFuture<contract::ManagedSessionRenew> {
         let config = self.config.managed_sessions.clone();
+        let binding_config = self.config.operator_bindings.clone();
+        let source_accounts = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
         let prepared = self.prepared();
         Box::pin(async move {
             let Some(config) = config else {
@@ -229,6 +298,51 @@ impl AccountAuthPlugin {
             let prepared = prepared?;
             let old_digest =
                 storage::token_digest(&prepared.pepper, &request.credential).map_err(runtime)?;
+            // Classify historical digests before current-session binding checks; stale remains retryable.
+            match storage::session_metadata(&prepared.store, &old_digest, &config.policy)
+                .await
+                .map_err(runtime)?
+            {
+                Ok(_) => {}
+                Err(Outcome::StaleCredential) => {
+                    return Ok(Err(contract::RenewError::StaleCredential));
+                }
+                Err(Outcome::InvalidCredential) => {
+                    return Ok(Err(contract::RenewError::InvalidCredential));
+                }
+                Err(Outcome::Expired) => return Ok(Err(contract::RenewError::Expired)),
+                Err(Outcome::Revoked) => return Ok(Err(contract::RenewError::Revoked)),
+                Err(Outcome::Unsupported) => return Ok(Err(contract::RenewError::Unsupported)),
+                Err(_) => return Ok(Err(contract::RenewError::InvalidCredential)),
+            }
+            let Some(session) = storage::load_session(&prepared.store, &old_digest)
+                .await
+                .map_err(runtime)?
+            else {
+                return Ok(Err(
+                    match storage::session_metadata(&prepared.store, &old_digest, &config.policy)
+                        .await
+                        .map_err(runtime)?
+                    {
+                        Err(Outcome::StaleCredential) => contract::RenewError::StaleCredential,
+                        Err(Outcome::Expired) => contract::RenewError::Expired,
+                        Err(Outcome::Revoked) => contract::RenewError::Revoked,
+                        _ => contract::RenewError::InvalidCredential,
+                    },
+                ));
+            };
+            if !super::operator_binding::session_admitted(
+                &prepared.store,
+                binding_config.as_ref(),
+                &session.subject,
+                &session.claims,
+                source_accounts.as_ref(),
+                &context,
+            )
+            .await?
+            {
+                return Ok(Err(contract::RenewError::Revoked));
+            }
             let token = random_token().map_err(runtime)?;
             let new_digest = storage::token_digest(&prepared.pepper, &token).map_err(runtime)?;
             match storage::renew_session(&prepared.store, &old_digest, &new_digest, &config.policy)

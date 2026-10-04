@@ -80,12 +80,23 @@ pub async fn adopt_legacy(binding: &D1Binding) -> Result<(), Error> { plan()?.ad
     if owner == "account":
         # Managed tables are opt-in; preserve the existing v2 operator plan.
         text = text.replace('pub fn plan() -> Result<Plan, Error> {',
-            'pub fn managed_plan() -> Result<Plan, Error> {', 1)
+            'pub fn operator_plan() -> Result<Plan, Error> {', 1)
         text += '\n' + f'''pub fn plan() -> Result<Plan, Error> {{
     Plan::new("lenso.auth.account", &SQL[..2], &MIGRATIONS[..2], Some(LegacySchema {{ table: "{marker[1]}", fingerprint: "{marker[2]}" }}))
 }}
+pub fn managed_plan() -> Result<Plan, Error> {{
+    Plan::new("lenso.auth.account", &SQL[..3], &MIGRATIONS[..3], Some(LegacySchema {{ table: "{marker[1]}", fingerprint: "{marker[2]}" }}))
+}}
 /// Read-only exact-history admission. Returns whether digest history is supported.
 pub async fn verify_compatible(binding: &D1Binding, managed_required: bool) -> Result<bool, Error> {{
+    verify_features(binding, managed_required, false).await
+}}
+pub async fn verify_features(binding: &D1Binding, managed_required: bool, operator_required: bool) -> Result<bool, Error> {{
+    match operator_plan()?.verify(binding).await {{
+        Ok(()) => return Ok(true),
+        Err(Error::UpgradeRequired) if !operator_required => {{}},
+        Err(error) => return Err(error),
+    }}
     match managed_plan()?.verify(binding).await {{
         Ok(()) => Ok(true),
         Err(Error::UpgradeRequired) if !managed_required => {{
@@ -95,6 +106,10 @@ pub async fn verify_compatible(binding: &D1Binding, managed_required: bool) -> R
         Err(error) => Err(error),
     }}
 }}
+/// Explicit operator binding setup; runtime Ready is read-only.
+pub async fn setup_operator_bound(binding: &D1Binding) -> Result<(), Error> {{ operator_plan()?.setup(binding).await }}
+/// Explicit operator binding upgrade; never invoked during Ready.
+pub async fn upgrade_operator_bound(binding: &D1Binding) -> Result<(), Error> {{ operator_plan()?.upgrade(binding).await }}
 /// Explicit opt-in operation for a fresh dedicated managed-session database.
 pub async fn setup_managed(binding: &D1Binding) -> Result<(), Error> {{ managed_plan()?.setup(binding).await }}
 /// Explicit opt-in operation for an existing dedicated managed-session database.

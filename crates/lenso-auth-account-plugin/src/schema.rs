@@ -31,6 +31,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "add-managed-sessions",
         "migrations/postgres/006_add_managed_sessions.sql"
     ),
+    (
+        7,
+        "operator-bindings",
+        "migrations/postgres/007_operator_bindings.sql"
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {
@@ -40,24 +45,49 @@ pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<Sche
 pub(crate) fn managed_schema_plan(
     schema: impl Into<std::sync::Arc<str>>,
 ) -> Result<SchemaPlan, PlanError> {
-    SchemaPlan::new(schema, MIGRATIONS)
+    SchemaPlan::new(schema, &MIGRATIONS[..6])
 }
 
-/// Verify either explicitly upgraded managed storage or the unchanged legacy plan.
-/// This preparation never creates or upgrades tables.
+pub(crate) fn operator_schema_plan(
+    schema: impl Into<std::sync::Arc<str>>,
+) -> Result<SchemaPlan, PlanError> {
+    SchemaPlan::new(schema, MIGRATIONS)
+}
+/// Read-only compatibility wrapper preserving existing callers.
 pub(crate) async fn prepare(
     database_url: &str,
     schema: &str,
     managed_required: bool,
 ) -> Result<lenso_postgres_kit::OwnedPostgres, lenso_postgres_kit::PostgresKitError> {
+    prepare_features(database_url, schema, managed_required, false).await
+}
+/// Read-only exact history verification, with independent opt-ins.
+pub(crate) async fn prepare_features(
+    database_url: &str,
+    schema: &str,
+    managed_required: bool,
+    operator_required: bool,
+) -> Result<lenso_postgres_kit::OwnedPostgres, lenso_postgres_kit::PostgresKitError> {
     use lenso_postgres_kit::{OwnedPostgres, PostgresKitError};
-    match OwnedPostgres::prepare(database_url, managed_schema_plan(schema)?).await {
-        Ok(postgres) => Ok(postgres),
+    match OwnedPostgres::prepare(database_url, operator_schema_plan(schema)?).await {
+        Ok(pg) => Ok(pg),
         Err(PostgresKitError::UpgradeRequired {
-            current: 5,
-            expected: 6,
+            current: 5 | 6,
+            expected: 7,
             ..
-        }) if !managed_required => OwnedPostgres::prepare(database_url, schema_plan(schema)?).await,
-        Err(error) => Err(error),
+        }) if !operator_required => {
+            match OwnedPostgres::prepare(database_url, managed_schema_plan(schema)?).await {
+                Ok(pg) => Ok(pg),
+                Err(PostgresKitError::UpgradeRequired {
+                    current: 5,
+                    expected: 6,
+                    ..
+                }) if !managed_required => {
+                    OwnedPostgres::prepare(database_url, schema_plan(schema)?).await
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Err(e) => Err(e),
     }
 }

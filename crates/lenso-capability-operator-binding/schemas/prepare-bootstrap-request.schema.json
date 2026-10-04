@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["source_subject", "source_issuer", "deployment", "scope_kind", "scope_id"],
+  "properties": {
+    "source_subject": {
+      "type": "string"
+    },
+    "source_issuer": {
+      "type": "string"
+    },
+    "deployment": {
+      "type": "string"
+    },
+    "scope_kind": {
+      "type": "string"
+    },
+    "scope_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "title": "PrepareBootstrapRequest"
+}

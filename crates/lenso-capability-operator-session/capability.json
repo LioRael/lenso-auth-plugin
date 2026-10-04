@@ -1,0 +1,43 @@
+{
+  "id": "lenso.auth.operator-session@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": true,
+  "operations": [
+    {
+      "name": "recover_revocation",
+      "interaction": "request",
+      "request_schema": "schemas/recover-revocation-request.schema.json",
+      "response_schema": "schemas/recover-revocation-response.schema.json",
+      "domain_error_schema": "schemas/recover-revocation-error.schema.json"
+    },
+    {
+      "name": "bootstrap_binding",
+      "interaction": "request",
+      "request_schema": "schemas/bootstrap-binding-request.schema.json",
+      "response_schema": "schemas/bootstrap-binding-response.schema.json",
+      "domain_error_schema": "schemas/bootstrap-binding-error.schema.json"
+    },
+    {
+      "name": "read_binding",
+      "interaction": "request",
+      "request_schema": "schemas/read-binding-request.schema.json",
+      "response_schema": "schemas/read-binding-response.schema.json",
+      "domain_error_schema": "schemas/read-binding-error.schema.json"
+    },
+    {
+      "name": "exchange_session",
+      "interaction": "request",
+      "request_schema": "schemas/exchange-session-request.schema.json",
+      "response_schema": "schemas/exchange-session-response.schema.json",
+      "domain_error_schema": "schemas/exchange-session-error.schema.json"
+    },
+    {
+      "name": "revoke_binding",
+      "interaction": "request",
+      "request_schema": "schemas/revoke-binding-request.schema.json",
+      "response_schema": "schemas/revoke-binding-response.schema.json",
+      "domain_error_schema": "schemas/revoke-binding-error.schema.json"
+    }
+  ]
+}

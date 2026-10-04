@@ -1,0 +1,50 @@
+{
+  "id": "lenso.auth.operator-binding@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": true,
+  "operations": [
+    {
+      "name": "prepare_recovery",
+      "interaction": "request",
+      "request_schema": "schemas/prepare-recovery-request.schema.json",
+      "response_schema": "schemas/prepare-recovery-response.schema.json",
+      "domain_error_schema": "schemas/prepare-recovery-error.schema.json"
+    },
+    {
+      "name": "complete_revocation",
+      "interaction": "request",
+      "request_schema": "schemas/complete-revocation-request.schema.json",
+      "response_schema": "schemas/complete-revocation-response.schema.json",
+      "domain_error_schema": "schemas/complete-revocation-error.schema.json"
+    },
+    {
+      "name": "prepare_bootstrap",
+      "interaction": "request",
+      "request_schema": "schemas/prepare-bootstrap-request.schema.json",
+      "response_schema": "schemas/prepare-bootstrap-response.schema.json",
+      "domain_error_schema": "schemas/prepare-bootstrap-error.schema.json"
+    },
+    {
+      "name": "activate_binding",
+      "interaction": "request",
+      "request_schema": "schemas/activate-binding-request.schema.json",
+      "response_schema": "schemas/activate-binding-response.schema.json",
+      "domain_error_schema": "schemas/activate-binding-error.schema.json"
+    },
+    {
+      "name": "read_binding",
+      "interaction": "request",
+      "request_schema": "schemas/read-binding-request.schema.json",
+      "response_schema": "schemas/read-binding-response.schema.json",
+      "domain_error_schema": "schemas/read-binding-error.schema.json"
+    },
+    {
+      "name": "revoke_binding",
+      "interaction": "request",
+      "request_schema": "schemas/revoke-binding-request.schema.json",
+      "response_schema": "schemas/revoke-binding-response.schema.json",
+      "domain_error_schema": "schemas/revoke-binding-error.schema.json"
+    }
+  ]
+}

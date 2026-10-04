@@ -3,7 +3,7 @@ use lenso_postgres_kit::{
 };
 use thiserror::Error;
 
-use crate::schema::{managed_schema_plan, schema_plan};
+use crate::schema::{managed_schema_plan, operator_schema_plan, schema_plan};
 
 /// Explicit schema and subject administration for the Account Plugin.
 #[derive(Clone, Debug)]
@@ -12,6 +12,31 @@ pub struct AccountAuthOperator {
 }
 
 impl AccountAuthOperator {
+    /// Explicit operator binding setup. Never invoked by runtime Ready.
+    pub async fn setup_operator_bound(
+        database_url: &str,
+        schema: &str,
+    ) -> Result<SetupOutcome, AccountOperatorError> {
+        Ok(
+            SchemaOperator::connect(database_url, operator_schema_plan(schema)?)
+                .await?
+                .setup()
+                .await?,
+        )
+    }
+    /// Explicit operator binding upgrade. Original SQL histories stay immutable.
+    pub async fn upgrade_operator_bound(
+        database_url: &str,
+        schema: &str,
+    ) -> Result<UpgradeOutcome, AccountOperatorError> {
+        Ok(
+            SchemaOperator::connect(database_url, operator_schema_plan(schema)?)
+                .await?
+                .upgrade()
+                .await?,
+        )
+    }
+
     pub async fn setup(
         database_url: &str,
         schema: &str,

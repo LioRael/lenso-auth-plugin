@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["binding", "control_assertion"],
+  "properties": {
+    "binding": {
+      "$ref": "#/$defs/Binding"
+    },
+    "control_assertion": {
+      "type": "string",
+      "x-lenso-sensitive": true
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Binding": {
+      "type": "object",
+      "required": [
+        "source_issuer",
+        "deployment",
+        "scope_kind",
+        "scope_id",
+        "binding_id",
+        "source_subject",
+        "operator_subject",
+        "revision",
+        "active",
+        "revoked",
+        "revocation_pending",
+        "revocation_audit_event_id",
+        "revoked_by",
+        "revoked_at",
+        "audit_event_id",
+        "policy_revision"
+      ],
+      "properties": {
+        "source_issuer": {
+          "type": "string"
+        },
+        "deployment": {
+          "type": "string"
+        },
+        "scope_kind": {
+          "type": "string"
+        },
+        "scope_id": {
+          "type": "string"
+        },
+        "binding_id": {
+          "type": "string"
+        },
+        "source_subject": {
+          "type": "string"
+        },
+        "operator_subject": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "revoked": {
+          "type": "boolean"
+        },
+        "revocation_pending": {
+          "type": "boolean"
+        },
+        "revocation_audit_event_id": {
+          "type": "string"
+        },
+        "revoked_by": {
+          "type": "string"
+        },
+        "revoked_at": {
+          "type": "string"
+        },
+        "audit_event_id": {
+          "type": "string"
+        },
+        "policy_revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "title": "PrepareBootstrapResponse"
+}

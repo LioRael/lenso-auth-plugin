@@ -1,0 +1,27 @@
+[workspace]
+
+[package]
+name = "lenso-operator-binding-d1-proof"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["workers"]
+workers = []
+postgres = []
+
+[dependencies]
+js-sys = "=0.3.104"
+lenso-migration = "=0.1.0"
+lenso-migration-d1 = "=0.1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "parsing", "serde", "wasm-bindgen"] }
+wasm-bindgen = "=0.2.127"
+wasm-bindgen-futures = "=0.4.77"

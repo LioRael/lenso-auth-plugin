@@ -18,9 +18,10 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 CARGO = shlex.split(os.environ.get("CARGO", "cargo"))
 OWNERS = {
-    "account": ("account-admin", "auth-delegation", "credential-state", "managed-session"), "oauth-flow": ("oauth-flow",),
+    "account": ("account-admin", "auth-delegation", "credential-state", "managed-session", "operator-binding"), "oauth-flow": ("oauth-flow",),
     "password": ("credential-issuer", "identity-directory", "password-auth", "managed-session"),
     "session-renewal": ("managed-session",),
+    "operator-session": ("operator-binding", "operator-session", "credential-issuer", "credential-state", "auth"),
     "phone": ("credential-issuer", "identity-directory", "phone-auth", "sms-delivery"),
     "device": ("device-auth",), "api-token": ("auth", "credential-state", "api-token-admin"),
     "oidc": ("credential-issuer", "identity-directory", "oidc-provider"),
@@ -108,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         name = f"lenso-auth-{owner}-plugin"
         directory = package(name, config, workers=True)
         source = ROOT / "crates" / name
-        if owner != "session-renewal":
+        if owner not in {"session-renewal", "operator-session"}:
             for relative in ("src/workers.rs", "src/migration.rs"):
                 assert (directory / relative).read_bytes() == (source / relative).read_bytes(), relative
             for backend in ("postgres", "d1"):

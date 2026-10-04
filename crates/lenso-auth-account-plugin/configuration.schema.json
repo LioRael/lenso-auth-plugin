@@ -206,6 +206,82 @@
           }
         }
       }
+    },
+    "operator_bindings": {
+      "if": {
+        "type": "null"
+      },
+      "then": {
+        "type": "null"
+      },
+      "else": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_issuer",
+          "deployment",
+          "bootstrap_subject",
+          "bootstrap_not_before",
+          "bootstrap_expires_at",
+          "workflow_callers",
+          "source_account_instance",
+          "scope_kind",
+          "scope_id"
+        ],
+        "properties": {
+          "source_issuer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "deployment": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bootstrap_subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bootstrap_not_before": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "bootstrap_expires_at": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "workflow_callers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "source_account_instance": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "scope_kind": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "scope_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
     }
   }
 }

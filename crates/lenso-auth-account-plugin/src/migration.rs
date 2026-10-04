@@ -20,6 +20,11 @@ const MIGRATIONS: &[Migration] = &[
         "managed-sessions",
         include_str!("../migrations/d1/003_managed_sessions.sql"),
     ),
+    Migration::new(
+        4,
+        "operator-bindings",
+        include_str!("../migrations/d1/004_operator_bindings.sql"),
+    ),
 ];
 const SQL: &[SqlMigration] = &[
     SqlMigration {
@@ -34,8 +39,12 @@ const SQL: &[SqlMigration] = &[
         migration: MIGRATIONS[2],
         statement_ends: &[410, 552, 640],
     },
+    SqlMigration {
+        migration: MIGRATIONS[3],
+        statement_ends: &[781],
+    },
 ];
-pub fn managed_plan() -> Result<Plan, Error> {
+pub fn operator_plan() -> Result<Plan, Error> {
     Plan::new(
         "lenso.auth.account",
         SQL,
@@ -96,8 +105,31 @@ pub fn plan() -> Result<Plan, Error> {
         }),
     )
 }
+pub fn managed_plan() -> Result<Plan, Error> {
+    Plan::new(
+        "lenso.auth.account",
+        &SQL[..3],
+        &MIGRATIONS[..3],
+        Some(LegacySchema {
+            table: "auth_account_schema",
+            fingerprint: "e2ab982504b77776e928387519fb612fcd4b0213007713ad5389d79910a1db12",
+        }),
+    )
+}
 /// Read-only exact-history admission. Returns whether digest history is supported.
 pub async fn verify_compatible(binding: &D1Binding, managed_required: bool) -> Result<bool, Error> {
+    verify_features(binding, managed_required, false).await
+}
+pub async fn verify_features(
+    binding: &D1Binding,
+    managed_required: bool,
+    operator_required: bool,
+) -> Result<bool, Error> {
+    match operator_plan()?.verify(binding).await {
+        Ok(()) => return Ok(true),
+        Err(Error::UpgradeRequired) if !operator_required => {}
+        Err(error) => return Err(error),
+    }
     match managed_plan()?.verify(binding).await {
         Ok(()) => Ok(true),
         Err(Error::UpgradeRequired) if !managed_required => {
@@ -106,6 +138,14 @@ pub async fn verify_compatible(binding: &D1Binding, managed_required: bool) -> R
         }
         Err(error) => Err(error),
     }
+}
+/// Explicit operator binding setup; runtime Ready is read-only.
+pub async fn setup_operator_bound(binding: &D1Binding) -> Result<(), Error> {
+    operator_plan()?.setup(binding).await
+}
+/// Explicit operator binding upgrade; never invoked during Ready.
+pub async fn upgrade_operator_bound(binding: &D1Binding) -> Result<(), Error> {
+    operator_plan()?.upgrade(binding).await
 }
 /// Explicit opt-in operation for a fresh dedicated managed-session database.
 pub async fn setup_managed(binding: &D1Binding) -> Result<(), Error> {
