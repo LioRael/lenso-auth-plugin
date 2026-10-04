@@ -134,6 +134,10 @@
         "type": "string"
       },
       "default": []
+    },
+    "storage_ref": {
+      "type": "string",
+      "default": ""
     }
   }
 }

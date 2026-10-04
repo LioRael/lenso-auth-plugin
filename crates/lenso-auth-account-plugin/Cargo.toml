@@ -11,6 +11,11 @@ description = "Identity directory and session credential issuer Plugin for Lenso
 plugin-id = "lenso.auth.account"
 root-slot = "identity"
 
+[package.metadata.lenso.host-facilities.state]
+native = "host_facilities::state"
+workers = "host_facilities::state"
+workers-adapter = "src/host_facilities/state.mjs"
+
 [features]
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:lenso-postgres-kit"]

@@ -1,4 +1,6 @@
 //! Password authentication as a removable Plugin over Directory and Credential Issuer contracts.
+pub mod host_facilities;
+pub use host_facilities::EventStorageBinding;
 
 #[cfg(feature = "workers")]
 pub mod migration;
@@ -68,6 +70,9 @@ pub struct PasswordAuthConfig {
     #[serde(default)]
     #[lenso(default = "")]
     d1_binding: String,
+    #[serde(default)]
+    #[lenso(default = "")]
+    storage_ref: String,
     audience: Vec<String>,
     session_ttl_seconds: u64,
     max_failures: u32,
@@ -87,6 +92,7 @@ impl PasswordAuthConfig {
             schema: schema.into(),
             database_url_secret: database_url_secret.into(),
             d1_binding: String::new(),
+            storage_ref: String::new(),
             audience,
             session_ttl_seconds,
             max_failures,
@@ -95,6 +101,18 @@ impl PasswordAuthConfig {
         value.validate()?;
         Ok(value)
     }
+    /// Select one logical storage reference; target attachments retain transport custody.
+    pub fn with_storage_ref(
+        mut self,
+        reference: impl Into<String>,
+    ) -> Result<Self, PasswordConfigError> {
+        self.storage_ref = reference.into();
+        self.database_url_secret.clear();
+        self.d1_binding.clear();
+        self.validate()?;
+        Ok(self)
+    }
+
     fn validate(&self) -> Result<(), PasswordConfigError> {
         if self.schema.is_empty()
             || self.schema.len() > 63
@@ -108,7 +126,14 @@ impl PasswordAuthConfig {
         {
             return Err(PasswordConfigError::InvalidSchema);
         }
-        if (self.d1_binding.is_empty() && self.database_url_secret.is_empty())
+        if !self.storage_ref.is_empty() {
+            if !host_facilities::valid_reference(&self.storage_ref)
+                || !self.database_url_secret.is_empty()
+                || !self.d1_binding.is_empty()
+            {
+                return Err(PasswordConfigError::InvalidSecretReference);
+            }
+        } else if (self.d1_binding.is_empty() && self.database_url_secret.is_empty())
             || self.database_url_secret.len() > 256
             || (!self.d1_binding.is_empty()
                 && (!self.database_url_secret.is_empty()
@@ -294,7 +319,8 @@ struct PasswordAuthPlugin {
     issuer: Port<credential_issuer::CredentialIssuerClient>,
     store: Rc<RefCell<Option<storage::PasswordStore>>>,
     #[allow(dead_code)]
-    d1: EventStorageBinding,
+    #[facility(id = "state")]
+    d1: Option<EventStorageBinding>,
     active: Rc<RefCell<Option<Rc<ActivePassword>>>>,
 }
 #[allow(clippy::missing_fields_in_debug)]
@@ -503,66 +529,64 @@ impl Lifecycle for PasswordAuthPlugin {
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
         let state = self.store.clone();
-        let store = if config.d1_binding.is_empty() {
-            #[cfg(feature = "postgres")]
-            {
-                let dependencies = context.dependencies().clone();
-                let cancellation = context.cancellation();
-                let invocation =
-                    dependencies.invocation_context_after(DEPENDENCY_TIMEOUT, cancellation)?;
-                let database_url = self
-                    .secrets
-                    .resolve_with_context(
-                        invocation,
-                        ResolveRequest {
-                            reference: config.database_url_secret.clone(),
-                        },
+        let selected = host_facilities::select(
+            &config.storage_ref,
+            &config.database_url_secret,
+            &config.d1_binding,
+            self.d1.as_ref(),
+        )?;
+        let store = match selected {
+            host_facilities::StorageSelection::Postgres(database_url_secret) => {
+                #[cfg(feature = "postgres")]
+                {
+                    let dependencies = context.dependencies().clone();
+                    let cancellation = context.cancellation();
+                    let invocation =
+                        dependencies.invocation_context_after(DEPENDENCY_TIMEOUT, cancellation)?;
+                    let database_url = self
+                        .secrets
+                        .resolve_with_context(
+                            invocation,
+                            ResolveRequest {
+                                reference: database_url_secret.to_owned(),
+                            },
+                        )
+                        .await
+                        .map(|value| Zeroizing::new(value.value))
+                        .map_err(|error| match error {
+                            SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
+                                detail: "password database secret was rejected".to_owned(),
+                            },
+                            SecretsInvocationError::Runtime(error) => error,
+                        })?;
+                    let postgres = OwnedPostgres::prepare(
+                        &database_url,
+                        schema_plan(config.schema.clone()).map_err(|error| {
+                            RuntimeFailure::InvalidResolvedPlan {
+                                detail: error.to_string(),
+                            }
+                        })?,
                     )
                     .await
-                    .map(|value| Zeroizing::new(value.value))
-                    .map_err(|error| match error {
-                        SecretsInvocationError::Domain(_) => RuntimeFailure::PluginFailure {
-                            detail: "password database secret was rejected".to_owned(),
-                        },
-                        SecretsInvocationError::Runtime(error) => error,
+                    .map_err(|error| RuntimeFailure::PluginFailure {
+                        detail: error.to_string(),
                     })?;
-                let postgres = OwnedPostgres::prepare(
-                    &database_url,
-                    schema_plan(config.schema.clone()).map_err(|error| {
-                        RuntimeFailure::InvalidResolvedPlan {
-                            detail: error.to_string(),
-                        }
-                    })?,
-                )
-                .await
-                .map_err(|error| RuntimeFailure::PluginFailure {
-                    detail: error.to_string(),
-                })?;
 
-                storage::PasswordStore::Postgres(postgres)
+                    storage::PasswordStore::Postgres(postgres)
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    let _ = context;
+                    let _ = database_url_secret;
+                    return Err(runtime("Password PostgreSQL support is disabled"));
+                }
             }
-            #[cfg(not(feature = "postgres"))]
-            {
-                let _ = context;
-                return Err(runtime("Password PostgreSQL support is disabled"));
-            }
-        } else {
             #[cfg(feature = "workers")]
-            {
-                let binding = self
-                    .d1
-                    .as_ref()
-                    .filter(|binding| binding.name() == config.d1_binding)
-                    .ok_or_else(|| runtime("Password D1 binding unavailable"))?
-                    .clone();
-                migration::verify(&binding)
+            host_facilities::StorageSelection::D1(binding) => {
+                migration::verify(binding)
                     .await
                     .map_err(|_| runtime("D1 migration verification failed"))?;
-                storage::PasswordStore::D1(binding)
-            }
-            #[cfg(not(feature = "workers"))]
-            {
-                return Err(runtime("Password D1 support is disabled"));
+                storage::PasswordStore::D1(binding.clone())
             }
         };
         let password_work = PasswordWork::prepare().map_err(runtime)?;
@@ -991,11 +1015,6 @@ mod tests {
     }
 }
 
-#[cfg(feature = "workers")]
-type EventStorageBinding = Option<workers::D1Binding>;
-#[cfg(not(feature = "workers"))]
-type EventStorageBinding = ();
-
 /// Creates a fresh generated factory with the configured event-owned binding.
 #[cfg(feature = "workers")]
 pub fn workers_factory(
@@ -1007,10 +1026,73 @@ pub fn workers_factory(
         if plugin.config.d1_binding != binding.name() {
             return Err(runtime("Password Auth requires its exact D1 binding"));
         }
-        plugin.d1 = Some(binding.clone());
+        plugin.d1 = Some(EventStorageBinding::D1 {
+            storage_ref: None,
+            binding: binding.clone(),
+        });
         Ok(())
     })
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod password_work_tests;
+
+#[cfg(test)]
+mod storage_reference_config_tests {
+    use super::*;
+
+    #[test]
+    fn storage_reference_is_target_neutral_and_excludes_physical_selectors() {
+        let legacy = PasswordAuthConfig::new(
+            "auth_password",
+            "database",
+            vec!["proof.operation".into()],
+            3600,
+            3,
+            60,
+        )
+        .unwrap();
+        let config = legacy.clone().with_storage_ref("auth/password").unwrap();
+        let mut value = serde_json::to_value(&config).unwrap();
+        assert_eq!(value["storage_ref"], "auth/password");
+        assert_eq!(value["database_url_secret"], "");
+        assert_eq!(value["d1_binding"], "");
+        value.as_object_mut().unwrap().remove("database_url_secret");
+        value.as_object_mut().unwrap().remove("d1_binding");
+        assert!(
+            serde_json::from_value::<PasswordAuthConfig>(value.clone())
+                .unwrap()
+                .validate()
+                .is_ok()
+        );
+        for key in ["database_url_secret", "d1_binding"] {
+            let mut mixed = value.clone();
+            mixed[key] = serde_json::json!("physical");
+            assert!(
+                serde_json::from_value::<PasswordAuthConfig>(mixed)
+                    .unwrap()
+                    .validate()
+                    .is_err()
+            );
+        }
+        for bad in ["", "../escape", "/root", "a//b", "a/..", "postgres://url"] {
+            assert!(legacy.clone().with_storage_ref(bad).is_err());
+        }
+        let mut old = serde_json::to_value(&legacy).unwrap();
+        old.as_object_mut().unwrap().remove("storage_ref");
+        assert_eq!(
+            serde_json::from_value::<PasswordAuthConfig>(old).unwrap(),
+            legacy
+        );
+        let mut d1 = serde_json::to_value(&legacy).unwrap();
+        d1["database_url_secret"] = serde_json::json!("");
+        d1["d1_binding"] = serde_json::json!("AUTH_D1");
+        d1.as_object_mut().unwrap().remove("storage_ref");
+        assert!(
+            serde_json::from_value::<PasswordAuthConfig>(d1)
+                .unwrap()
+                .validate()
+                .is_ok()
+        );
+    }
+}

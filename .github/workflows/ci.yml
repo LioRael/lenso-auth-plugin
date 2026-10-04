@@ -65,7 +65,9 @@ jobs:
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
       - name: Verify source-selected D1 facility
-        run: node --test crates/lenso-auth-api-token-plugin/tests/source-facility.test.mjs
+        run: node --test crates/lenso-auth-api-token-plugin/tests/source-facility.test.mjs crates/lenso-auth-account-plugin/tests/source-facility.test.mjs crates/lenso-auth-password-plugin/tests/source-facility.test.mjs
+      - name: Test Auth private storage reference selection
+        run: cargo test --locked --no-default-features --features workers -p lenso-auth-account-plugin -p lenso-auth-password-plugin --lib storage_reference
       - name: Check extracted Workers Auth packages
         run: python3 workers/check-packages.py
       - name: Package changed public cohort

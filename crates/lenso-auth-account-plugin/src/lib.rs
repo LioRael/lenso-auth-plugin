@@ -1,4 +1,6 @@
 //! Plugin-owned identity directory and opaque session credentials.
+pub mod host_facilities;
+pub use host_facilities::EventStorageBinding;
 
 mod delegation;
 #[cfg(feature = "postgres")]
@@ -70,6 +72,8 @@ pub struct AccountAuthConfig {
     database_url_secret: String,
     #[serde(default)]
     d1_binding: String,
+    #[serde(default)]
+    storage_ref: String,
     assertion_signing_key_secret: String,
     token_pepper_secret: String,
     assertion_ttl_seconds: u64,
@@ -102,6 +106,7 @@ impl AccountAuthConfig {
             assertion_public_key: assertion_public_key.into(),
             database_url_secret: database_url_secret.into(),
             d1_binding: String::new(),
+            storage_ref: String::new(),
             assertion_signing_key_secret: assertion_signing_key_secret.into(),
             token_pepper_secret: token_pepper_secret.into(),
             assertion_ttl_seconds,
@@ -167,9 +172,46 @@ impl AccountAuthConfig {
         binding: impl Into<String>,
     ) -> Result<Self, AccountConfigError> {
         self.database_url_secret.clear();
+        self.storage_ref.clear();
         self.d1_binding = binding.into();
         self.validate()?;
         Ok(self)
+    }
+
+    /// Select one logical storage reference; target attachments retain transport custody.
+    pub fn with_storage_ref(
+        mut self,
+        reference: impl Into<String>,
+    ) -> Result<Self, AccountConfigError> {
+        self.storage_ref = reference.into();
+        self.database_url_secret.clear();
+        self.d1_binding.clear();
+        self.validate()?;
+        Ok(self)
+    }
+
+    fn select_storage<'a>(
+        &'a self,
+        attachment: Option<&'a EventStorageBinding>,
+    ) -> Result<host_facilities::StorageSelection<'a>, RuntimeFailure> {
+        let selected = host_facilities::select(
+            &self.storage_ref,
+            &self.database_url_secret,
+            &self.d1_binding,
+            attachment,
+        )?;
+        match &selected {
+            host_facilities::StorageSelection::Postgres(reference) => {
+                if *reference == self.assertion_signing_key_secret
+                    || *reference == self.token_pepper_secret
+                {
+                    return Err(RuntimeFailure::InvalidResolvedPlan { detail: "database, signing key, and token pepper require distinct secret references".into() });
+                }
+            }
+            #[cfg(feature = "workers")]
+            host_facilities::StorageSelection::D1(_) => (),
+        }
+        Ok(selected)
     }
 
     fn validate(&self) -> Result<(), AccountConfigError> {
@@ -213,6 +255,13 @@ impl AccountAuthConfig {
         if self.assertion_ttl_seconds == 0 || self.assertion_ttl_seconds > 3600 {
             return Err(AccountConfigError::InvalidTtl);
         }
+        if !self.storage_ref.is_empty()
+            && (!host_facilities::valid_reference(&self.storage_ref)
+                || !self.database_url_secret.is_empty()
+                || !self.d1_binding.is_empty())
+        {
+            return Err(AccountConfigError::InvalidSecretReference);
+        }
         let references = [
             &self.database_url_secret,
             &self.assertion_signing_key_secret,
@@ -224,7 +273,10 @@ impl AccountAuthConfig {
             return Err(AccountConfigError::InvalidSecretReference);
         }
         for (index, reference) in references.into_iter().enumerate() {
-            if reference.is_empty() && !self.d1_binding.is_empty() && index == 0 {
+            if reference.is_empty()
+                && (!self.d1_binding.is_empty() || !self.storage_ref.is_empty())
+                && index == 0
+            {
                 continue;
             }
             if !valid_secret_reference(reference) {
@@ -306,7 +358,8 @@ struct AccountAuthPlugin {
     secrets: Port<secrets::SecretsClient>,
     state: Rc<RefCell<Option<PreparedAccount>>>,
     #[cfg_attr(not(feature = "workers"), allow(dead_code))]
-    d1: EventStorageBinding,
+    #[facility(id = "state")]
+    d1: Option<EventStorageBinding>,
 }
 
 #[derive(Clone)]
@@ -818,6 +871,7 @@ impl Lifecycle for AccountAuthPlugin {
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
         let state = self.state.clone();
+        let selected = config.select_storage(self.d1.as_ref())?;
         let dependencies = context.dependencies().clone();
         let cancellation = context.cancellation();
         let signing = resolve(
@@ -845,47 +899,37 @@ impl Lifecycle for AccountAuthPlugin {
                 detail: "signing key does not match public key".to_owned(),
             });
         }
-        let store = if config.d1_binding.is_empty() {
-            #[cfg(feature = "postgres")]
-            {
-                let database_url = resolve(
-                    &self.secrets,
-                    &dependencies,
-                    context.cancellation(),
-                    &config.database_url_secret,
-                )
-                .await?;
-                let postgres = OwnedPostgres::prepare(
-                    &database_url,
-                    schema_plan(config.schema).map_err(runtime)?,
-                )
-                .await
-                .map_err(runtime)?;
-                storage::AccountStore::Postgres(postgres)
+        let store = match selected {
+            host_facilities::StorageSelection::Postgres(database_url_secret) => {
+                #[cfg(feature = "postgres")]
+                {
+                    let database_url = resolve(
+                        &self.secrets,
+                        &dependencies,
+                        context.cancellation(),
+                        database_url_secret,
+                    )
+                    .await?;
+                    let postgres = OwnedPostgres::prepare(
+                        &database_url,
+                        schema_plan(config.schema).map_err(runtime)?,
+                    )
+                    .await
+                    .map_err(runtime)?;
+                    storage::AccountStore::Postgres(postgres)
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    let _ = database_url_secret;
+                    return Err(runtime("Account PostgreSQL implementation is not enabled"));
+                }
             }
-            #[cfg(not(feature = "postgres"))]
-            {
-                return Err(runtime("Account PostgreSQL implementation is not enabled"));
-            }
-        } else {
-            let binding_name = &config.d1_binding;
             #[cfg(feature = "workers")]
-            {
-                let binding = self
-                    .d1
-                    .as_ref()
-                    .filter(|b| b.name() == binding_name)
-                    .ok_or_else(|| runtime("configured Account D1 binding is unavailable"))?
-                    .clone();
-                migration::verify(&binding)
+            host_facilities::StorageSelection::D1(binding) => {
+                migration::verify(binding)
                     .await
                     .map_err(|_| runtime("Account D1 migration verification failed"))?;
-                storage::AccountStore::D1(binding)
-            }
-            #[cfg(not(feature = "workers"))]
-            {
-                let _ = binding_name;
-                return Err(runtime("Account D1 implementation is not enabled"));
+                storage::AccountStore::D1(binding.clone())
             }
         };
         state.replace(Some(PreparedAccount {
@@ -1069,15 +1113,13 @@ pub fn workers_factory(
                 detail: "Auth factory requires its exact configured D1 binding".to_owned(),
             });
         }
-        value.d1 = Some(binding.clone());
+        value.d1 = Some(EventStorageBinding::D1 {
+            storage_ref: None,
+            binding: binding.clone(),
+        });
         Ok(())
     })
 }
-
-#[cfg(feature = "workers")]
-type EventStorageBinding = Option<workers::D1Binding>;
-#[cfg(not(feature = "workers"))]
-type EventStorageBinding = ();
 
 #[cfg(all(test, feature = "postgres"))]
 mod tests {
@@ -1360,5 +1402,82 @@ mod tests {
         );
 
         cleanup_test_postgres(&database_url, &schema, postgres).await;
+    }
+}
+
+#[cfg(test)]
+mod storage_reference_config_tests {
+    use super::*;
+
+    #[test]
+    fn storage_reference_is_target_neutral_and_excludes_physical_selectors() {
+        let legacy = AccountAuthConfig::new(
+            "auth_account",
+            "proof.account",
+            assertion_public_key("0123456789abcdef0123456789abcdef"),
+            "database",
+            "signing",
+            "pepper",
+            60,
+        )
+        .unwrap();
+        let config = legacy.clone().with_storage_ref("auth/account").unwrap();
+        #[cfg(feature = "postgres")]
+        {
+            let signing_database = host_facilities::state(
+                &serde_json::json!({"storage_ref":"auth/account", "database_url_secret":"signing"}),
+            )
+            .unwrap();
+            assert!(config.select_storage(Some(&signing_database)).is_err());
+            let pepper_database = host_facilities::state(
+                &serde_json::json!({"storage_ref":"auth/account", "database_url_secret":"pepper"}),
+            )
+            .unwrap();
+            assert!(config.select_storage(Some(&pepper_database)).is_err());
+            assert!(config.select_storage(None).is_err());
+            let old_d1 = config.clone().with_d1_binding("AUTH_D1").unwrap();
+            assert!(old_d1.storage_ref.is_empty());
+        }
+        let mut value = serde_json::to_value(&config).unwrap();
+        assert_eq!(value["storage_ref"], "auth/account");
+        assert_eq!(value["database_url_secret"], "");
+        assert_eq!(value["d1_binding"], "");
+        value.as_object_mut().unwrap().remove("database_url_secret");
+        value.as_object_mut().unwrap().remove("d1_binding");
+        assert!(
+            serde_json::from_value::<AccountAuthConfig>(value.clone())
+                .unwrap()
+                .validate()
+                .is_ok()
+        );
+        for key in ["database_url_secret", "d1_binding"] {
+            let mut mixed = value.clone();
+            mixed[key] = serde_json::json!("physical");
+            assert!(
+                serde_json::from_value::<AccountAuthConfig>(mixed)
+                    .unwrap()
+                    .validate()
+                    .is_err()
+            );
+        }
+        for bad in ["", "../escape", "/root", "a//b", "a/..", "postgres://url"] {
+            assert!(legacy.clone().with_storage_ref(bad).is_err());
+        }
+        let mut old = serde_json::to_value(&legacy).unwrap();
+        old.as_object_mut().unwrap().remove("storage_ref");
+        assert_eq!(
+            serde_json::from_value::<AccountAuthConfig>(old).unwrap(),
+            legacy
+        );
+        let mut d1 = serde_json::to_value(&legacy).unwrap();
+        d1["database_url_secret"] = serde_json::json!("");
+        d1["d1_binding"] = serde_json::json!("AUTH_D1");
+        d1.as_object_mut().unwrap().remove("storage_ref");
+        assert!(
+            serde_json::from_value::<AccountAuthConfig>(d1)
+                .unwrap()
+                .validate()
+                .is_ok()
+        );
     }
 }

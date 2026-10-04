@@ -11,6 +11,11 @@ description = "Password registration and login Plugin for Lenso."
 plugin-id = "lenso.auth.password"
 root-slot = "auth-methods"
 
+[package.metadata.lenso.host-facilities.state]
+native = "host_facilities::state"
+workers = "host_facilities::state"
+workers-adapter = "src/host_facilities/state.mjs"
+
 [features]
 default = ["postgres"]
 postgres = ["dep:sqlx", "dep:lenso-postgres-kit", "tokio/rt"]

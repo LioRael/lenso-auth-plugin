@@ -1,0 +1,47 @@
+/** Private Auth persistence transport; lifecycle belongs to the Host event scope. */
+export function createD1Binding(database, scope) {
+  if (!database || typeof database.prepare !== 'function' || typeof database.batch !== 'function') {
+    throw new Error('Auth requires its configured D1 database binding');
+  }
+  if (!scope || typeof scope.run !== 'function') throw new Error('Auth requires an event resource scope');
+  return function batch(input) {
+    return scope.run(() => {
+      const statements = JSON.parse(input);
+      if (!Array.isArray(statements) || !statements.length || statements.length > 128) {
+        throw new Error('Invalid Auth statement batch');
+      }
+      // Primary database only. Replica/session reads cannot decide revocation.
+      const prepared = statements.map(({ sql, params }) => {
+        if (typeof sql !== 'string' || !Array.isArray(params)) throw new Error('Invalid Auth statement');
+        return database.prepare(sql).bind(...params);
+      });
+      return database.batch(prepared);
+    }, JSON.stringify);
+  };
+}
+
+function validReference(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 256 &&
+    /^[A-Za-z0-9._/-]+$/.test(value) && !value.startsWith('/') && !value.endsWith('/') &&
+    !value.includes('//') && value.split('/').every(part => part !== '.' && part !== '..');
+}
+
+// Configuration changes custody only; all SQL and readiness remain Auth-owned.
+export function create(database, scope, configuration) {
+  if (!configuration || typeof configuration !== 'object' || Array.isArray(configuration) ||
+      configuration.profile !== 'workers-d1' ||
+      typeof configuration.binding !== 'string' ||
+      !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(configuration.binding)) {
+    throw new Error('invalid_auth_d1_facility');
+  }
+  const hasReference = Object.hasOwn(configuration, 'storage_ref');
+  const keys = Object.keys(configuration);
+  if (keys.length !== (hasReference ? 3 : 2) ||
+      keys.some(key => !['profile', 'binding', 'storage_ref'].includes(key)) ||
+      (hasReference && !validReference(configuration.storage_ref))) {
+    throw new Error('invalid_auth_d1_facility');
+  }
+  const value = {name: configuration.binding, batch: createD1Binding(database, scope)};
+  if (hasReference) value.storage_ref = configuration.storage_ref;
+  return Object.freeze(value);
+}

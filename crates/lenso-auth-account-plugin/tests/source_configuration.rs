@@ -46,6 +46,9 @@ fn source_catalog_accepts_both_explicit_operators_ceiling_and_default_session_pr
     )
     .unwrap();
     assert!(resolves(&default));
+    assert!(resolves(
+        &default.clone().with_storage_ref("auth/account").unwrap()
+    ));
     let operators = default
         .with_credential_state_callers(vec!["lenso.auth.human-api-token/human".into()])
         .unwrap()
