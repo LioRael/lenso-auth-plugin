@@ -1,6 +1,9 @@
 use lenso_app_plan::{
-    AppComposition, CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan,
-    PluginInstancePlan, ResolvedAppPlan,
+    CapabilityEndpointPlan, CapabilityRequirementPlan, ResolvedAppPlan,
+    authoring::{
+        HostBinding, HostCatalog, HostDefaultPlugin, HostPluginRelease, HostSlot, PluginDescriptor,
+        PluginInstanceId, PluginRootSnapshot, resolve_plugin_root,
+    },
 };
 use lenso_auth_account_plugin::{AccountAuthConfig, OperatorBindingConfig, assertion_public_key};
 use lenso_auth_operator_session_plugin::OperatorSessionConfig;
@@ -11,11 +14,9 @@ use lenso_capability_access_control_directory as access_directory;
 use lenso_capability_account_admin as account_admin;
 use lenso_capability_audit_log as audit;
 use lenso_capability_auth as auth;
-use lenso_capability_auth_delegation as delegation;
 use lenso_capability_credential_issuer as issuer;
 use lenso_capability_credential_state as state;
 use lenso_capability_identity_directory as directory;
-use lenso_capability_managed_session as managed;
 use lenso_capability_operator_binding as binding;
 use lenso_capability_operator_session as workflow;
 use lenso_capability_secrets::{
@@ -47,6 +48,9 @@ pub const BINDING_MANAGE: &str = "access-control.bindings.manage";
 #[derive(Debug)]
 pub struct EmptyFactory;
 impl NativePluginFactory for EmptyFactory {
+    fn package_version(&self) -> &'static str {
+        "0.1.0"
+    }
     fn package_id(&self) -> &'static str {
         "test.operator-binding-app"
     }
@@ -67,6 +71,9 @@ impl std::fmt::Debug for FixtureSecrets {
     }
 }
 impl NativePluginFactory for FixtureSecrets {
+    fn package_version(&self) -> &'static str {
+        "0.1.0"
+    }
     fn package_id(&self) -> &'static str {
         "test.operator-binding-secrets"
     }
@@ -100,42 +107,14 @@ fn cap(id: &str, version: &str, ops: &[&str]) -> CapabilityEndpointPlan {
     ops.sort_unstable();
     CapabilityEndpointPlan::new(id, version, ops)
 }
-fn declared(metadata: &str) -> CapabilityEndpointPlan {
-    let v: serde_json::Value = serde_json::from_str(metadata).unwrap();
-    let ops: Vec<&str> = v["operations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s.as_str().unwrap())
-        .collect();
-    cap(
-        v["capability_id"].as_str().unwrap(),
-        v["descriptor_version"].as_str().unwrap(),
-        &ops,
-    )
-}
-fn requirement(p: PluginInstancePlan, id: &str, version: &str) -> PluginInstancePlan {
-    p.with_requirement(CapabilityRequirementPlan::one(id, version))
-}
-fn account_caps(mut p: PluginInstancePlan) -> PluginInstancePlan {
-    for c in [
-        declared(auth::__lenso_provided_auth!()),
-        declared(directory::__lenso_provided_directory!()),
-        declared(issuer::__lenso_provided_credential_issuer!()),
-        declared(account_admin::__lenso_provided_account_admin!()),
-        declared(delegation::__lenso_provided_delegation!()),
-        declared(state::__lenso_provided_credential_state!()),
-        declared(managed::__lenso_provided_managed_session!()),
-        declared(binding::__lenso_provided_operator_binding!()),
-    ] {
-        p = p.with_capability(c);
-    }
-    p
-}
-pub fn plan(subject: &str, enabled: bool) -> ResolvedAppPlan {
+pub fn plan(subject: &str, enabled: bool) -> Result<ResolvedAppPlan, String> {
     plan_with_management(subject, enabled, true)
 }
-pub fn plan_with_management(subject: &str, enabled: bool, manage: bool) -> ResolvedAppPlan {
+pub fn plan_with_management(
+    subject: &str,
+    enabled: bool,
+    manage: bool,
+) -> Result<ResolvedAppPlan, String> {
     let permissions = if manage {
         vec![PERMISSION.to_string(), BINDING_MANAGE.to_string()]
     } else {
@@ -196,26 +175,6 @@ pub fn plan_with_management(subject: &str, enabled: bool, manage: bool) -> Resol
             })
             .unwrap();
     }
-    let accounts = requirement(
-        account_caps(
-            PluginInstancePlan::new(SOURCE, "lenso.auth.account")
-                .with_configuration(serde_json::to_string(&source).unwrap()),
-        ),
-        secrets::CAPABILITY_ID,
-        secrets::DESCRIPTOR_VERSION,
-    );
-    let operators = requirement(
-        account_caps(
-            PluginInstancePlan::new(OPERATORS, "lenso.auth.account")
-                .with_configuration(serde_json::to_string(&operators).unwrap()),
-        ),
-        secrets::CAPABILITY_ID,
-        secrets::DESCRIPTOR_VERSION,
-    )
-    .with_requirement(CapabilityRequirementPlan::many(
-        directory::CAPABILITY_ID,
-        directory::DESCRIPTOR_VERSION,
-    ));
     let config = OperatorSessionConfig {
         accounts_issuer: SOURCE_ISSUER.into(),
         accounts_public_key: assertion_public_key(SOURCE_KEY),
@@ -234,154 +193,163 @@ pub fn plan_with_management(subject: &str, enabled: bool, manage: bool) -> Resol
             lenso_auth_sdk::audience(access_admin::CAPABILITY_ID, "revoke_role"),
         ],
     };
-    let mut flow = PluginInstancePlan::new(WORKFLOW, "lenso.auth.operator-session")
-        .with_authoring(2, "lenso.native-authoring@2")
-        .with_configuration(serde_json::to_string(&config).unwrap())
-        .with_capability(declared(workflow::__lenso_provided_operator_session!()));
-    let access_config: lenso_access_control_d1_plugin::D1Config=serde_json::from_value(serde_json::json!({"binding":"ACCESS_DB","auth_issuer":OPERATORS_ISSUER,"auth_assertion_public_key":assertion_public_key(OPERATORS_KEY),"bootstrap_callers":[WORKFLOW],"directory_callers":[OWNER,WORKFLOW]})).unwrap();
-    let ac = PluginInstancePlan::new(ACCESS, "lenso.access-control.d1")
-        .with_configuration(serde_json::to_string(&access_config).unwrap())
-        .with_capability(declared(access::__lenso_provided_access_control!()))
-        .with_capability(declared(
-            access_admin::__lenso_provided_access_control_admin!(),
-        ))
-        .with_capability(declared(
-            access_directory::__lenso_provided_access_control_directory!(),
-        ));
-    // The owner AuditPolicy is projected by the actual D1 plugin; no SQL or store logic here.
-    let au=PluginInstancePlan::new(AUDIT,"lenso.audit-log.d1")
-      .with_configuration(serde_json::json!({"writer_instances":[WORKFLOW],"reader_instances":[OWNER],"reader_scopes":{}}).to_string())
-      .with_capability(declared(audit::__lenso_provided_audit_log!()));
-    let mut bindings = vec![];
-    for id in [SOURCE, OPERATORS] {
-        bindings.push(CapabilityBinding::new(
-            id,
-            secrets::CAPABILITY_ID,
-            secrets::DESCRIPTOR_VERSION,
-            SECRETS,
-        ));
-    }
-    bindings.push(CapabilityBinding::new(
-        OPERATORS,
-        directory::CAPABILITY_ID,
-        directory::DESCRIPTOR_VERSION,
-        SOURCE,
-    ));
-    for (name, id, version, provider) in [
+    resolve_catalog(&source, &operators, &config, enabled)
+}
+
+fn instance(key: &str) -> PluginInstanceId {
+    let (package, name) = key.split_once('/').unwrap();
+    PluginInstanceId::new(package, name)
+}
+fn default(key: &str, configuration: serde_json::Value) -> HostDefaultPlugin {
+    let (package, name) = key.split_once('/').unwrap();
+    HostDefaultPlugin::new(package, name).with_configuration(configuration)
+}
+fn resolve_catalog(
+    source: &AccountAuthConfig,
+    operators: &AccountAuthConfig,
+    workflow_config: &OperatorSessionConfig,
+    enabled: bool,
+) -> Result<ResolvedAppPlan, String> {
+    let mut descriptors: Vec<PluginDescriptor> = [
+        lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON,
+        lenso_auth_operator_session_plugin::PLUGIN_DESCRIPTOR_JSON,
+        lenso_access_control_d1_plugin::PLUGIN_DESCRIPTOR_JSON,
+        lenso_audit_log_d1_plugin::PLUGIN_DESCRIPTOR_JSON,
+    ]
+    .into_iter()
+    .map(|s| serde_json::from_str(s).map_err(|e| e.to_string()))
+    .collect::<Result<_, _>>()?;
+    let requirements = [
         (
-            "bindings",
-            binding::CAPABILITY_ID,
-            binding::DESCRIPTOR_VERSION,
-            OPERATORS,
+            workflow::CAPABILITY_ID,
+            workflow::DESCRIPTOR_VERSION,
+            WORKFLOW,
         ),
+        (auth::CAPABILITY_ID, auth::DESCRIPTOR_VERSION, SOURCE),
+        (state::CAPABILITY_ID, state::DESCRIPTOR_VERSION, SOURCE),
         (
-            "accounts_state",
-            state::CAPABILITY_ID,
-            state::DESCRIPTOR_VERSION,
+            directory::CAPABILITY_ID,
+            directory::DESCRIPTOR_VERSION,
             SOURCE,
         ),
+        (issuer::CAPABILITY_ID, issuer::DESCRIPTOR_VERSION, SOURCE),
         (
-            "operators_state",
-            state::CAPABILITY_ID,
-            state::DESCRIPTOR_VERSION,
-            OPERATORS,
+            account_admin::CAPABILITY_ID,
+            account_admin::DESCRIPTOR_VERSION,
+            SOURCE,
         ),
+        (access::CAPABILITY_ID, access::DESCRIPTOR_VERSION, ACCESS),
         (
-            "operators_issuer",
-            issuer::CAPABILITY_ID,
-            issuer::DESCRIPTOR_VERSION,
-            OPERATORS,
-        ),
-        (
-            "access",
-            access::CAPABILITY_ID,
-            access::DESCRIPTOR_VERSION,
+            access_directory::CAPABILITY_ID,
+            access_directory::DESCRIPTOR_VERSION,
             ACCESS,
         ),
-        (
-            "access_admin",
-            access_admin::CAPABILITY_ID,
-            access_admin::DESCRIPTOR_VERSION,
-            ACCESS,
-        ),
-        (
-            "audit",
-            audit::CAPABILITY_ID,
-            audit::DESCRIPTOR_VERSION,
-            AUDIT,
-        ),
-    ] {
-        flow = flow.with_requirement(
-            CapabilityRequirementPlan::one(id, version).with_requirement_id(name),
-        );
-        bindings.push(
-            CapabilityBinding::new(WORKFLOW, id, version, provider).with_requirement_id(name),
-        );
-    }
-    let mut callers = vec![];
-    for id in [OWNER, ORDINARY, OPERATOR_BROWSER] {
-        let mut p = PluginInstancePlan::new(id, "test.operator-binding-app");
-        for (cid, version, provider) in [
-            (
-                workflow::CAPABILITY_ID,
-                workflow::DESCRIPTOR_VERSION,
-                WORKFLOW,
-            ),
-            (
-                auth::CAPABILITY_ID,
-                auth::DESCRIPTOR_VERSION,
-                if id == OPERATOR_BROWSER {
-                    OPERATORS
-                } else {
-                    SOURCE
-                },
-            ),
-            (
-                state::CAPABILITY_ID,
-                state::DESCRIPTOR_VERSION,
-                if id == OPERATOR_BROWSER {
-                    OPERATORS
-                } else {
-                    SOURCE
-                },
-            ),
-            (
-                directory::CAPABILITY_ID,
-                directory::DESCRIPTOR_VERSION,
-                SOURCE,
-            ),
-            (issuer::CAPABILITY_ID, issuer::DESCRIPTOR_VERSION, SOURCE),
-            (
-                account_admin::CAPABILITY_ID,
-                account_admin::DESCRIPTOR_VERSION,
-                SOURCE,
-            ),
-            (access::CAPABILITY_ID, access::DESCRIPTOR_VERSION, ACCESS),
-            (
-                access_directory::CAPABILITY_ID,
-                access_directory::DESCRIPTOR_VERSION,
-                ACCESS,
-            ),
-        ] {
-            p = requirement(p, cid, version);
-            bindings.push(CapabilityBinding::new(id, cid, version, provider));
-        }
-        callers.push(p);
-    }
-    let mut instances = vec![
-        accounts,
-        operators,
-        flow,
-        ac,
-        au,
-        PluginInstancePlan::new(SECRETS, "test.operator-binding-secrets").with_capability(cap(
-            secrets::CAPABILITY_ID,
-            secrets::DESCRIPTOR_VERSION,
-            &["resolve"],
-        )),
     ];
-    instances.extend(callers);
-    AppComposition::new(instances, bindings).resolve().unwrap()
+    let mut caller = PluginDescriptor::new("test.operator-binding-app", "0.1.0", "callers")
+        .with_runtime_package("test.operator-binding-app", "0.1.0");
+    for (id, version, _) in requirements {
+        caller = caller.with_requirement(CapabilityRequirementPlan::one(id, version));
+    }
+    descriptors.push(caller);
+    descriptors.push(
+        PluginDescriptor::new("test.operator-binding-secrets", "0.1.0", "secrets")
+            .with_runtime_package("test.operator-binding-secrets", "0.1.0")
+            .with_capability(cap(
+                secrets::CAPABILITY_ID,
+                secrets::DESCRIPTOR_VERSION,
+                &[secrets::RESOLVE_OPERATION],
+            )),
+    );
+    let access_config: lenso_access_control_d1_plugin::D1Config =
+        serde_json::from_value(serde_json::json!({
+            "binding":"ACCESS_DB", "auth_issuer":OPERATORS_ISSUER,
+            "auth_assertion_public_key":assertion_public_key(OPERATORS_KEY),
+            "bootstrap_callers":[WORKFLOW],"directory_callers":[OWNER,WORKFLOW]
+        }))
+        .map_err(|e| e.to_string())?;
+    let mut defaults = vec![
+        default(SOURCE, serde_json::to_value(source).unwrap()),
+        default(OPERATORS, serde_json::to_value(operators).unwrap()),
+        default(WORKFLOW, serde_json::to_value(workflow_config).unwrap()),
+        default(ACCESS, serde_json::to_value(access_config).unwrap()),
+        default(
+            AUDIT,
+            serde_json::json!({"writer_instances":[WORKFLOW],"reader_instances":[OWNER],"reader_scopes":{}}),
+        ),
+        default(SECRETS, serde_json::json!({})),
+    ];
+    let mut bindings = vec![HostBinding::new(
+        instance(SOURCE),
+        directory::CAPABILITY_ID,
+        "source_accounts",
+    )];
+    bindings.push(if enabled {
+        HostBinding::to_instance(
+            instance(OPERATORS),
+            directory::CAPABILITY_ID,
+            instance(SOURCE),
+        )
+    } else {
+        HostBinding::new(
+            instance(OPERATORS),
+            directory::CAPABILITY_ID,
+            "source_accounts",
+        )
+    });
+    for id in [SOURCE, OPERATORS] {
+        bindings.push(HostBinding::to_instance(
+            instance(id),
+            secrets::CAPABILITY_ID,
+            instance(SECRETS),
+        ));
+    }
+    for (name, id, provider) in [
+        ("bindings", binding::CAPABILITY_ID, OPERATORS),
+        ("accounts_state", state::CAPABILITY_ID, SOURCE),
+        ("operators_state", state::CAPABILITY_ID, OPERATORS),
+        ("operators_issuer", issuer::CAPABILITY_ID, OPERATORS),
+        ("access", access::CAPABILITY_ID, ACCESS),
+        ("access_admin", access_admin::CAPABILITY_ID, ACCESS),
+        ("audit", audit::CAPABILITY_ID, AUDIT),
+    ] {
+        bindings.push(
+            HostBinding::to_instance(instance(WORKFLOW), id, instance(provider))
+                .with_requirement_id(name),
+        );
+    }
+    for key in [OWNER, ORDINARY, OPERATOR_BROWSER] {
+        defaults.push(default(key, serde_json::json!({})));
+        for (id, _, provider) in requirements {
+            let provider = if key == OPERATOR_BROWSER
+                && [auth::CAPABILITY_ID, state::CAPABILITY_ID].contains(&id)
+            {
+                OPERATORS
+            } else {
+                provider
+            };
+            bindings.push(HostBinding::to_instance(
+                instance(key),
+                id,
+                instance(provider),
+            ));
+        }
+    }
+    let slots: std::collections::BTreeSet<_> = descriptors
+        .iter()
+        .map(|d| d.root_slot().to_string())
+        .collect();
+    let host = HostCatalog::new(
+        slots
+            .into_iter()
+            .map(HostSlot::many)
+            .chain([HostSlot::optional("source_accounts")]),
+        descriptors.into_iter().map(HostPluginRelease::new),
+        defaults,
+    )
+    .with_bindings(bindings);
+    resolve_plugin_root(&host, &PluginRootSnapshot::default())
+        .map(|r| r.plan().clone())
+        .map_err(|e| format!("{e:?}"))
 }
 
 /// Event-owned values created by each real owner JS adapter. No business state is mocked.
@@ -466,7 +434,8 @@ pub async fn start_app<D: lenso_kernel::RuntimeDriver>(
     driver: D,
 ) -> Result<lenso_kernel::NativeApp, RuntimeFailure> {
     lenso_kernel::Kernel::start_native(
-        plan(confirmed_subject, true),
+        plan(confirmed_subject, true)
+            .map_err(|detail| RuntimeFailure::InvalidResolvedPlan { detail })?,
         driver,
         registry(attachments)?,
     )
@@ -487,3 +456,6 @@ pub async fn bootstrap_binding(
     )
     .await
 }
+
+#[cfg(target_arch = "wasm32")]
+mod workers;

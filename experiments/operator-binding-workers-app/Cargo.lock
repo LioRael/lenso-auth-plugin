@@ -1139,6 +1139,7 @@ dependencies = [
 name = "lenso-operator-binding-workers-app-proof"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "js-sys",
  "lenso",
  "lenso-access-control-d1-plugin",
@@ -1163,6 +1164,7 @@ dependencies = [
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-native-adapter",
+ "serde",
  "serde_json",
  "time",
  "wasm-bindgen",
