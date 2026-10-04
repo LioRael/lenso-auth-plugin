@@ -1,0 +1,16 @@
+crates/lenso-auth-account-admin-agent-tools-plugin/tests/business_flow.rs
+  h_9d56aba080c170 3,155-169
+crates/lenso-auth-human-api-token-plugin/tests/postgres_lifecycle.rs
+  h_9d56aba080c170 6,240-253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "72da3d42999390995d18d7d37aba205cb3584675",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
