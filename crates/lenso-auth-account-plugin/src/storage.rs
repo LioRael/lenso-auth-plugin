@@ -61,7 +61,7 @@ pub(crate) async fn session_metadata(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::session_metadata(pg, digest, policy).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::session_metadata(binding, digest, policy).await,
+        AccountStore::D1 { binding, .. } => d1::session_metadata(binding, digest, policy).await,
     }
 }
 
@@ -74,7 +74,7 @@ pub(crate) async fn policy_expiry(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::policy_expiry(pg, session_id, policy).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::policy_expiry(binding, session_id, policy).await,
+        AccountStore::D1 { binding, .. } => d1::policy_expiry(binding, session_id, policy).await,
     }
 }
 
@@ -103,7 +103,9 @@ pub(crate) async fn issue_managed_session(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::issue_managed_session(pg, session, managed).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::issue_managed_session(binding, session, managed).await,
+        AccountStore::D1 { binding, .. } => {
+            d1::issue_managed_session(binding, session, managed).await
+        }
     }
 }
 
@@ -119,7 +121,7 @@ pub(crate) async fn renew_session(
             postgres::renew_session(pg, old_digest, new_digest, policy).await
         }
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => {
+        AccountStore::D1 { binding, .. } => {
             d1::renew_session(binding, old_digest, new_digest, policy).await
         }
     }
@@ -144,7 +146,10 @@ pub(crate) enum AccountStore {
     #[cfg(feature = "postgres")]
     Postgres(lenso_postgres_kit::OwnedPostgres),
     #[cfg(feature = "workers")]
-    D1(crate::workers::D1Binding),
+    D1 {
+        binding: crate::workers::D1Binding,
+        managed_schema: bool,
+    },
 }
 impl AccountStore {
     #[cfg_attr(
@@ -156,7 +161,7 @@ impl AccountStore {
             #[cfg(feature = "postgres")]
             Self::Postgres(pg) => pg.pool().close().await,
             #[cfg(feature = "workers")]
-            Self::D1(_) => (),
+            Self::D1 { .. } => (),
         }
     }
 }
@@ -173,7 +178,7 @@ pub(crate) async fn ensure_identity(
             postgres::ensure_identity(pg, provider, external_subject, new_subject).await
         }
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => {
+        AccountStore::D1 { binding, .. } => {
             d1::ensure_identity(binding, provider, external_subject, new_subject).await
         }
     }
@@ -187,7 +192,7 @@ pub(crate) async fn subject_status(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::subject_status(pg, subject).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::subject_status(binding, subject).await,
+        AccountStore::D1 { binding, .. } => d1::subject_status(binding, subject).await,
     }
 }
 
@@ -199,7 +204,7 @@ pub(crate) async fn issue_session(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::issue_session(pg, session).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::issue_session(binding, session).await,
+        AccountStore::D1 { binding, .. } => d1::issue_session(binding, session).await,
     }
 }
 
@@ -211,7 +216,7 @@ pub(crate) async fn revoke_session(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::revoke_session(pg, session_id).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::revoke_session(binding, session_id).await,
+        AccountStore::D1 { binding, .. } => d1::revoke_session(binding, session_id).await,
     }
 }
 
@@ -221,9 +226,24 @@ pub(crate) async fn revoke_credential(
 ) -> Result<Option<bool>, AccountError> {
     match store {
         #[cfg(feature = "postgres")]
-        AccountStore::Postgres(pg) => postgres::revoke_credential(pg, digest).await,
+        AccountStore::Postgres(pg) => {
+            if pg.schema_version() >= 6 {
+                postgres::revoke_credential(pg, digest).await
+            } else {
+                postgres::revoke_legacy_credential(pg, digest).await
+            }
+        }
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::revoke_credential(binding, digest).await,
+        AccountStore::D1 {
+            binding,
+            managed_schema,
+        } => {
+            if *managed_schema {
+                d1::revoke_credential(binding, digest).await
+            } else {
+                d1::revoke_legacy_credential(binding, digest).await
+            }
+        }
     }
 }
 
@@ -235,7 +255,7 @@ pub(crate) async fn load_session(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::load_session(pg, digest).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::load_session(binding, digest).await,
+        AccountStore::D1 { binding, .. } => d1::load_session(binding, digest).await,
     }
 }
 
@@ -247,7 +267,7 @@ pub(crate) async fn inspect_session(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::inspect_session(pg, session_id).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::inspect_session(binding, session_id).await,
+        AccountStore::D1 { binding, .. } => d1::inspect_session(binding, session_id).await,
     }
 }
 
@@ -259,7 +279,7 @@ pub(crate) async fn list_subjects(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::list_subjects(pg, request).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::list_subjects(binding, request).await,
+        AccountStore::D1 { binding, .. } => d1::list_subjects(binding, request).await,
     }
 }
 
@@ -271,7 +291,7 @@ pub(crate) async fn list_sessions(
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => postgres::list_sessions(pg, request).await,
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => d1::list_sessions(binding, request).await,
+        AccountStore::D1 { binding, .. } => d1::list_sessions(binding, request).await,
     }
 }
 
@@ -288,7 +308,7 @@ pub(crate) async fn set_subject_status(
             postgres::set_subject_status(pg, subject, status, reason, until).await
         }
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => {
+        AccountStore::D1 { binding, .. } => {
             d1::set_subject_status(binding, subject, status, reason, until).await
         }
     }
@@ -301,15 +321,24 @@ pub(crate) async fn create_grant(
     digest: &[u8],
     audience: &[String],
     expires_at: OffsetDateTime,
+    policy: Option<&ManagedSessionPolicy>,
 ) -> Result<Result<String, lenso_capability_auth_delegation::GrantError>, crate::RuntimeFailure> {
     match store {
         #[cfg(feature = "postgres")]
         AccountStore::Postgres(pg) => {
-            postgres::create_grant(pg, parent_digest, session_id, digest, audience, expires_at)
-                .await
+            postgres::create_grant(
+                pg,
+                parent_digest,
+                session_id,
+                digest,
+                audience,
+                expires_at,
+                policy,
+            )
+            .await
         }
         #[cfg(feature = "workers")]
-        AccountStore::D1(binding) => {
+        AccountStore::D1 { binding, .. } => {
             d1::create_grant(
                 binding,
                 parent_digest,
@@ -317,6 +346,7 @@ pub(crate) async fn create_grant(
                 digest,
                 audience,
                 expires_at,
+                policy,
             )
             .await
         }

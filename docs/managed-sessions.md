@@ -62,7 +62,10 @@ stable session ID for logout through the existing `revoke_credential`. Trusted
 logout adapters retain their fixed issuer binding, selected ingress credential
 and POST/CSRF admission; historical credentials are never accepted as authority
 for authentication. Delegated children retain their original expiry and stable
-parent reference; parent revocation still invalidates them.
+parent reference; parent revocation still invalidates them. New grants clip their
+actual stored and returned expiry to the effective parent deadline inside the
+admitting transaction or primary batch. CredentialState and scoped receipts
+apply the same current-policy bounds, without refreshing expiry.
 
 `read_managed` is read-only, uses the same current-policy checks and renew caller
 allowlist, and returns dates/session ID without credential material. It allows
@@ -103,9 +106,11 @@ is tested and is not presented as seamless response-loss recovery.
 
 PostgreSQL migration 6 and D1 migration 3 add managed metadata and digest history.
 Old migration SQL is unchanged. Operators must explicitly setup/upgrade a dedicated
-database; Account activation verifies readiness and never auto-migrates. Existing
-instances must admit the new owner source and migrate before Ready even if the
-new managed policy remains disabled. There is no production migration/deployment
+database; Account activation verifies readiness and never auto-migrates. Legacy instances with managed policy disabled continue to verify the exact PG5
+or D1v2 history and use the original SQL without the new tables. Opting in requires
+explicit `setup_managed` / `upgrade_managed` (PG6 / D1v3) before Ready. Already
+upgraded instances retain digest-history logout even when managed policy is later
+disabled; schema support is verified independently of configuration. There is no production migration/deployment
 in this candidate. Password storage and migrations remain unchanged.
 
 Focused Native tests run the actual PostgreSQL Store in a fresh isolated cluster;
@@ -116,5 +121,14 @@ compatibility and restart. The D1 fixture's independent wasm-bindgen transport
 cohort is disclosed; it is not a substitute for direct candidate Native/Workers
 checks against the unchanged declared cohort. Generated-client routing, HTTP
 Cookie/Origin composition and browser concurrency have separate synthetic gates.
-Full candidate CI and Relay/Console page-level ingress/CSRF integration remain
-downstream acceptance gates; these focused tests do not claim full App qualification.
+The separate `experiments/managed-session-app` fixture runs actual Account,
+Password, renewal adapter and generated clients through Registry Kernel 0.3.12,
+Ingress 0.4.11 and nominal HTTP 0.3.7 on Native PostgreSQL and local Workers D1.
+Real CSRF admission, caller isolation, Cookie competition, policy narrowing,
+response loss and replay are synthetic App acceptance gates in candidate CI.
+Declare the new stateless renewal adapter as native authoring v2 and bind its
+named `managed_sessions` requirement; declaring it as legacy v1 is invalid Host
+assembly. The Workers fixture provides only public RuntimeDriver spawn/timer
+mechanics and does not qualify the older Registry WorkersDriver package.
+Full remote candidate CI, production Host qualification and Relay/Console page
+integration remain parent-owned gates. No production deployment is authorized.

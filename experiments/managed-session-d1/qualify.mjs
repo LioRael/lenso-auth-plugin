@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const root=fileURLToPath(new URL(".",import.meta.url));
 const repository=resolve(root,"../..");
+const targetRoot=resolve(process.env.CARGO_TARGET_DIR ?? join(root,"target"));
 const receiptPath=process.argv[2];
 if(process.argv.length>3)throw new Error("Usage: node qualify.mjs [receipt-path]");
 if(receiptPath && resolve(receiptPath).startsWith(repository))throw new Error("Receipt must be outside source worktree");
@@ -29,6 +30,11 @@ const scalar=async(sql,...params)=>(await db.prepare(sql).bind(...params).first(
 const mutate=async(sql,...params)=>db.prepare(sql).bind(...params).run();
 const rows=async(table)=>(await db.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()).results;
 const snapshot=async()=>JSON.stringify(await Promise.all([rows("auth_sessions"),rows("auth_managed_sessions"),rows("auth_session_rotations")]));
+const schemaSnapshot=async()=>{
+  const schema=(await db.prepare("SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' ORDER BY name").all()).results;
+  const content=[];for(const {name} of schema)content.push((await db.prepare(`SELECT * FROM "${name.replaceAll('"','""')}"`).all()).results);
+  return JSON.stringify([schema,content]);
+};
 const raw=(input,drop=false)=>mf.dispatchFetch("http://local/call",{method:"POST",headers:{"content-type":"application/json",...(drop?{"x-local-drop-response":"after-rotation"}:{})},body:JSON.stringify(input)});
 const call=async(input)=>{
   const response=await raw(input);
@@ -60,7 +66,7 @@ const checkFailure=async(s,expected,selectedPolicy=s.selectedPolicy)=>{
 
 try {
   execFileSync(process.env.LENSO_CARGO ?? "cargo",["build","--locked","--offline","--target","wasm32-unknown-unknown","--release"],{cwd:root,stdio:"inherit"});
-  execFileSync(process.env.LENSO_WASM_BINDGEN ?? "wasm-bindgen",["--target","web","--out-dir","pkg","--out-name","managed_session_d1","target/wasm32-unknown-unknown/release/lenso_managed_session_d1_proof.wasm"],{cwd:root,stdio:"inherit"});
+  execFileSync(process.env.LENSO_WASM_BINDGEN ?? "wasm-bindgen",["--target","web","--out-dir","pkg","--out-name","managed_session_d1",join(targetRoot,"wasm32-unknown-unknown/release/lenso_managed_session_d1_proof.wasm")],{cwd:root,stdio:"inherit"});
   await build({entryPoints:[resolve(root,"proof-worker.mjs")],outfile:output,bundle:true,format:"esm",platform:"browser",target:"es2022",plugins:[
     {name:"wasm",setup(b){b.onResolve({filter:/\.wasm$/},a=>({path:a.path,external:true}));}},
     {name:"runtime",setup(b){b.onResolve({filter:/^@lenso\/workers-runtime$/},()=>({path:runtimePackage}));}},
@@ -70,12 +76,26 @@ try {
   const migrationDirectory=resolve(repository,"crates/lenso-auth-account-plugin/migrations/d1");
   const migrations=(await readdir(migrationDirectory)).filter(f=>f.endsWith(".sql")).sort();
   assert.equal(migrations.length,3,"Managed-session migration must be present");
-  for(const file of migrations){
-    const sql=await readFile(join(migrationDirectory,file),"utf8");
-    // Owner SQL is executed explicitly against an ephemeral fixture only.
-    for(const part of sql.replace(/--[^\n]*/g,"").split(";").map(p=>p.trim()).filter(Boolean))await db.prepare(part).run();
-  }
-  cases.push("Explicit owner migrations create isolated local D1 schema");
+  assert.deepEqual(await call({operation:"migration",action:"setup_legacy"}),{Ok:true});
+  const v2Before=await schemaSnapshot();
+  assert.deepEqual(await call({operation:"migration",action:"verify",managed_required:false}),{Ok:false});
+  assert.deepEqual(await call({operation:"migration",action:"verify",managed_required:true}),{Err:"upgrade_required"});
+  assert.equal(await schemaSnapshot(),v2Before);
+  assert.equal(await scalar("SELECT name FROM sqlite_master WHERE type='table' AND name='auth_managed_sessions'"),null);
+  const v2=await session({managed:false}),v2Child=digest(),v2ChildId=`v2-child-${counter}`;
+  assert.ok((await call({operation:"grant",parent_digest:v2.token,session_id:v2ChildId,digest:v2Child})).Ok);
+  assert.ok(await load(v2Child));
+  assert.equal(await call({operation:"revoke_legacy_credential",digest:v2.token}),true);
+  assert.equal((await load(v2Child)).revoked,true);
+  assert.equal(await scalar("SELECT name FROM sqlite_master WHERE type='table' AND name='auth_session_rotations'"),null);
+  cases.push("Legacy v2 D1 issue/delegation/current-digest revoke run without either managed table");
+  cases.push("Actual generated verify_compatible admits v2 only when managed is disabled and rejects managed-required without any writes");
+  assert.deepEqual(await call({operation:"migration",action:"upgrade_managed"}),{Ok:true});
+  const v3Before=await schemaSnapshot();
+  assert.deepEqual(await call({operation:"migration",action:"verify",managed_required:false}),{Ok:true});
+  assert.deepEqual(await call({operation:"migration",action:"verify",managed_required:true}),{Ok:true});
+  assert.equal(await schemaSnapshot(),v3Before);
+  cases.push("Actual generated explicit managed upgrade creates v3; verify_compatible retains history support when managed config is disabled, with no writes");
 
   const missingBefore=await snapshot();
   assert.equal(await call({operation:"managed_issue",subject:"absent-subject",session_id:"absent-session",digest:digest(),policy}),"InvalidSubject");
@@ -262,6 +282,45 @@ try {
   }
   cases.push("Private policy bound propagates managed parent's narrowed idle/absolute to delegated child without writes; child metadata/renewal stays unsupported");
   cases.push("Private policy bound preserves legacy parent/child expiry and the child's own earlier deadline");
+  for(const narrowed of ["idle","absolute"]){
+    const rootSession=await session();let selectedPolicy;
+    if(narrowed==="idle"){
+      await due(rootSession);selectedPolicy={...policy,idle_timeout_seconds:12};
+    }else{
+      await mutate("UPDATE auth_managed_sessions SET issued_at=strftime('%Y-%m-%dT%H:%M:%f000000Z','now','-120 seconds') WHERE session_id=?1",rootSession.id);
+      selectedPolicy={...policy,absolute_timeout_seconds:60};
+    }
+    const childDigest=digest(),session_id=`rejected-child-${counter}`,before=await snapshot();
+    const result=await call({operation:"grant",parent_digest:rootSession.token,session_id,digest:childDigest,managed_policy:selectedPolicy});
+    assert.equal(result.Err,"Expired");assert.equal(await snapshot(),before);
+    assert.equal(await scalar("SELECT session_id FROM auth_session_delegations WHERE session_id=?1",session_id),null);
+  }
+  cases.push("Atomic grant refuses managed parent's narrowed idle/absolute expiry without session or delegation writes");
+  for(const narrowed of ["idle","absolute"]){
+    const rootSession=await session();let selectedPolicy;
+    if(narrowed==="idle"){
+      await mutate("UPDATE auth_managed_sessions SET last_renew_at=strftime('%Y-%m-%dT%H:%M:%f000000Z','now','-6 seconds') WHERE session_id=?1",rootSession.id);
+      selectedPolicy={...policy,idle_timeout_seconds:12};
+    }else{
+      await mutate("UPDATE auth_managed_sessions SET issued_at=strftime('%Y-%m-%dT%H:%M:%f000000Z','now','-57 seconds') WHERE session_id=?1",rootSession.id);
+      selectedPolicy={...policy,absolute_timeout_seconds:60};
+    }
+    const childDigest=digest(),session_id=`clipped-child-${counter}`;
+    assert.ok((await call({operation:"grant",parent_digest:rootSession.token,session_id,digest:childDigest,managed_policy:selectedPolicy})).Ok);
+    const childRow=await scalar("SELECT expires_at FROM auth_sessions WHERE session_id=?1",session_id);
+    const effective=await policyExpiry(rootSession,selectedPolicy);
+    assert.equal(Date.parse(childRow.expires_at),Date.parse(effective));
+    assert.ok(Date.parse(childRow.expires_at)<Date.now()+8000);
+    assert.ok(await load(childDigest));
+  }
+  cases.push("Atomic managed grant clips requested child expiry to parent's current idle/absolute boundary");
+  const grantScope=await session();
+  for(const patch of [{expiry_offset_seconds:120},{expiry_offset_seconds:-1},{audience:["forbidden.resource@1:write"]}]){
+    const childDigest=digest(),session_id=`scope-rejected-${counter}`,before=await snapshot();
+    assert.equal((await call({operation:"grant",parent_digest:grantScope.token,session_id,digest:childDigest,managed_policy:policy,...patch})).Err,patch.expiry_offset_seconds===-1?"Expired":"InvalidScope");
+    assert.equal(await snapshot(),before);
+  }
+  cases.push("Grant clipping preserves original parent expiry/audience authority; expired requested child also cannot write");
 
   const lost=await session();await due(lost);const lostNew=digest();
   assert.equal((await raw({operation:"renew",old_digest:lost.token,new_digest:lostNew,policy},true)).status,599);
@@ -276,9 +335,9 @@ try {
   assert.equal((await load(persistedNew)).revoked,true);
   cases.push("Workerd restart persists current digest, rotation replay rejection and historical logout authority");
 
-  const sourcePaths=["crates/lenso-auth-account-plugin/src/storage/d1.rs","crates/lenso-auth-account-plugin/src/storage/d1_managed.rs","crates/lenso-auth-account-plugin/src/workers.rs","workers/d1-binding.mjs",...migrations.map(f=>`crates/lenso-auth-account-plugin/migrations/d1/${f}`)];
+  const sourcePaths=["crates/lenso-auth-account-plugin/src/storage/d1.rs","crates/lenso-auth-account-plugin/src/storage/d1_managed.rs","crates/lenso-auth-account-plugin/src/workers.rs","crates/lenso-auth-account-plugin/src/migration.rs","workers/d1-binding.mjs",...migrations.map(f=>`crates/lenso-auth-account-plugin/migrations/d1/${f}`)];
   const hashes={};for(const path of sourcePaths)hashes[path]=createHash("sha256").update(await readFile(resolve(repository,path))).digest("hex");
-  const receipt={schema:"lenso.auth.managed-session-local-d1@1",backend:"actual-local-workerd-d1",passed:true,cloudResourcesCreated:false,sourceHashes:hashes,toolVersions:{wrangler:wranglerRequire("./package.json").version,miniflare:wranglerRequire("miniflare/package.json").version,wasmBindgen:execFileSync(process.env.LENSO_WASM_BINDGEN??"wasm-bindgen",["--version"],{encoding:"utf8"}).trim()},scope:"Actual Account D1 Rust functions and owner JS bridge; fixture model/request shims, no Kernel/Capability/caller ACL or browser Cookie gate",cases};
+  const receipt={schema:"lenso.auth.managed-session-local-d1@1",backend:"actual-local-workerd-d1",passed:true,cloudResourcesCreated:false,sourceHashes:hashes,toolVersions:{wrangler:wranglerRequire("./package.json").version,miniflare:wranglerRequire("miniflare/package.json").version,wasmBindgen:execFileSync(process.env.LENSO_WASM_BINDGEN??"wasm-bindgen",["--version"],{encoding:"utf8"}).trim(),rustc:execFileSync(process.env.RUSTC??"rustc",["--version"],{encoding:"utf8"}).trim()},scope:"Actual Account D1 Rust storage and generated migration::verify_compatible/setup/upgrade functions plus owner JS bridge; fixture model/request shims, no Kernel/Capability/caller ACL or browser Cookie gate",cases};
   if(receiptPath)await writeFile(receiptPath,JSON.stringify(receipt,null,2)+"\n");
   console.log(JSON.stringify(receipt,null,2));
 } finally {

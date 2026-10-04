@@ -50,6 +50,10 @@ jobs:
         run: cargo check --locked --workspace --all-targets
       - name: Test workspace lifecycle and authorization
         run: cargo test --locked --workspace -- --include-ignored --test-threads=1
+      - name: Fetch frozen synthetic managed-session App dependencies
+        run: cargo fetch --manifest-path experiments/managed-session-app/Cargo.toml --locked
+      - name: Test complete synthetic Native managed-session App and real Ingress
+        run: cargo test --manifest-path experiments/managed-session-app/Cargo.toml --locked --offline --test native_ingress -- --ignored
       - name: Lint workspace
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Check portable Auth targets
@@ -64,6 +68,12 @@ jobs:
           python3 workers/test-migration-generation.py
       - name: Check managed browser renewal Workers implementation
         run: cargo clippy --locked --target wasm32-unknown-unknown --features workers -p lenso-auth-session-renewal-plugin -- -D warnings
+      - name: Install frozen synthetic managed-session App tooling
+        run: npm ci --ignore-scripts --prefix experiments/managed-session-app
+      - name: Install matching Wasm Bindgen test tool
+        run: cargo install --locked --version 0.2.128 wasm-bindgen-cli
+      - name: Test complete synthetic Workers managed-session App and real Ingress
+        run: node experiments/managed-session-app/qualify-workers.mjs
       - name: Test browser renewal competition and response loss
         run: node --test crates/lenso-auth-session-renewal-plugin/browser/session-renewal.test.mjs
       - name: Test Auth event storage lifetime

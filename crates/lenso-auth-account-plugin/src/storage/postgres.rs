@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     ListSessionsResponseSessionsItem, ListSubjectsResponseSubjectsItem,
-    ListSubjectsResponseSubjectsItemStatus, format_time, runtime,
+    ListSubjectsResponseSubjectsItemStatus, ManagedSessionPolicy, format_time, runtime,
 };
 use lenso_postgres_kit::OwnedPostgres;
 use sqlx::Row;
@@ -192,6 +192,19 @@ pub(crate) async fn revoke_credential(
     .fetch_one(postgres.pool())
     .await
     .map_err(db("revoke credential"))
+}
+
+pub(crate) async fn revoke_legacy_credential(
+    postgres: &OwnedPostgres,
+    digest: &[u8],
+) -> Result<Option<bool>, AccountError> {
+    sqlx::query_scalar(
+        "WITH updated AS (UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE token_digest = $1 AND revoked_at IS NULL RETURNING 1) SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN TRUE WHEN EXISTS (SELECT 1 FROM auth_sessions WHERE token_digest = $1) THEN FALSE ELSE NULL END",
+    )
+    .bind(digest)
+    .fetch_one(postgres.pool())
+    .await
+    .map_err(db("revoke legacy credential"))
 }
 
 pub(crate) async fn load_session(
@@ -411,6 +424,7 @@ pub(crate) async fn create_grant(
     digest: &[u8],
     audience: &[String],
     expires_at: OffsetDateTime,
+    policy: Option<&ManagedSessionPolicy>,
 ) -> Result<Result<String, GrantError>, RuntimeFailure> {
     let mut tx = postgres.pool().begin().await.map_err(grant_db)?;
     let parent = sqlx::query("SELECT s.session_id,s.subject_id,s.actor_kind,s.assurance,s.audience,s.claims,s.expires_at,s.revoked_at IS NOT NULL AS revoked,(i.status = 'disabled' AND (i.disabled_until IS NULL OR i.disabled_until > transaction_timestamp())) AS disabled FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id WHERE s.token_digest=$1 FOR SHARE OF s,i")
@@ -419,6 +433,14 @@ pub(crate) async fn create_grant(
         return Ok(Err(GrantError::InvalidCredential));
     };
     let parent_id: String = parent.try_get("session_id").map_err(grant_db)?;
+    let parent_expiry = effective_delegation_expiry(
+        &mut tx,
+        &parent_id,
+        parent.try_get("expires_at").map_err(grant_db)?,
+        policy,
+    )
+    .await
+    .map_err(grant_db)?;
     let nested: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM auth_session_delegations WHERE session_id=$1)",
     )
@@ -435,15 +457,25 @@ pub(crate) async fn create_grant(
         disabled: parent.try_get("disabled").map_err(grant_db)?,
         nested,
     };
-    let subject = match validate_grant(
-        Some(&facts),
-        audience,
-        expires_at,
-        OffsetDateTime::now_utc(),
-    ) {
+    let now = if policy.is_some() {
+        sqlx::query_scalar("SELECT clock_timestamp()")
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(grant_db)?
+    } else {
+        OffsetDateTime::now_utc()
+    };
+    let subject = match validate_grant(Some(&facts), audience, expires_at, now) {
         Ok(subject) => subject,
         Err(error) => return Ok(Err(error)),
     };
+    if policy.is_some() && parent_expiry <= now {
+        return Ok(Err(GrantError::Expired));
+    }
+    if policy.is_some() && expires_at <= now {
+        return Ok(Err(GrantError::Expired));
+    }
+    let expires_at = expires_at.min(parent_expiry);
     sqlx::query("INSERT INTO auth_sessions(session_id,token_digest,subject_id,actor_kind,assurance,audience,claims,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
         .bind(session_id).bind(digest).bind(&subject)
         .bind(parent.try_get::<String,_>("actor_kind").map_err(grant_db)?)
@@ -459,6 +491,32 @@ pub(crate) async fn create_grant(
     tx.commit().await.map_err(grant_db)?;
     Ok(Ok(subject))
 }
+
+/// Evaluate the session and its parent chain inside the admitting transaction.
+/// Legacy schema callers never query managed tables when policy is absent.
+pub(crate) async fn effective_delegation_expiry(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    session_id: &str,
+    stored_expiry: OffsetDateTime,
+    policy: Option<&ManagedSessionPolicy>,
+) -> Result<OffsetDateTime, sqlx::Error> {
+    let Some(policy) = policy else {
+        return Ok(stored_expiry);
+    };
+    let effective: Option<OffsetDateTime> = sqlx::query_scalar(
+        "WITH RECURSIVE session_chain AS (SELECT session_id,expires_at,ARRAY[session_id] AS path FROM auth_sessions WHERE session_id=$1 UNION ALL SELECT p.session_id,p.expires_at,c.path||p.session_id FROM session_chain c JOIN auth_session_delegations d ON d.session_id=c.session_id JOIN auth_sessions p ON p.session_id=d.parent_session_id WHERE NOT(p.session_id=ANY(c.path))) SELECT MIN(LEAST(c.expires_at,m.absolute_expires_at,m.issued_at+($2*interval '1 second'),m.last_renew_at+(LEAST(m.idle_timeout_seconds,$3)*interval '1 second'))) FROM session_chain c LEFT JOIN auth_managed_sessions m ON m.session_id=c.session_id",
+    )
+    .bind(session_id)
+    .bind(i64::try_from(policy.absolute_timeout_seconds).expect("validated policy"))
+    .bind(i64::try_from(policy.idle_timeout_seconds).expect("validated policy"))
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(effective.map_or(stored_expiry, |expiry| expiry.min(stored_expiry)))
+}
+
+#[cfg(test)]
+#[path = "postgres_delegation_policy_tests.rs"]
+mod delegation_policy_tests;
 
 fn grant_db(_: sqlx::Error) -> RuntimeFailure {
     runtime("delegated session storage failed")

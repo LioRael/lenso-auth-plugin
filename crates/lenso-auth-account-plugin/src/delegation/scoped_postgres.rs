@@ -3,6 +3,7 @@ use super::{
     SCOPED_DELEGATION_CLAIM, ScopedDelegationBinding, ScopedParent, random_id, random_token,
     requested_ceiling, runtime, scoped, storage,
 };
+use crate::ManagedSessionPolicy;
 use lenso_auth_sdk::credential::MANAGEMENT_CEILING_CLAIM;
 use lenso_postgres_kit::OwnedPostgres;
 use sqlx::Row;
@@ -29,6 +30,7 @@ pub(super) async fn grant(
     request: &scoped::GrantScopedRequest,
     configured: Option<&ManagementCredentialCeiling>,
     expiry: OffsetDateTime,
+    policy: Option<&ManagedSessionPolicy>,
 ) -> Result<Result<scoped::GrantScopedResponse, scoped::GrantScopedError>, RuntimeFailure> {
     let caller = context.caller_instance().unwrap_or_default();
     let mut tx = pg.pool().begin().await.map_err(db)?;
@@ -48,17 +50,29 @@ pub(super) async fn grant(
     let Some(current) = current else {
         return Ok(Err(scoped::GrantScopedError::PermissionDenied));
     };
-    let now = OffsetDateTime::now_utc();
+    let parent_expiry = storage::postgres::effective_delegation_expiry(
+        &mut tx,
+        &parent.session_id,
+        current.try_get("expires_at").map_err(db)?,
+        policy,
+    )
+    .await
+    .map_err(db)?;
+    let now = if policy.is_some() {
+        sqlx::query_scalar("SELECT clock_timestamp()")
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(db)?
+    } else {
+        OffsetDateTime::now_utc()
+    };
     let audience: Vec<String> = current.try_get("audience").map_err(db)?;
     if current.try_get::<String, _>("subject_id").map_err(db)? != parent.subject
         || current.try_get::<String, _>("actor_kind").map_err(db)? != "user"
         || current.try_get::<bool, _>("revoked").map_err(db)?
         || current.try_get::<bool, _>("disabled").map_err(db)?
         || current.try_get::<bool, _>("nested").map_err(db)?
-        || current
-            .try_get::<OffsetDateTime, _>("expires_at")
-            .map_err(db)?
-            <= now
+        || parent_expiry <= now
         || !audience.contains(&lenso_auth_sdk::audience(
             scoped::CAPABILITY_ID,
             scoped::GRANT_SCOPED_OPERATION,
@@ -94,7 +108,8 @@ pub(super) async fn grant(
         if old.try_get::<String, _>("intent").map_err(db)? != intent {
             return Ok(Err(scoped::GrantScopedError::Conflict));
         }
-        let delegation = metadata(&old)?;
+        let mut delegation = metadata(&old)?;
+        constrain_receipt(&mut tx, &mut delegation, policy).await?;
         tx.commit().await.map_err(db)?;
         return Ok(Ok(scoped::GrantScopedResponse {
             delegation,
@@ -111,6 +126,7 @@ pub(super) async fn grant(
     {
         return Ok(Err(scoped::GrantScopedError::InvalidRequest));
     }
+    let expiry = expiry.min(parent_expiry);
     let token = random_token().map_err(runtime)?;
     let digest = storage::token_digest(pepper, &token).map_err(runtime)?;
     let session_id = random_id("ses_").map_err(runtime)?;
@@ -139,7 +155,11 @@ pub(super) async fn grant(
         permissions: request.permissions.clone(),
         resource_scopes: request.resource_scopes.clone(),
         audience: request.audience.clone(),
-        expires_at: request.expires_at.clone(),
+        expires_at: if policy.is_some() {
+            crate::format_time(expiry)?
+        } else {
+            request.expires_at.clone()
+        },
         active: true,
     };
     sqlx::query("INSERT INTO scoped_delegation_receipts(issuer_caller,subject_id,idempotency_key,parent_session_id,session_id,intent,metadata) VALUES($1,$2,$3,$4,$5,$6,$7)").bind(caller).bind(&parent.subject).bind(&request.idempotency_key).bind(&parent.session_id).bind(&session_id).bind(intent).bind(sqlx::types::Json(&delegation)).execute(&mut *tx).await.map_err(db)?;
@@ -155,12 +175,14 @@ pub(super) async fn receipt(
     caller: &str,
     parent: &ScopedParent,
     request: &scoped::ScopedReceiptRequest,
+    policy: Option<&ManagedSessionPolicy>,
 ) -> Result<Result<scoped::ScopedReceiptResponse, scoped::ScopedReceiptError>, RuntimeFailure> {
+    let mut tx = pg.pool().begin().await.map_err(db)?;
     let row = sqlx::query(RECEIPT_QUERY)
         .bind(caller)
         .bind(&parent.subject)
         .bind(&request.idempotency_key)
-        .fetch_optional(pg.pool())
+        .fetch_optional(&mut *tx)
         .await
         .map_err(db)?;
     let Some(row) = row else {
@@ -169,15 +191,47 @@ pub(super) async fn receipt(
             delegation: None,
         }));
     };
-    let delegation = metadata(&row)?;
+    let mut delegation = metadata(&row)?;
     if row.try_get::<String, _>("parent_session_id").map_err(db)? != parent.session_id
         || delegation.task_id != request.task_id
         || delegation.agent_session_id != request.agent_session_id
     {
         return Ok(Err(scoped::ScopedReceiptError::PermissionDenied));
     }
+    constrain_receipt(&mut tx, &mut delegation, policy).await?;
+    tx.commit().await.map_err(db)?;
     Ok(Ok(scoped::ScopedReceiptResponse {
         found: true,
         delegation: Some(Some(delegation)),
     }))
 }
+
+async fn constrain_receipt(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    delegation: &mut scoped::ScopedDelegationMetadata,
+    policy: Option<&ManagedSessionPolicy>,
+) -> Result<(), RuntimeFailure> {
+    if policy.is_none() {
+        return Ok(());
+    }
+    let stored_expiry = OffsetDateTime::parse(
+        &delegation.expires_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(runtime)?;
+    let effective = storage::postgres::effective_delegation_expiry(
+        tx,
+        &delegation.session_id,
+        stored_expiry,
+        policy,
+    )
+    .await
+    .map_err(db)?;
+    delegation.active &= effective > OffsetDateTime::now_utc();
+    delegation.expires_at = crate::format_time(effective)?;
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "scoped_policy_tests.rs"]
+mod policy_tests;

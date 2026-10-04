@@ -27,7 +27,7 @@ impl AccountAuthPlugin {
                 let postgres = match &prepared.store {
                     AccountStore::Postgres(pg) => pg,
                     #[cfg(feature = "workers")]
-                    AccountStore::D1(_) => {
+                    AccountStore::D1 { .. } => {
                         return Ok(Err(admin::ReadProfileError::UnsupportedProfile));
                     }
                 };

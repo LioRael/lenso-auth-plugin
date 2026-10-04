@@ -1,5 +1,5 @@
 use super::*;
-use crate::{AccountAuthOperator, schema::schema_plan};
+use crate::{AccountAuthOperator, schema::managed_schema_plan};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_SCHEMA: AtomicU64 = AtomicU64::new(0);
@@ -16,8 +16,10 @@ async fn fixture() -> (OwnedPostgres, String, String) {
         NEXT_SCHEMA.fetch_add(1, Ordering::Relaxed)
     );
     eprintln!("isolated fixture schema: {schema}");
-    AccountAuthOperator::setup(&url, &schema).await.unwrap();
-    let pg = OwnedPostgres::prepare(&url, schema_plan(schema.clone()).unwrap())
+    AccountAuthOperator::setup_managed(&url, &schema)
+        .await
+        .unwrap();
+    let pg = OwnedPostgres::prepare(&url, managed_schema_plan(schema.clone()).unwrap())
         .await
         .unwrap();
     super::super::ensure_identity(&pg, "fixture", "synthetic", "usr_fixture")
@@ -143,9 +145,9 @@ async fn managed_rotation_concurrency_replay_logout_and_restart() {
             .unwrap(),
         RenewSessionOutcome::StaleCredential
     );
-    let reopened = OwnedPostgres::prepare(&url, schema_plan(schema.clone()).unwrap())
-        .await
-        .unwrap();
+    // Restart with managed policy disabled still verifies the upgraded ledger.
+    let reopened = crate::schema::prepare(&url, &schema, false).await.unwrap();
+    assert_eq!(reopened.schema_version(), 6);
     assert!(
         super::super::load_session(&reopened, winner)
             .await
@@ -153,9 +155,12 @@ async fn managed_rotation_concurrency_replay_logout_and_restart() {
             .is_some()
     );
     assert_eq!(
-        super::super::revoke_credential(&reopened, b"original")
-            .await
-            .unwrap(),
+        crate::storage::revoke_credential(
+            &crate::storage::AccountStore::Postgres(reopened.clone()),
+            b"original"
+        )
+        .await
+        .unwrap(),
         Some(true)
     );
     assert!(
@@ -272,7 +277,8 @@ async fn managed_frozen_policy_and_parent_limits_are_preserved() {
             "ses_child",
             b"child",
             &["test.operation".into()],
-            OffsetDateTime::now_utc() + Duration::seconds(30)
+            OffsetDateTime::now_utc() + Duration::seconds(30),
+            Some(&p),
         )
         .await
         .unwrap()
@@ -322,34 +328,6 @@ async fn managed_frozen_policy_and_parent_limits_are_preserved() {
 #[tokio::test]
 #[ignore = "requires isolated LENSO_POSTGRES_TEST_URL"]
 async fn managed_migration_upgrade_is_explicit_and_preserves_legacy_sessions() {
-    use lenso_postgres_kit::{Migration, SchemaOperator, SchemaPlan, sql_migrations};
-    const OLD: &[Migration] = sql_migrations![
-        (
-            1,
-            "create-identities-and-sessions",
-            "migrations/postgres/001_create_identities_and_sessions.sql"
-        ),
-        (
-            2,
-            "add-subject-disable-details",
-            "migrations/postgres/002_add_subject_disable_details.sql"
-        ),
-        (
-            3,
-            "add-session-delegations",
-            "migrations/postgres/003_add_session_delegations.sql"
-        ),
-        (
-            4,
-            "add-scoped-delegation-receipts",
-            "migrations/postgres/004_add_scoped_delegation_receipts.sql"
-        ),
-        (
-            5,
-            "add-display-profile",
-            "migrations/postgres/005_add_display_profile.sql"
-        )
-    ];
     let url = std::env::var("LENSO_POSTGRES_TEST_URL").unwrap();
     let schema = format!(
         "managed_upgrade_{}_{}",
@@ -359,13 +337,8 @@ async fn managed_migration_upgrade_is_explicit_and_preserves_legacy_sessions() {
             .unwrap()
             .as_nanos()
     );
-    let oldplan = SchemaPlan::new(schema.clone(), OLD).unwrap();
-    SchemaOperator::connect(&url, oldplan.clone())
-        .await
-        .unwrap()
-        .setup()
-        .await
-        .unwrap();
+    let oldplan = crate::schema::schema_plan(schema.clone()).unwrap();
+    AccountAuthOperator::setup(&url, &schema).await.unwrap();
     let pg = OwnedPostgres::prepare(&url, oldplan).await.unwrap();
     super::super::ensure_identity(&pg, "fixture", "synthetic", "usr_fixture")
         .await
@@ -382,20 +355,44 @@ async fn managed_migration_upgrade_is_explicit_and_preserves_legacy_sessions() {
     };
     super::super::issue_session(&pg, &legacy).await.unwrap();
     assert!(
-        OwnedPostgres::prepare(&url, schema_plan(schema.clone()).unwrap())
+        OwnedPostgres::prepare(&url, managed_schema_plan(schema.clone()).unwrap())
             .await
             .is_err()
     );
+    let legacy_ready = crate::schema::prepare(&url, &schema, false).await.unwrap();
+    assert_eq!(legacy_ready.schema_version(), 5);
+    assert!(crate::schema::prepare(&url, &schema, true).await.is_err());
+    assert!(
+        super::super::load_session(&legacy_ready, b"before-upgrade")
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert_eq!(
+        crate::storage::revoke_credential(
+            &crate::storage::AccountStore::Postgres(legacy_ready.clone()),
+            b"unknown"
+        )
+        .await
+        .unwrap(),
+        None
+    );
+    legacy_ready.pool().close().await;
     let exists: bool =
         sqlx::query_scalar("SELECT to_regclass('auth_managed_sessions') IS NOT NULL")
             .fetch_one(pg.pool())
             .await
             .unwrap();
     assert!(!exists, "readiness must not auto-migrate");
-    AccountAuthOperator::upgrade(&url, &schema).await.unwrap();
-    let upgraded = OwnedPostgres::prepare(&url, schema_plan(schema.clone()).unwrap())
+    AccountAuthOperator::upgrade_managed(&url, &schema)
         .await
         .unwrap();
+    let upgraded = OwnedPostgres::prepare(&url, managed_schema_plan(schema.clone()).unwrap())
+        .await
+        .unwrap();
+    let disabled_ready = crate::schema::prepare(&url, &schema, false).await.unwrap();
+    assert_eq!(disabled_ready.schema_version(), 6);
+    disabled_ready.pool().close().await;
     assert!(
         super::super::load_session(&upgraded, b"before-upgrade")
             .await

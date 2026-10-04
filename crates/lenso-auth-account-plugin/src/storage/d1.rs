@@ -1,6 +1,6 @@
 use super::{
-    AccountError, GrantParent, IssueSessionOutcome, NewSession, OffsetDateTime, StoredSession,
-    Value, validate_grant,
+    AccountError, GrantParent, IssueSessionOutcome, ManagedSessionPolicy, NewSession,
+    OffsetDateTime, StoredSession, Value, validate_grant,
 };
 use crate::workers::{D1Binding, decode_time, field, statement, timestamp};
 use crate::{RuntimeFailure, format_time, runtime};
@@ -97,6 +97,12 @@ pub(crate) async fn revoke_credential(
         statement(format!("SELECT session_id FROM auth_sessions WHERE session_id IN ({ids})"), vec![digest_value(digest)]),
     ]).await.map_err(fail)?;
     Ok((!r[1].results.is_empty()).then_some(r[0].meta.changes == 1))
+}
+pub(crate) async fn revoke_legacy_credential(
+    db: &D1Binding,
+    digest: &[u8],
+) -> Result<Option<bool>, AccountError> {
+    revoke(db, "token_digest", digest_value(digest)).await
 }
 pub(crate) async fn load_session(
     db: &D1Binding,
@@ -333,42 +339,98 @@ pub(crate) async fn create_grant(
     digest: &[u8],
     audience: &[String],
     expiry: OffsetDateTime,
+    policy: Option<&ManagedSessionPolicy>,
 ) -> Result<Result<String, GrantError>, RuntimeFailure> {
-    let now = OffsetDateTime::now_utc();
-    let parent_status = STATUS.replace(NOW, "?2");
+    // The optional policy selects managed history only after the owner has
+    // verified it. The legacy path never mentions a managed table.
+    let joins = if policy.is_some() {
+        " LEFT JOIN auth_managed_sessions m ON m.session_id=s.session_id"
+    } else {
+        ""
+    };
+    let effective = |absolute: usize, idle: usize| {
+        if policy.is_some() {
+            format!(
+                "CASE WHEN m.session_id IS NULL THEN s.expires_at ELSE min(s.expires_at,m.absolute_expires_at,strftime('%Y-%m-%dT%H:%M:%f000000Z',m.issued_at,'+' || ?{absolute} || ' seconds'),strftime('%Y-%m-%dT%H:%M:%f000000Z',m.last_renew_at,'+' || min(m.idle_timeout_seconds,?{idle}) || ' seconds')) END"
+            )
+        } else {
+            "s.expires_at".to_owned()
+        }
+    };
+    let selected_expiry = effective(2, 3);
     let select = format!(
-        "SELECT s.session_id,s.subject_id,s.actor_kind,s.assurance,s.audience,s.claims,s.expires_at,s.revoked_at IS NOT NULL AS revoked,({parent_status})='disabled' AS disabled,EXISTS(SELECT 1 FROM auth_session_delegations d WHERE d.session_id=s.session_id) AS nested FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id WHERE s.token_digest=?1"
+        "SELECT s.session_id,s.subject_id,s.actor_kind,s.assurance,s.audience,s.claims,{selected_expiry} AS expires_at,s.expires_at AS stored_expires_at,{NOW} AS database_now,s.revoked_at IS NOT NULL AS revoked,({STATUS})='disabled' AS disabled,EXISTS(SELECT 1 FROM auth_session_delegations d WHERE d.session_id=s.session_id) AS nested FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id{joins} WHERE s.token_digest=?1"
     );
     let scope = serde_json::to_string(audience).map_err(|_| rt(()))?;
-    let guard_status = STATUS.replace(NOW, "?6");
+    let effective_expiry = effective(6, 7);
+    let child_expiry = format!("min(?5,({effective_expiry}))");
     let guard = format!(
-        "s.token_digest=?1 AND s.actor_kind='user' AND s.revoked_at IS NULL AND ({guard_status})='active' AND s.expires_at>?6 AND s.expires_at>=?5 AND NOT EXISTS(SELECT 1 FROM auth_session_delegations d WHERE d.session_id=s.session_id) AND NOT EXISTS(SELECT 1 FROM json_each(?4) requested WHERE NOT EXISTS(SELECT 1 FROM json_each(s.audience) allowed WHERE allowed.value=requested.value))"
+        "s.token_digest=?1 AND s.actor_kind='user' AND s.revoked_at IS NULL AND ({STATUS})='active' AND ({effective_expiry})>{NOW} AND {child_expiry}>{NOW} AND s.expires_at>=?5 AND NOT EXISTS(SELECT 1 FROM auth_session_delegations d WHERE d.session_id=s.session_id) AND NOT EXISTS(SELECT 1 FROM json_each(?4) requested WHERE NOT EXISTS(SELECT 1 FROM json_each(s.audience) allowed WHERE allowed.value=requested.value))"
     );
+    let mut selected_params = vec![digest_value(parent_digest)];
+    let mut insert_params = vec![
+        digest_value(parent_digest),
+        json!(id),
+        digest_value(digest),
+        json!(scope),
+        timestamp(expiry),
+    ];
+    if let Some(policy) = policy {
+        let bounds = [
+            json!(policy.absolute_timeout_seconds),
+            json!(policy.idle_timeout_seconds),
+        ];
+        selected_params.extend(bounds.clone());
+        insert_params.extend(bounds);
+    }
     let r=db.run(vec![
-        statement(select,vec![digest_value(parent_digest),timestamp(now)]),
-        statement(format!("INSERT INTO auth_sessions(session_id,token_digest,subject_id,actor_kind,assurance,audience,claims,expires_at) SELECT ?2,?3,s.subject_id,s.actor_kind,s.assurance,?4,s.claims,?5 FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id WHERE {guard}"),vec![digest_value(parent_digest),json!(id),digest_value(digest),json!(scope),timestamp(expiry),timestamp(now)]),
-        statement("INSERT INTO auth_session_delegations(session_id,parent_session_id) SELECT child.session_id,parent.session_id FROM auth_sessions child JOIN auth_sessions parent ON parent.token_digest=?1 WHERE child.session_id=?2",vec![digest_value(parent_digest),json!(id)])
+        statement(select.clone(),selected_params.clone()),
+        statement(format!("INSERT INTO auth_sessions(session_id,token_digest,subject_id,actor_kind,assurance,audience,claims,expires_at) SELECT ?2,?3,s.subject_id,s.actor_kind,s.assurance,?4,s.claims,{child_expiry} FROM auth_sessions s JOIN identity_subjects i ON i.subject_id=s.subject_id{joins} WHERE {guard}"),insert_params),
+        statement("INSERT INTO auth_session_delegations(session_id,parent_session_id) SELECT child.session_id,parent.session_id FROM auth_sessions child JOIN auth_sessions parent ON parent.token_digest=?1 WHERE child.session_id=?2 AND changes()=1",vec![digest_value(parent_digest),json!(id)]),
+        statement(select,selected_params),
     ]).await.map_err(rt)?;
-    let parent = r[0]
-        .results
-        .first()
+    let selected = if r[1].meta.changes == 1 && r[2].meta.changes == 1 {
+        0
+    } else {
+        3
+    };
+    let row = r[selected].results.first();
+    match validate_grant_row(row, audience, expiry)? {
+        Ok(subject) if r[1].meta.changes == 1 && r[2].meta.changes == 1 => Ok(Ok(subject)),
+        Err(error) if r[1].meta.changes == 0 && r[2].meta.changes == 0 => Ok(Err(error)),
+        _ => Err(rt(())),
+    }
+}
+
+fn validate_grant_row(
+    row: Option<&Value>,
+    audience: &[String],
+    expiry: OffsetDateTime,
+) -> Result<Result<String, GrantError>, RuntimeFailure> {
+    let parent = row
         .map(|row| {
             Ok::<_, RuntimeFailure>(GrantParent {
                 subject: field(row, "subject_id").map_err(rt)?,
                 actor_kind: field(row, "actor_kind").map_err(rt)?,
                 audience: serde_json::from_str(&field::<String>(row, "audience").map_err(rt)?)
                     .map_err(|_| rt(()))?,
-                expires_at: decode_time(row, "expires_at").map_err(rt)?,
+                expires_at: decode_time(row, "stored_expires_at").map_err(rt)?,
                 revoked: field::<i64>(row, "revoked").map_err(rt)? != 0,
                 disabled: field::<i64>(row, "disabled").map_err(rt)? != 0,
                 nested: field::<i64>(row, "nested").map_err(rt)? != 0,
             })
         })
         .transpose()?;
-    let valid = validate_grant(parent.as_ref(), audience, expiry, now);
-    match valid {
-        Ok(subject) if r[1].meta.changes == 1 && r[2].meta.changes == 1 => Ok(Ok(subject)),
-        Err(error) if r[1].meta.changes == 0 && r[2].meta.changes == 0 => Ok(Err(error)),
-        _ => Err(rt(())),
+    let now = row
+        .map(|row| decode_time(row, "database_now").map_err(rt))
+        .transpose()?
+        .unwrap_or_else(OffsetDateTime::now_utc);
+    let mut valid = validate_grant(parent.as_ref(), audience, expiry, now);
+    if valid.is_ok() {
+        let effective = decode_time(row.ok_or_else(|| rt(()))?, "expires_at").map_err(rt)?;
+        if effective <= now || expiry <= now {
+            valid = Err(GrantError::Expired);
+        }
     }
+    Ok(valid)
 }

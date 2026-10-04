@@ -42,8 +42,9 @@ export function createSessionRenewalClient({
       throw new TypeError("Managed server renewal metadata is required.");
     }
     if (expiry <= now()) {
-      onLoginRequired("session_expired");
-      return { status: "login_required", reason: "session_expired" };
+      // Another tab may have rotated the shared Cookie while this tab missed
+      // its metadata update. Only the server can decide whether it expired.
+      return validateOnce("session_metadata_expired");
     }
     if (after > now()) return { status: "too_early", renew_after: metadata.renew_after };
     const csrf = readCsrfToken();

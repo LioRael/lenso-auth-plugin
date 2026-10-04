@@ -103,3 +103,55 @@ test("initial state validator returns metadata without choosing any credential",
   const unavailable = createSessionValidator(async () => ({status:503}));
   await assert.rejects(unavailable(), /unavailable/);
 });
+
+test("expired tab metadata validates another tab's current Cookie once after a missed update", async () => {
+  const requests = [], updates = [];
+  let login = 0;
+  const client = createSessionRenewalClient({ csrfCookieName: "__Host-csrf", locks, now: () => now,
+    readCsrfToken: () => { throw new Error("read-only validation does not need CSRF"); },
+    onLoginRequired: () => login++, onMetadata: (value) => updates.push(value),
+    fetchImpl: async (url, options) => {
+      requests.push([url, options.method]);
+      assert.equal(url, "/auth/session/state"); assert.equal(options.method, "GET");
+      assert.equal(options.credentials, "same-origin"); assert.equal(options.cache, "no-store");
+      assert.equal(options.body, undefined); assert.equal(options.headers, undefined);
+      return { status: 200, json: async () => ({ authenticated: true, ...next }) };
+    },
+  });
+  const result = await client.renewOnce({ ...metadata, expires_at: new Date(now).toISOString() });
+  assert.deepEqual(result, { status: "validated", reason: "session_metadata_expired", metadata: next });
+  assert.deepEqual(updates, [next]); assert.equal(login, 0);
+  assert.deepEqual(requests, [["/auth/session/state", "GET"]]);
+});
+
+test("expired tab metadata requires login only after the current Cookie is rejected once", async () => {
+  for (const status of [401, 409]) {
+    const requests = [], reasons = [];
+    const client = createSessionRenewalClient({ csrfCookieName: "__Host-csrf", locks, now: () => now,
+      onLoginRequired: (reason) => reasons.push(reason),
+      fetchImpl: async (url, options) => {
+        requests.push([url, options.method]);
+        return { status };
+      },
+    });
+    assert.deepEqual(await client.renewOnce({ ...metadata, expires_at: new Date(now - 1).toISOString() }),
+      { status: "login_required", reason: "session_metadata_expired" });
+    assert.deepEqual(reasons, ["session_metadata_expired"]);
+    assert.deepEqual(requests, [["/auth/session/state", "GET"]]);
+  }
+});
+
+test("expired metadata validation unavailable does not trigger login or retry renewal", async () => {
+  const requests = [];
+  let login = 0;
+  const client = createSessionRenewalClient({ csrfCookieName: "__Host-csrf", locks, now: () => now,
+    onLoginRequired: () => login++,
+    fetchImpl: async (url, options) => {
+      requests.push([url, options.method]);
+      return { status: 503 };
+    },
+  });
+  await assert.rejects(client.renewOnce({ ...metadata, expires_at: new Date(now).toISOString() }), /unavailable/);
+  assert.equal(login, 0);
+  assert.deepEqual(requests, [["/auth/session/state", "GET"]]);
+});

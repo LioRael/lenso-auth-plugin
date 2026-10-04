@@ -49,7 +49,7 @@ use lenso_capability_managed_session as managed_session;
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
-#[cfg(feature = "postgres")]
+#[cfg(all(feature = "postgres", test))]
 use lenso_postgres_kit::OwnedPostgres;
 use serde::{Deserialize, Serialize};
 
@@ -885,6 +885,11 @@ impl AccountAuthPlugin {
         let prepared = self.prepared();
         let current_ceiling = self.config.management_session_ceiling.clone();
         let current_targets = self.config.scoped_delegation_targets.clone();
+        let managed_policy = self
+            .config
+            .managed_sessions
+            .as_ref()
+            .map(|managed| managed.policy.clone());
         Box::pin(async move {
             if !admitted {
                 return Ok(Err(credential_state::InspectError::PermissionDenied));
@@ -900,12 +905,20 @@ impl AccountAuthPlugin {
                 return Ok(Err(credential_state::InspectError::NotFound));
             }
             let prepared = prepared?;
-            let Some(session) = storage::inspect_session(&prepared.store, &binding.session_id)
+            let Some(mut session) = storage::inspect_session(&prepared.store, &binding.session_id)
                 .await
                 .map_err(runtime)?
             else {
                 return Ok(Err(credential_state::InspectError::NotFound));
             };
+            if let Some(policy) = managed_policy
+                && let Some(expiry) =
+                    storage::policy_expiry(&prepared.store, &session.session_id, &policy)
+                        .await
+                        .map_err(runtime)?
+            {
+                session.expires_at = session.expires_at.min(expiry);
+            }
             let active = scoped_target_admitted(&session.claims, &current_targets)
                 && session.status == "active"
                 && !session.revoked
@@ -971,9 +984,10 @@ impl Lifecycle for AccountAuthPlugin {
                         database_url_secret,
                     )
                     .await?;
-                    let postgres = OwnedPostgres::prepare(
+                    let postgres = crate::schema::prepare(
                         &database_url,
-                        schema_plan(config.schema).map_err(runtime)?,
+                        &config.schema,
+                        config.managed_sessions.is_some(),
                     )
                     .await
                     .map_err(runtime)?;
@@ -987,10 +1001,14 @@ impl Lifecycle for AccountAuthPlugin {
             }
             #[cfg(feature = "workers")]
             host_facilities::StorageSelection::D1(binding) => {
-                migration::verify(binding)
-                    .await
-                    .map_err(|_| runtime("Account D1 migration verification failed"))?;
-                storage::AccountStore::D1(binding.clone())
+                let managed_schema =
+                    migration::verify_compatible(binding, config.managed_sessions.is_some())
+                        .await
+                        .map_err(|_| runtime("Account D1 migration verification failed"))?;
+                storage::AccountStore::D1 {
+                    binding: binding.clone(),
+                    managed_schema,
+                }
             }
         };
         state.replace(Some(PreparedAccount {
@@ -1334,13 +1352,13 @@ mod tests {
         );
 
         assert_eq!(
-            storage::postgres::revoke_credential(&postgres, &digest)
+            storage::postgres::revoke_legacy_credential(&postgres, &digest)
                 .await
                 .unwrap(),
             Some(true)
         );
         assert_eq!(
-            storage::postgres::revoke_credential(&postgres, &digest)
+            storage::postgres::revoke_legacy_credential(&postgres, &digest)
                 .await
                 .unwrap(),
             Some(false)
@@ -1351,7 +1369,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            storage::postgres::revoke_credential(&postgres, &unknown)
+            storage::postgres::revoke_legacy_credential(&postgres, &unknown)
                 .await
                 .unwrap(),
             None
@@ -1496,7 +1514,7 @@ mod storage_reference_config_tests {
             assert!(config.select_storage(Some(&pepper_database)).is_err());
             assert!(config.select_storage(None).is_err());
             let old_d1 = config.clone().with_d1_binding("AUTH_D1").unwrap();
-            assert!(old_d1.storage_ref.is_empty());
+            assert_eq!(old_d1.storage_ref, "");
         }
         let mut value = serde_json::to_value(&config).unwrap();
         assert_eq!(value["storage_ref"], "auth/account");

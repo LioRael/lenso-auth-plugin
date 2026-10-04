@@ -34,5 +34,30 @@ const MIGRATIONS: &[Migration] = sql_migrations![
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {
+    SchemaPlan::new(schema, &MIGRATIONS[..5])
+}
+
+pub(crate) fn managed_schema_plan(
+    schema: impl Into<std::sync::Arc<str>>,
+) -> Result<SchemaPlan, PlanError> {
     SchemaPlan::new(schema, MIGRATIONS)
+}
+
+/// Verify either explicitly upgraded managed storage or the unchanged legacy plan.
+/// This preparation never creates or upgrades tables.
+pub(crate) async fn prepare(
+    database_url: &str,
+    schema: &str,
+    managed_required: bool,
+) -> Result<lenso_postgres_kit::OwnedPostgres, lenso_postgres_kit::PostgresKitError> {
+    use lenso_postgres_kit::{OwnedPostgres, PostgresKitError};
+    match OwnedPostgres::prepare(database_url, managed_schema_plan(schema)?).await {
+        Ok(postgres) => Ok(postgres),
+        Err(PostgresKitError::UpgradeRequired {
+            current: 5,
+            expected: 6,
+            ..
+        }) if !managed_required => OwnedPostgres::prepare(database_url, schema_plan(schema)?).await,
+        Err(error) => Err(error),
+    }
 }

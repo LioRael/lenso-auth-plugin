@@ -19,6 +19,11 @@ impl AccountAuthPlugin {
                 .any(|entry| entry == caller)
         });
         let prepared = self.prepared();
+        let managed_policy = self
+            .config
+            .managed_sessions
+            .as_ref()
+            .map(|managed| managed.policy.clone());
         Box::pin(async move {
             if !allowed {
                 return Ok(Err(GrantError::PermissionDenied));
@@ -64,18 +69,28 @@ impl AccountAuthPlugin {
                 &digest,
                 &request.audience,
                 expires_at,
+                managed_policy.as_ref(),
             )
             .await?;
             let subject = match result {
                 Ok(subject) => subject,
                 Err(error) => return Ok(Err(error)),
             };
+            let response_expiry = if managed_policy.is_some() {
+                let session = storage::inspect_session(&prepared.store, &session_id)
+                    .await
+                    .map_err(runtime)?
+                    .ok_or_else(|| runtime("delegated session missing after committed grant"))?;
+                super::format_time(session.expires_at)?
+            } else {
+                request.expires_at
+            };
             Ok(Ok(GrantResponse {
                 session_id,
                 subject,
                 credential: token,
                 audience: request.audience,
-                expires_at: request.expires_at,
+                expires_at: response_expiry,
             }))
         })
     }
@@ -225,11 +240,16 @@ impl AccountAuthPlugin {
                         &request,
                         plugin.config.management_session_ceiling.as_ref(),
                         expiry,
+                        plugin
+                            .config
+                            .managed_sessions
+                            .as_ref()
+                            .map(|managed| &managed.policy),
                     )
                     .await
                 }
                 #[cfg(feature = "workers")]
-                storage::AccountStore::D1(_) => {
+                storage::AccountStore::D1 { .. } => {
                     Ok(Err(scoped::GrantScopedError::UnsupportedProfile))
                 }
             }
@@ -282,11 +302,16 @@ impl AccountAuthPlugin {
                         context.caller_instance().unwrap_or_default(),
                         &parent,
                         &request,
+                        plugin
+                            .config
+                            .managed_sessions
+                            .as_ref()
+                            .map(|managed| &managed.policy),
                     )
                     .await
                 }
                 #[cfg(feature = "workers")]
-                storage::AccountStore::D1(_) => {
+                storage::AccountStore::D1 { .. } => {
                     Ok(Err(scoped::ScopedReceiptError::UnsupportedProfile))
                 }
             }
@@ -342,6 +367,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "requires LENSO_POSTGRES_TEST_URL"]
+    #[allow(clippy::too_many_lines)] // One sequential grant and revocation lifecycle.
     async fn delegated_sessions_narrow_scope_and_follow_parent_revocation() {
         let (url, schema, postgres) = crate::tests::test_postgres("delegation").await;
         let subject = "usr_delegate";
@@ -363,7 +389,8 @@ mod tests {
                 "ses_bad",
                 &child_digest,
                 &["other.app@1:write".into()],
-                expiry
+                expiry,
+                None,
             )
             .await
             .unwrap(),
@@ -376,7 +403,8 @@ mod tests {
                 "ses_bad",
                 &child_digest,
                 &parent.audience,
-                parent.expires_at + Duration::seconds(1)
+                parent.expires_at + Duration::seconds(1),
+                None,
             )
             .await
             .unwrap(),
@@ -389,7 +417,8 @@ mod tests {
                 "ses_child",
                 &child_digest,
                 &parent.audience,
-                expiry
+                expiry,
+                None,
             )
             .await
             .unwrap()
@@ -410,13 +439,14 @@ mod tests {
                 "ses_nested",
                 &[3; 32],
                 &parent.audience,
-                expiry - Duration::seconds(1)
+                expiry - Duration::seconds(1),
+                None,
             )
             .await
             .unwrap(),
             Err(GrantError::NestedDelegation)
         ));
-        storage::postgres::revoke_credential(&postgres, &parent_digest)
+        storage::postgres::revoke_legacy_credential(&postgres, &parent_digest)
             .await
             .unwrap();
         assert!(
@@ -433,7 +463,8 @@ mod tests {
                 "ses_after",
                 &[4; 32],
                 &parent.audience,
-                expiry
+                expiry,
+                None,
             )
             .await
             .unwrap(),

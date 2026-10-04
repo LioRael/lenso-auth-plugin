@@ -35,7 +35,7 @@ const SQL: &[SqlMigration] = &[
         statement_ends: &[410, 552, 640],
     },
 ];
-pub fn plan() -> Result<Plan, Error> {
+pub fn managed_plan() -> Result<Plan, Error> {
     Plan::new(
         "lenso.auth.account",
         SQL,
@@ -70,7 +70,7 @@ impl Transport for D1Binding {
 
 /// Runtime Ready gate; never changes storage.
 pub async fn verify(binding: &D1Binding) -> Result<(), Error> {
-    plan()?.verify(binding).await
+    verify_compatible(binding, false).await.map(|_| ())
 }
 /// Explicit deployment operation for a fresh dedicated database.
 pub async fn setup(binding: &D1Binding) -> Result<(), Error> {
@@ -83,4 +83,35 @@ pub async fn upgrade(binding: &D1Binding) -> Result<(), Error> {
 /// Explicitly register the known legacy v1, without replaying its SQL.
 pub async fn adopt_legacy(binding: &D1Binding) -> Result<(), Error> {
     plan()?.adopt_legacy(binding).await
+}
+
+pub fn plan() -> Result<Plan, Error> {
+    Plan::new(
+        "lenso.auth.account",
+        &SQL[..2],
+        &MIGRATIONS[..2],
+        Some(LegacySchema {
+            table: "auth_account_schema",
+            fingerprint: "e2ab982504b77776e928387519fb612fcd4b0213007713ad5389d79910a1db12",
+        }),
+    )
+}
+/// Read-only exact-history admission. Returns whether digest history is supported.
+pub async fn verify_compatible(binding: &D1Binding, managed_required: bool) -> Result<bool, Error> {
+    match managed_plan()?.verify(binding).await {
+        Ok(()) => Ok(true),
+        Err(Error::UpgradeRequired) if !managed_required => {
+            plan()?.verify(binding).await?;
+            Ok(false)
+        }
+        Err(error) => Err(error),
+    }
+}
+/// Explicit opt-in operation for a fresh dedicated managed-session database.
+pub async fn setup_managed(binding: &D1Binding) -> Result<(), Error> {
+    managed_plan()?.setup(binding).await
+}
+/// Explicit opt-in operation for an existing dedicated managed-session database.
+pub async fn upgrade_managed(binding: &D1Binding) -> Result<(), Error> {
+    managed_plan()?.upgrade(binding).await
 }

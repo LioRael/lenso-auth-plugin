@@ -302,14 +302,14 @@ async fn all_domain_failures_preserve_browser_cookies_including_stale_rotation()
                 let (response, seen) = call(request(), Err(error)).await;
                 assert_eq!(seen, ["selected-synthetic"]);
                 assert_eq!(response.status, status);
-                assert!(headers(&response, "set-cookie").is_empty());
+                assert_eq!(headers(&response, "set-cookie"), [] as [&str; 0]);
                 assert_eq!(headers(&response, "cache-control"), ["no-store"]);
             }
             let mut invalid = success();
             invalid.credential = "unsafe; Cookie=value".into();
             let (response, _) = call(request(), Ok(invalid)).await;
             assert_eq!(response.status, 502);
-            assert!(headers(&response, "set-cookie").is_empty());
+            assert_eq!(headers(&response, "set-cookie"), [] as [&str; 0]);
         }))
         .await;
 }
@@ -339,9 +339,9 @@ async fn origin_body_and_missing_selected_session_fail_before_provider_mutation(
                 (wrong_scheme, 401),
             ] {
                 let (response, seen) = call(input, Ok(success())).await;
-                assert!(seen.is_empty());
+                assert_eq!(seen, [] as [&str; 0]);
                 assert_eq!(response.status, status);
-                assert!(headers(&response, "set-cookie").is_empty());
+                assert_eq!(headers(&response, "set-cookie"), [] as [&str; 0]);
             }
         }))
         .await;
@@ -378,7 +378,7 @@ async fn state_reads_current_cookie_metadata_without_rotation_or_cookie_material
                 let (response, seen) = call(input, Ok(success())).await;
                 assert_eq!(seen, ["read:selected-synthetic"]);
                 assert_eq!(response.status, 200);
-                assert!(headers(&response, "set-cookie").is_empty());
+                assert_eq!(headers(&response, "set-cookie"), [] as [&str; 0]);
                 assert_eq!(headers(&response, "cache-control"), ["no-store"]);
                 let body: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
                 assert_eq!(body["authenticated"], true);
@@ -398,7 +398,7 @@ async fn state_reads_current_cookie_metadata_without_rotation_or_cookie_material
                 let (response, seen) = call(state_request(), Err(error)).await;
                 assert_eq!(seen, ["read:selected-synthetic"]);
                 assert_eq!(response.status, status);
-                assert!(headers(&response, "set-cookie").is_empty());
+                assert_eq!(headers(&response, "set-cookie"), [] as [&str; 0]);
             }
         }))
         .await;
@@ -432,9 +432,9 @@ async fn state_rejects_unsafe_or_ambiguous_origin_before_reading_provider() {
                 (scheme, 401),
             ] {
                 let (response, seen) = call(input, Ok(success())).await;
-                assert!(seen.is_empty());
+                assert_eq!(seen, [] as [&str; 0]);
                 assert_eq!(response.status, status);
-                assert!(headers(&response, "set-cookie").is_empty());
+                assert_eq!(headers(&response, "set-cookie"), [] as [&str; 0]);
             }
         }))
         .await;

@@ -1,14 +1,15 @@
 # Managed session local D1 proof
 
 This isolated fixture compiles the actual Account-owned
-`src/storage/d1.rs`, `src/storage/d1_managed.rs`, and `src/workers.rs` through
+`src/storage/d1.rs`, `src/storage/d1_managed.rs`, `src/workers.rs`, and the generated
+`src/migration.rs` through
 Rust source paths. It uses the actual Auth-owned JS D1 bridge and primary D1
 batch transactions in local workerd/Miniflare. Only model and request framing
 are fixture shims; SQL is not copied or reimplemented. This proves the storage
 transition, not the generated Capability, Kernel caller ACL, Password login,
 CSRF ingress, Cookie adapter, or complete App composition.
 
-Install the declared local Node development dependencies, use Rust 1.94 with
+Install the declared local Node development dependencies, use Rust 1.94 or newer with
 the `wasm32-unknown-unknown` target, and use `wasm-bindgen-cli` 0.2.127 (matching
 this independent fixture's committed Cargo lock). Run:
 
@@ -19,16 +20,16 @@ node qualify.mjs /tmp/managed-session-d1-receipt.json
 The local listener may need the execution environment's sandbox permission.
 No remote Cloudflare account, service, credentials, or production database is
 used. Every run creates an ephemeral local D1 database, applies the actual owner
-SQL migrations explicitly, and deletes the fixture persistence directory after
+generated migration operators explicitly, and deletes the fixture persistence directory after
 the test. This is not an automatic production migration workflow.
 
 When already-installed read-only tool packages are outside this directory,
 `LENSO_WRANGLER_PACKAGE` may identify their `wrangler/package.json` and
 `LENSO_WORKERS_RUNTIME_PACKAGE` the Workers Runtime `index.mjs` entry. The
-fixture records the actual Wrangler, Miniflare, and wasm-bindgen versions.
+fixture records the actual Rust, Wrangler, Miniflare, and wasm-bindgen versions.
 `LENSO_CARGO` and `LENSO_WASM_BINDGEN` can select matching executables.
 
-The receipt records actual owner source hashes and 25 grouped scenarios:
+The receipt records actual owner source hashes and 30 grouped scenarios:
 single-winner concurrent rotation, write-free stale/TooEarly/expiry rejection,
 historical-token revocation after multiple rotations, revocation/disable races
 in both orders, narrower policy and frozen upper bounds, atomic constraint
@@ -42,6 +43,17 @@ historical digest. The private read-only policy bound also applies a managed
 parent's narrowed idle or absolute deadline to its delegated child, while
 preserving the child's own earlier expiry and legacy behavior. Delegated
 credentials remain unsupported for renewal and public managed metadata.
+
+The actual generated `verify_compatible` admits the legacy v2 schema with
+managed configuration disabled, rejects it when managed is required, and never
+writes schema or data during verification. Legacy issue, delegation, and current
+credential revocation run before the managed tables exist. After the explicit
+managed upgrade, verification reports history support even when managed
+configuration is disabled. Managed delegation checks the parent's current
+idle and absolute bounds in its atomic batch, rejects expired parents without
+writes, and clips a permitted child's expiry to the effective parent boundary.
+Original audience and stored-expiry authority checks remain in force; an
+already expired requested child is rejected as expired without writes.
 
 The browser must interpret stale as retryable competition, preserve the newer
 Cookie, and at most revalidate the current Cookie once. The fixture does not

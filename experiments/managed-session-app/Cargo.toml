@@ -1,0 +1,49 @@
+[workspace]
+
+[package]
+name = "lenso-managed-session-app-proof"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = ["postgres"]
+postgres = ["lenso-auth-account-plugin/postgres", "lenso-auth-password-plugin/postgres", "dep:lenso-runner", "dep:sqlx", "tokio/rt"]
+workers = ["lenso-auth-account-plugin/workers", "lenso-auth-password-plugin/workers", "lenso-auth-session-renewal-plugin/workers", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys"]
+
+[dependencies]
+lenso = "=0.5.29"
+lenso-app-plan = "=0.4.6"
+lenso-kernel = "=0.3.12"
+lenso-native-adapter = "=0.3.20"
+lenso-runner = { version = "=0.2.20", optional = true }
+lenso-web-ingress-plugin = { version = "=0.4.11", default-features = false }
+lenso-capability-http-endpoint = "=0.3.7"
+lenso-capability-secrets = "=0.1.4"
+lenso-auth-account-plugin = { path = "../../crates/lenso-auth-account-plugin", default-features = false }
+lenso-auth-password-plugin = { path = "../../crates/lenso-auth-password-plugin", default-features = false }
+lenso-auth-session-renewal-plugin = { path = "../../crates/lenso-auth-session-renewal-plugin" }
+lenso-capability-auth = { path = "../../crates/lenso-capability-auth" }
+lenso-capability-account-admin = { path = "../../crates/lenso-capability-account-admin" }
+lenso-capability-auth-delegation = { path = "../../crates/lenso-capability-auth-delegation" }
+lenso-capability-credential-state = { path = "../../crates/lenso-capability-credential-state" }
+lenso-capability-credential-issuer = { path = "../../crates/lenso-capability-credential-issuer" }
+lenso-capability-identity-directory = { path = "../../crates/lenso-capability-identity-directory" }
+lenso-capability-managed-session = { path = "../../crates/lenso-capability-managed-session" }
+lenso-capability-password-auth = { path = "../../crates/lenso-capability-password-auth" }
+bytes = "1"
+http = "1"
+futures = "0.3"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+wasm-bindgen = { version = "=0.2.128", optional = true }
+wasm-bindgen-futures = { version = "=0.4.78", optional = true }
+js-sys = { version = "=0.3.105", optional = true }
+sqlx = { version = "0.9", default-features = false, optional = true, features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "time"] }
+tokio = { version = "1.52", default-features = false, features = ["sync"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { version = "1.52", features = ["macros", "rt", "time"] }

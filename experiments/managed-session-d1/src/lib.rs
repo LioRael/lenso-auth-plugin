@@ -11,6 +11,8 @@ use wasm_bindgen::prelude::*;
 
 #[path = "../../../crates/lenso-auth-account-plugin/src/storage/d1.rs"]
 mod d1;
+#[path = "../../../crates/lenso-auth-account-plugin/src/migration.rs"]
+mod migration;
 #[path = "../../../crates/lenso-auth-account-plugin/src/workers.rs"]
 mod workers;
 
@@ -183,6 +185,26 @@ pub async fn invoke(input: String, batch: js_sys::Function) -> Result<String, Js
         .map_err(|_| JsValue::from_str("Invalid local fixture JSON"))?;
     let db = workers::D1Binding::new("LOCAL_ONLY", batch);
     match string(&input, "operation")?.as_str() {
+        "migration" => {
+            let result = match string(&input, "action")?.as_str() {
+                "setup_legacy" => migration::setup(&db).await.map(|()| json!(true)),
+                "upgrade_managed" => migration::upgrade_managed(&db).await.map(|()| json!(true)),
+                "verify" => migration::verify_compatible(
+                    &db,
+                    input["managed_required"].as_bool().unwrap_or(false),
+                )
+                .await
+                .map(|value| json!(value)),
+                _ => return Err(JsValue::from_str("Invalid local fixture migration action")),
+            };
+            match result {
+                Ok(value) => Ok(json!({"Ok":value}).to_string()),
+                Err(lenso_migration_d1::Error::UpgradeRequired) => {
+                    Ok(json!({"Err":"upgrade_required"}).to_string())
+                }
+                Err(_) => Ok(json!({"Err":"migration_failure"}).to_string()),
+            }
+        }
         "ensure" => wire(
             d1::ensure_identity(
                 &db,
@@ -267,6 +289,9 @@ pub async fn invoke(input: String, batch: js_sys::Function) -> Result<String, Js
         "load" => wire(d1::load_session(&db, &bytes(&input, "digest")?).await),
         "inspect" => wire(d1::inspect_session(&db, &string(&input, "session_id")?).await),
         "revoke_credential" => wire(d1::revoke_credential(&db, &bytes(&input, "digest")?).await),
+        "revoke_legacy_credential" => {
+            wire(d1::revoke_legacy_credential(&db, &bytes(&input, "digest")?).await)
+        }
         "revoke_session" => wire(d1::revoke_session(&db, &string(&input, "session_id")?).await),
         "disable" => {
             let value =
@@ -276,13 +301,27 @@ pub async fn invoke(input: String, batch: js_sys::Function) -> Result<String, Js
             Ok(json!(value).to_string())
         }
         "grant" => {
+            let selected_policy: Option<ManagedSessionPolicy> = input
+                .get("managed_policy")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .map_err(|_| JsValue::from_str("Invalid local fixture policy"))?;
+            let expiry = OffsetDateTime::now_utc()
+                + Duration::seconds(input["expiry_offset_seconds"].as_i64().unwrap_or(10));
+            let audience: Vec<String> = input
+                .get("audience")
+                .map(|value| serde_json::from_value(value.clone()))
+                .transpose()
+                .map_err(|_| JsValue::from_str("Invalid local fixture audience"))?
+                .unwrap_or_else(|| vec!["fixture.resource@1:read".into()]);
             let value = d1::create_grant(
                 &db,
                 &bytes(&input, "parent_digest")?,
                 &string(&input, "session_id")?,
                 &bytes(&input, "digest")?,
-                &["fixture.resource@1:read".into()],
-                OffsetDateTime::now_utc() + Duration::seconds(10),
+                &audience,
+                expiry,
+                selected_policy.as_ref(),
             )
             .await
             .map_err(|e| JsValue::from_str(&e))?;

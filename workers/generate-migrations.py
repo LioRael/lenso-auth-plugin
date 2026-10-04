@@ -77,6 +77,31 @@ pub async fn upgrade(binding: &D1Binding) -> Result<(), Error> { plan()?.upgrade
 /// Explicitly register the known legacy v1, without replaying its SQL.
 pub async fn adopt_legacy(binding: &D1Binding) -> Result<(), Error> { plan()?.adopt_legacy(binding).await }
 '''
+    if owner == "account":
+        # Managed tables are opt-in; preserve the existing v2 operator plan.
+        text = text.replace('pub fn plan() -> Result<Plan, Error> {',
+            'pub fn managed_plan() -> Result<Plan, Error> {', 1)
+        text += '\n' + f'''pub fn plan() -> Result<Plan, Error> {{
+    Plan::new("lenso.auth.account", &SQL[..2], &MIGRATIONS[..2], Some(LegacySchema {{ table: "{marker[1]}", fingerprint: "{marker[2]}" }}))
+}}
+/// Read-only exact-history admission. Returns whether digest history is supported.
+pub async fn verify_compatible(binding: &D1Binding, managed_required: bool) -> Result<bool, Error> {{
+    match managed_plan()?.verify(binding).await {{
+        Ok(()) => Ok(true),
+        Err(Error::UpgradeRequired) if !managed_required => {{
+            plan()?.verify(binding).await?;
+            Ok(false)
+        }}
+        Err(error) => Err(error),
+    }}
+}}
+/// Explicit opt-in operation for a fresh dedicated managed-session database.
+pub async fn setup_managed(binding: &D1Binding) -> Result<(), Error> {{ managed_plan()?.setup(binding).await }}
+/// Explicit opt-in operation for an existing dedicated managed-session database.
+pub async fn upgrade_managed(binding: &D1Binding) -> Result<(), Error> {{ managed_plan()?.upgrade(binding).await }}
+'''
+        text = text.replace('pub async fn verify(binding: &D1Binding) -> Result<(), Error> { plan()?.verify(binding).await }',
+            'pub async fn verify(binding: &D1Binding) -> Result<(), Error> { verify_compatible(binding, false).await.map(|_| ()) }')
     # Match repository formatting without editing unrelated files.
     result = subprocess.run(["rustfmt", "+1.94.0", "--edition", "2024"], input=text, text=True, capture_output=True, check=True)
     return crate / "src/migration.rs", result.stdout

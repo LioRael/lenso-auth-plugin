@@ -3,7 +3,7 @@ use lenso_postgres_kit::{
 };
 use thiserror::Error;
 
-use crate::schema::schema_plan;
+use crate::schema::{managed_schema_plan, schema_plan};
 
 /// Explicit schema and subject administration for the Account Plugin.
 #[derive(Clone, Debug)]
@@ -30,9 +30,33 @@ impl AccountAuthOperator {
             .upgrade()
             .await?)
     }
+    /// Explicit opt-in setup including managed-session tables.
+    pub async fn setup_managed(
+        database_url: &str,
+        schema: &str,
+    ) -> Result<SetupOutcome, AccountOperatorError> {
+        Ok(
+            SchemaOperator::connect(database_url, managed_schema_plan(schema)?)
+                .await?
+                .setup()
+                .await?,
+        )
+    }
+    /// Explicit opt-in upgrade including managed-session tables.
+    pub async fn upgrade_managed(
+        database_url: &str,
+        schema: &str,
+    ) -> Result<UpgradeOutcome, AccountOperatorError> {
+        Ok(
+            SchemaOperator::connect(database_url, managed_schema_plan(schema)?)
+                .await?
+                .upgrade()
+                .await?,
+        )
+    }
     pub async fn connect(database_url: &str, schema: &str) -> Result<Self, AccountOperatorError> {
         Ok(Self {
-            postgres: OwnedPostgres::prepare(database_url, schema_plan(schema)?).await?,
+            postgres: crate::schema::prepare(database_url, schema, false).await?,
         })
     }
     /// Updates display-only subject data using an explicit revision precondition.

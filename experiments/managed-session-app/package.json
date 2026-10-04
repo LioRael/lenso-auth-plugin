@@ -1,0 +1,8 @@
+{
+  "name": "lenso-managed-session-app-local-proof",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test:workers": "node qualify-workers.mjs"},
+  "devDependencies": {"@lenso/workers-runtime": "0.1.2", "wrangler": "4.136.3"}
+}
