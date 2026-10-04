@@ -4,6 +4,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 static SCHEMA_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+fn fixture_url() -> String {
+    let url = std::env::var("LENSO_POSTGRES_TEST_URL").expect("isolated synthetic PG required");
+    let local_fixture = url.starts_with("postgres://renewal_fixture@127.0.0.1:55494/");
+    let ci_fixture = std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
+        && url == "postgres://postgres@localhost:5432/postgres";
+    assert!(local_fixture || ci_fixture, "refuse non-fixture database");
+    url
+}
+
 fn config() -> OperatorBindingConfig {
     let now = OffsetDateTime::now_utc();
     OperatorBindingConfig {
@@ -19,8 +28,7 @@ fn config() -> OperatorBindingConfig {
     }
 }
 async fn fixture() -> (AccountStore, String, String) {
-    let url = std::env::var("LENSO_POSTGRES_TEST_URL").expect("isolated synthetic PG required");
-    assert!(url.starts_with("postgres://renewal_fixture@127.0.0.1:55494/"));
+    let url = fixture_url();
     let schema = format!(
         "operator_binding_{}_{}_{}",
         std::process::id(),
@@ -196,8 +204,7 @@ async fn binding_history_cannot_revive_when_configuration_is_removed() {
 #[tokio::test]
 #[ignore = "requires isolated LENSO_POSTGRES_TEST_URL"]
 async fn operator_history_is_explicit_and_legacy_readiness_remains_compatible() {
-    let url = std::env::var("LENSO_POSTGRES_TEST_URL").expect("isolated synthetic PG required");
-    assert!(url.starts_with("postgres://renewal_fixture@127.0.0.1:55494/"));
+    let url = fixture_url();
     for managed in [false, true] {
         let schema = format!(
             "operator_history_{}_{}",

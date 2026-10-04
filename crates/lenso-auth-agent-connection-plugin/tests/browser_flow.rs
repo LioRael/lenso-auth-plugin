@@ -123,10 +123,7 @@ fn instance(key: &str, descriptor: &str, config: &Value) -> PluginInstancePlan {
         result = result.with_capability(endpoint);
     }
     for entry in descriptor["required_capabilities"].as_array().unwrap() {
-        result = result.with_requirement(CapabilityRequirementPlan::one(
-            entry["capability_id"].as_str().unwrap(),
-            entry["descriptor_version"].as_str().unwrap(),
-        ));
+        result = result.with_requirement(serde_json::from_value(entry.clone()).unwrap());
     }
     result
 }

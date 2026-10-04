@@ -10,7 +10,17 @@ use lenso_capability_auth_profile_cache as cache;
 use lenso_capability_secrets as secrets;
 
 fn host(include_cache: bool) -> HostCatalog {
-    let account = serde_json::from_str(lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON).unwrap();
+    let account: PluginDescriptor =
+        serde_json::from_str(lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON).unwrap();
+    let source_accounts = account
+        .required_capabilities()
+        .iter()
+        .find(|requirement| {
+            requirement.cardinality() == lenso_app_plan::CapabilityCardinality::Many
+        })
+        .unwrap()
+        .capability_id()
+        .to_owned();
     let profile = serde_json::from_str(lenso_auth_profile_plugin::PLUGIN_DESCRIPTOR_JSON).unwrap();
     let secret = PluginDescriptor::new("test.secrets", "0.1.0", "secrets")
         .with_runtime_package("test.secrets", "0.1.0")
@@ -77,17 +87,26 @@ fn host(include_cache: bool) -> HostCatalog {
             HostSlot::one("secrets"),
             HostSlot::one("auth-profile"),
             HostSlot::optional("auth-profile-cache"),
+            HostSlot::optional("source_accounts"),
         ],
         releases,
         defaults,
     )
-    .with_bindings([HostBinding::new(
-        PluginInstanceId::new(lenso_auth_profile_plugin::PACKAGE_ID, "default"),
-        cache::CAPABILITY_ID,
-        "auth-profile-cache",
-    )
-    .with_requirement_id("profile_cache")
-    .selectable(None)])
+    .with_bindings([
+        HostBinding::new(
+            PluginInstanceId::new(lenso_auth_profile_plugin::PACKAGE_ID, "default"),
+            cache::CAPABILITY_ID,
+            "auth-profile-cache",
+        )
+        .with_requirement_id("profile_cache")
+        .selectable(None),
+        // Operator binding is disabled; do not automatically bind Account to itself.
+        HostBinding::new(
+            PluginInstanceId::new(lenso_auth_account_plugin::PACKAGE_ID, "default"),
+            source_accounts,
+            "source_accounts",
+        ),
+    ])
 }
 
 #[test]
