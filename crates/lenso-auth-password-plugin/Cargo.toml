@@ -30,9 +30,9 @@ wasm-bindgen-futures = { version = "0.4", optional = true }
 lenso.workspace = true
 argon2.workspace = true
 getrandom.workspace = true
-lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.3.0" }
-lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.3.0" }
-lenso-capability-password-auth = { path = "../lenso-capability-password-auth", version = "0.3.0" }
+lenso-capability-credential-issuer = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
+lenso-capability-identity-directory = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
+lenso-capability-password-auth = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true
