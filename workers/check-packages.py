@@ -75,6 +75,49 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         name = tomllib.loads((directory / "Cargo.toml").read_text())["package"]["name"]
         runtime_packages[name] = directory
 
+    if "operator-session" in OWNERS:
+        # Cargo normalizes Git dependencies to registry versions in .crate files.
+        # Stage the operator's unpublished Roles as real archives from exactly
+        # the locked Git objects; never patch the extracted graph to source trees.
+        graph = json.loads(cargo("metadata", "--locked", "--format-version", "1", capture=True))
+        manifest = ROOT / "crates/lenso-auth-operator-session-plugin/Cargo.toml"
+        dependencies = tomllib.loads(manifest.read_text())["dependencies"]
+        snapshots = {}
+        for name in ("lenso-capability-access-control", "lenso-capability-access-control-admin",
+                     "lenso-capability-audit-log"):
+            declared = dependencies[name]
+            source = f'git+{declared["git"]}?rev={declared["rev"]}#{declared["rev"]}'
+            candidates = [package for package in graph["packages"]
+                          if package["name"] == name and package["source"] == source
+                          and package["version"] == declared["version"]]
+            assert len(candidates) == 1, f"{name}: expected exact locked Git Role"
+            dependency = candidates[0]
+            if name in runtime_packages:
+                packed = tomllib.loads((runtime_packages[name] / "Cargo.toml").read_text())["package"]
+                assert packed["version"] == dependency["version"], f"{name}: supplied archive version drift"
+                continue
+            cached_manifest = Path(dependency["manifest_path"])
+            repository = Path(subprocess.check_output(
+                ["git", "-C", str(cached_manifest.parent), "rev-parse", "--show-toplevel"], text=True).strip())
+            key = (repository, declared["rev"])
+            if key not in snapshots:
+                snapshot = task / f"git-role-source-{len(snapshots)}"
+                snapshot.mkdir()
+                archive = task / f"git-role-source-{len(snapshots)}.tar"
+                subprocess.run(["git", "-C", str(repository), "archive", "--format=tar",
+                                f"--output={archive}", declared["rev"]], check=True)
+                with tarfile.open(archive) as packed:
+                    packed.extractall(snapshot, filter="data")
+                snapshots[key] = snapshot
+            isolated_manifest = snapshots[key] / cached_manifest.relative_to(repository)
+            cargo("package", "--manifest-path", isolated_manifest, "--no-verify",
+                  "--allow-dirty", "--target-dir", archives)
+            archive = archives / "package" / f'{name}-{dependency["version"]}.crate'
+            with tarfile.open(archive) as packed:
+                packed.extractall(extracted, filter="data")
+            runtime_packages[name] = extracted / archive.name.removesuffix(".crate")
+            print(f"STAGED: {name} {dependency['version']} from {source}", flush=True)
+
     cohort_config = task / "cohort-patch.toml"
     cohort_config.write_text("[patch.crates-io]\n" + "".join(
         f'{name} = {{ path = {json.dumps(str(directory))} }}\n'
