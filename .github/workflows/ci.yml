@@ -54,6 +54,10 @@ jobs:
         run: cargo fetch --manifest-path experiments/managed-session-app/Cargo.toml --locked
       - name: Test complete synthetic Native managed-session App and real Ingress
         run: cargo test --manifest-path experiments/managed-session-app/Cargo.toml --locked --offline --test native_ingress -- --ignored
+      - name: Fetch frozen synthetic operator App dependencies
+        run: cargo fetch --manifest-path experiments/operator-binding-app/Cargo.toml --locked
+      - name: Test complete synthetic Native operator App
+        run: cargo test --manifest-path experiments/operator-binding-app/Cargo.toml --locked --offline --test native_binding -- --ignored
       - name: Lint workspace
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Check portable Auth targets
@@ -66,8 +70,8 @@ jobs:
         run: |
           python3 workers/generate-migrations.py --check
           python3 workers/test-migration-generation.py
-      - name: Check managed browser renewal Workers implementation
-        run: cargo clippy --locked --target wasm32-unknown-unknown --features workers -p lenso-auth-session-renewal-plugin -- -D warnings
+      - name: Check renewal and operator workflow Workers implementations
+        run: cargo clippy --locked --target wasm32-unknown-unknown --features workers -p lenso-auth-session-renewal-plugin -p lenso-auth-operator-session-plugin -- -D warnings
       - name: Install frozen synthetic managed-session App tooling
         run: npm ci --ignore-scripts --prefix experiments/managed-session-app
       - name: Install matching Wasm Bindgen test tool
@@ -76,6 +80,16 @@ jobs:
         run: node experiments/managed-session-app/qualify-workers.mjs
       - name: Test browser renewal competition and response loss
         run: node --test crates/lenso-auth-session-renewal-plugin/browser/session-renewal.test.mjs
+      - name: Fetch frozen synthetic Workers operator App dependencies
+        run: cargo fetch --manifest-path experiments/operator-binding-workers-app/Cargo.toml --locked
+      - name: Install frozen synthetic Workers operator App tooling
+        run: npm ci --ignore-scripts --prefix experiments/operator-binding-workers-app
+      - name: Install isolated matching operator Wasm Bindgen test tool
+        run: cargo install --locked --version 0.2.127 --root "$RUNNER_TEMP/auth-operator-wasm-bindgen-0127" wasm-bindgen-cli
+      - name: Test complete synthetic Workers operator App
+        env:
+          LENSO_WASM_BINDGEN: ${{ runner.temp }}/auth-operator-wasm-bindgen-0127/bin/wasm-bindgen
+        run: node experiments/operator-binding-workers-app/qualify-workers.mjs /tmp/operator-workers-app.json
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
       - name: Verify source-selected D1 facility

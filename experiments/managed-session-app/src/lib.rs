@@ -6,9 +6,7 @@ use lenso_auth_account_plugin::{
     AccountAuthConfig, ManagedSessionConfig, ManagedSessionPolicy, assertion_public_key,
 };
 use lenso_auth_password_plugin::PasswordAuthConfig;
-use lenso_capability_account_admin as admin;
 use lenso_capability_auth as auth;
-use lenso_capability_auth_delegation as delegation;
 use lenso_capability_credential_issuer as issuer;
 use lenso_capability_credential_state as state;
 use lenso_capability_http_endpoint as endpoint;
@@ -132,56 +130,17 @@ pub fn plan_with_policy(
         renew_callers: vec![RENEWAL.into()],
     })
     .unwrap();
-    let mut account = req(
-        PluginInstancePlan::new(ACCOUNT, "lenso.auth.account")
-            .with_configuration(storage_configuration(&config, "ACCOUNT_DB")),
-        secrets::CAPABILITY_ID,
-        secrets::DESCRIPTOR_VERSION,
-    );
-    let account_caps = [
-        cap(
-            auth::CAPABILITY_ID,
-            auth::DESCRIPTOR_VERSION,
-            &["authenticate"],
-        ),
-        cap(
-            directory::CAPABILITY_ID,
-            directory::DESCRIPTOR_VERSION,
-            &["ensure_identity", "read_status"],
-        ),
-        cap(
-            issuer::CAPABILITY_ID,
-            issuer::DESCRIPTOR_VERSION,
-            &["issue", "revoke", "revoke_credential"],
-        ),
-        cap(
-            admin::CAPABILITY_ID,
-            admin::DESCRIPTOR_VERSION,
-            &[
-                "list_subjects",
-                "list_sessions",
-                "set_subject_status",
-                "read_profile",
-            ],
-        ),
-        cap(
-            delegation::CAPABILITY_ID,
-            delegation::DESCRIPTOR_VERSION,
-            &["grant", "grant_scoped", "scoped_receipt"],
-        ),
-        cap(
-            state::CAPABILITY_ID,
-            state::DESCRIPTOR_VERSION,
-            &["inspect"],
-        ),
-        cap(
-            managed::CAPABILITY_ID,
-            managed::DESCRIPTOR_VERSION,
-            &["issue_managed", "renew", "read_managed"],
-        ),
-    ];
-    for c in account_caps {
-        account = account.with_capability(c);
+    // Keep this legacy explicit-composition fixture current with the actual owner.
+    // Operator binding remains disabled; its many-port Directory has zero bindings.
+    let descriptor: lenso_app_plan::authoring::PluginDescriptor =
+        serde_json::from_str(lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON).unwrap();
+    let mut account = PluginInstancePlan::new(ACCOUNT, "lenso.auth.account")
+        .with_configuration(storage_configuration(&config, "ACCOUNT_DB"));
+    for capability in descriptor.provided_capabilities() {
+        account = account.with_capability(capability.clone());
+    }
+    for requirement in descriptor.required_capabilities() {
+        account = account.with_requirement(requirement.clone());
     }
     let password_config = PasswordAuthConfig::new(
         password_schema,

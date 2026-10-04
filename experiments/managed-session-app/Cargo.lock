@@ -832,6 +832,7 @@ dependencies = [
  "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
  "lenso-capability-managed-session",
+ "lenso-capability-operator-binding",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-migration",
@@ -1050,6 +1051,21 @@ dependencies = [
 
 [[package]]
 name = "lenso-capability-managed-session"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.2",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-operator-binding"
 version = "0.1.0"
 dependencies = [
  "futures",
