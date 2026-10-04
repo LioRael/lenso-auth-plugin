@@ -1,0 +1,11 @@
+{
+  "name":"lenso-managed-session-d1-local-proof",
+  "version":"0.1.0",
+  "private":true,
+  "type":"module",
+  "scripts":{"test":"node qualify.mjs"},
+  "devDependencies":{
+    "@lenso/workers-runtime":"0.1.2",
+    "wrangler":"4.136.3"
+  }
+}

@@ -15,6 +15,11 @@ const MIGRATIONS: &[Migration] = &[
         "pagination-indexes",
         include_str!("../migrations/d1/002_pagination_indexes.sql"),
     ),
+    Migration::new(
+        3,
+        "managed-sessions",
+        include_str!("../migrations/d1/003_managed_sessions.sql"),
+    ),
 ];
 const SQL: &[SqlMigration] = &[
     SqlMigration {
@@ -24,6 +29,10 @@ const SQL: &[SqlMigration] = &[
     SqlMigration {
         migration: MIGRATIONS[1],
         statement_ends: &[161],
+    },
+    SqlMigration {
+        migration: MIGRATIONS[2],
+        statement_ends: &[410, 552, 640],
     },
 ];
 pub fn plan() -> Result<Plan, Error> {

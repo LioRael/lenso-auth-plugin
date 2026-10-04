@@ -1,0 +1,29 @@
+{
+  "id": "lenso.auth.managed-session@1",
+  "version": "1.0.0",
+  "portable": true,
+  "cross_lane_transfer": true,
+  "operations": [
+    {
+      "name": "issue_managed",
+      "interaction": "request",
+      "request_schema": "schemas/issue-managed-request.schema.json",
+      "response_schema": "schemas/issue-managed-response.schema.json",
+      "domain_error_schema": "schemas/issue-managed-error.schema.json"
+    },
+    {
+      "name": "renew",
+      "interaction": "request",
+      "request_schema": "schemas/renew-request.schema.json",
+      "response_schema": "schemas/renew-response.schema.json",
+      "domain_error_schema": "schemas/renew-error.schema.json"
+    },
+    {
+      "name": "read_managed",
+      "interaction": "request",
+      "request_schema": "schemas/read-managed-request.schema.json",
+      "response_schema": "schemas/read-managed-response.schema.json",
+      "domain_error_schema": "schemas/read-managed-error.schema.json"
+    }
+  ]
+}

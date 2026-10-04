@@ -18,7 +18,7 @@ use std::{cell::RefCell, collections::BTreeMap, fmt, future::Future, rc::Rc, syn
 use std::time::Duration as StdDuration;
 
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
-use lenso::{ActivateContext, DeactivateContext, Lifecycle, Port, provides};
+use lenso::{ActivateContext, DeactivateContext, Lifecycle, ManyPort, Port, provides};
 use lenso_capability_credential_issuer as credential_issuer;
 use lenso_capability_credential_issuer::{
     CredentialIssuerClient, CredentialIssuerIssueInvocationError, IssueError, IssueRequest,
@@ -26,6 +26,11 @@ use lenso_capability_credential_issuer::{
 use lenso_capability_identity_directory as directory;
 use lenso_capability_identity_directory::{
     DirectoryEnsureIdentityInvocationError, EnsureIdentityError, EnsureIdentityRequest,
+};
+use lenso_capability_managed_session as managed;
+use lenso_capability_managed_session::{
+    IssueManagedError, IssueManagedRequest, ManagedSessionClient,
+    ManagedSessionIssueManagedInvocationError,
 };
 use lenso_capability_password_auth as password;
 use lenso_capability_password_auth::{
@@ -75,6 +80,9 @@ pub struct PasswordAuthConfig {
     storage_ref: String,
     audience: Vec<String>,
     session_ttl_seconds: u64,
+    #[serde(default)]
+    #[lenso(default = false)]
+    managed_sessions: bool,
     max_failures: u32,
     failure_window_seconds: u64,
 }
@@ -95,6 +103,7 @@ impl PasswordAuthConfig {
             storage_ref: String::new(),
             audience,
             session_ttl_seconds,
+            managed_sessions: false,
             max_failures,
             failure_window_seconds,
         };
@@ -111,6 +120,14 @@ impl PasswordAuthConfig {
         self.d1_binding.clear();
         self.validate()?;
         Ok(self)
+    }
+
+    /// Opt in to Account-owned managed issuance through an explicit capability binding.
+    /// The legacy TTL remains configured for compatibility, but is not sent in this mode.
+    #[must_use]
+    pub fn with_managed_sessions(mut self, enabled: bool) -> Self {
+        self.managed_sessions = enabled;
+        self
     }
 
     fn validate(&self) -> Result<(), PasswordConfigError> {
@@ -317,6 +334,9 @@ struct PasswordAuthPlugin {
     secrets: Port<secrets::SecretsClient>,
     directory: Port<directory::DirectoryClient>,
     issuer: Port<credential_issuer::CredentialIssuerClient>,
+    // Existing lifecycle authoring exposes zero-or-many Ports; activation narrows this
+    // optional role to at most one provider instead of silently picking among bindings.
+    managed_sessions: ManyPort<managed::ManagedSessionClient>,
     store: Rc<RefCell<Option<storage::PasswordStore>>>,
     #[allow(dead_code)]
     #[facility(id = "state")]
@@ -352,6 +372,7 @@ impl PasswordProvider for PasswordAuthPlugin {
         let active = self.active();
         let directory = self.directory.clone();
         let issuer = self.issuer.clone();
+        let managed_sessions = self.managed_sessions.clone();
         Box::pin(async move {
             let active = active?;
             let identifier =
@@ -393,7 +414,16 @@ impl PasswordProvider for PasswordAuthPlugin {
             {
                 return Ok(Err(RegisterError::IdentifierTaken));
             }
-            let credential = issue(&active, &issuer, context, &identity.subject).await;
+            let credential = issue(
+                &active.config,
+                &issuer,
+                managed_sessions
+                    .first()
+                    .map(lenso::BoundCapabilityClient::client),
+                context,
+                &identity.subject,
+            )
+            .await;
             match credential {
                 Ok(value) => Ok(Ok(RegisterResponse {
                     subject: identity.subject,
@@ -414,6 +444,7 @@ impl PasswordProvider for PasswordAuthPlugin {
     ) -> NativeRequestFuture<PasswordLogin> {
         let active = self.active();
         let issuer = self.issuer.clone();
+        let managed_sessions = self.managed_sessions.clone();
         Box::pin(async move {
             let active = active?;
             let Some(identifier) = normalize_identifier(&request.identifier) else {
@@ -466,7 +497,17 @@ impl PasswordProvider for PasswordAuthPlugin {
                 .await
                 .map_err(runtime)?;
             let subject = subject.expect("verified credential has a subject");
-            match issue(&active, &issuer, context, &subject).await {
+            match issue(
+                &active.config,
+                &issuer,
+                managed_sessions
+                    .first()
+                    .map(lenso::BoundCapabilityClient::client),
+                context,
+                &subject,
+            )
+            .await
+            {
                 Ok(value) => Ok(Ok(LoginResponse {
                     subject,
                     credential: value.credential,
@@ -481,13 +522,51 @@ impl PasswordProvider for PasswordAuthPlugin {
 }
 
 async fn issue(
-    active: &ActivePassword,
+    config: &PasswordAuthConfig,
     issuer: &CredentialIssuerClient,
+    managed_sessions: Option<&ManagedSessionClient>,
     context: InvocationContext,
     subject: &str,
 ) -> Result<lenso_capability_credential_issuer::IssueResponse, IssueCallError> {
+    validate_managed_binding(config, usize::from(managed_sessions.is_some()))
+        .map_err(IssueCallError::Runtime)?;
+    if config.managed_sessions {
+        let managed_sessions = managed_sessions.expect("validated managed session binding");
+        return managed_sessions
+            .issue_managed_with_context(
+                context,
+                IssueManagedRequest {
+                    subject: subject.to_owned(),
+                    actor_kind: "user".to_owned(),
+                    assurance: "password".to_owned(),
+                    audience: config.audience.clone(),
+                    claims: BTreeMap::default(),
+                },
+            )
+            .await
+            .map(|value| credential_issuer::IssueResponse {
+                session_id: value.session_id,
+                credential: value.credential,
+                expires_at: value.expires_at,
+            })
+            .map_err(|error| match error {
+                ManagedSessionIssueManagedInvocationError::Domain(IssueManagedError::Disabled) => {
+                    IssueCallError::Disabled
+                }
+                ManagedSessionIssueManagedInvocationError::Domain(error) => {
+                    IssueCallError::Runtime(RuntimeFailure::PluginFailure {
+                        detail: format!(
+                            "managed session issuer rejected password session: {error:?}"
+                        ),
+                    })
+                }
+                ManagedSessionIssueManagedInvocationError::Runtime(error) => {
+                    IssueCallError::Runtime(error)
+                }
+            });
+    }
     let expires_at = (OffsetDateTime::now_utc()
-        + Duration::seconds(i64::try_from(active.config.session_ttl_seconds).expect("validated")))
+        + Duration::seconds(i64::try_from(config.session_ttl_seconds).expect("validated")))
     .format(&Rfc3339)
     .map_err(|error| {
         IssueCallError::Runtime(RuntimeFailure::PluginFailure {
@@ -501,7 +580,7 @@ async fn issue(
                 subject: subject.to_owned(),
                 actor_kind: "user".to_owned(),
                 assurance: "password".to_owned(),
-                audience: active.config.audience.clone(),
+                audience: config.audience.clone(),
                 claims: BTreeMap::default(),
                 expires_at,
             },
@@ -525,9 +604,22 @@ enum IssueCallError {
     Runtime(RuntimeFailure),
 }
 
+fn validate_managed_binding(
+    config: &PasswordAuthConfig,
+    bindings: usize,
+) -> Result<(), RuntimeFailure> {
+    if bindings > 1 || (config.managed_sessions && bindings != 1) {
+        return Err(RuntimeFailure::InvalidResolvedPlan {
+            detail: "Password permits at most one ManagedSession provider and managed_sessions requires exactly one binding".to_owned(),
+        });
+    }
+    Ok(())
+}
+
 impl Lifecycle for PasswordAuthPlugin {
     async fn activate(&self, context: ActivateContext) -> Result<(), RuntimeFailure> {
         let config = self.config.clone();
+        validate_managed_binding(&config, self.managed_sessions.len())?;
         let state = self.store.clone();
         let selected = host_facilities::select(
             &config.storage_ref,
@@ -1093,6 +1185,350 @@ mod storage_reference_config_tests {
                 .unwrap()
                 .validate()
                 .is_ok()
+        );
+    }
+}
+
+#[cfg(test)]
+mod managed_session_config_tests {
+    use super::*;
+
+    fn legacy_config() -> PasswordAuthConfig {
+        PasswordAuthConfig::new(
+            "auth_password",
+            "database",
+            vec!["proof.operation".into()],
+            3600,
+            3,
+            60,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn omitted_managed_mode_retains_the_legacy_configuration_default() {
+        let legacy = legacy_config();
+        assert!(!legacy.managed_sessions);
+        let mut old = serde_json::to_value(&legacy).unwrap();
+        old.as_object_mut().unwrap().remove("managed_sessions");
+        assert_eq!(
+            serde_json::from_value::<PasswordAuthConfig>(old).unwrap(),
+            legacy
+        );
+        assert!(validate_managed_binding(&legacy, 0).is_ok());
+        assert!(validate_managed_binding(&legacy, 1).is_ok());
+        assert!(validate_managed_binding(&legacy, 2).is_err());
+    }
+
+    #[test]
+    fn explicit_managed_mode_requires_its_binding_before_storage_preparation() {
+        let legacy = legacy_config();
+        let managed = legacy.clone().with_managed_sessions(true);
+        assert_eq!(managed.session_ttl_seconds, legacy.session_ttl_seconds);
+        assert_eq!(managed.audience, legacy.audience);
+        assert!(matches!(
+            validate_managed_binding(&managed, 0),
+            Err(RuntimeFailure::InvalidResolvedPlan { .. })
+        ));
+        assert!(validate_managed_binding(&managed, 1).is_ok());
+        assert!(validate_managed_binding(&managed, 2).is_err());
+        assert!(!managed.with_managed_sessions(false).managed_sessions);
+    }
+
+    #[test]
+    fn generated_contract_keeps_managed_binding_optional_and_legacy_issuer_required() {
+        let descriptor: serde_json::Value = serde_json::from_str(PLUGIN_DESCRIPTOR_JSON).unwrap();
+        let requirements = descriptor["required_capabilities"].as_array().unwrap();
+        let managed = requirements
+            .iter()
+            .find(|value| value["capability_id"] == managed::CAPABILITY_ID)
+            .unwrap();
+        assert_eq!(managed["cardinality"], "many");
+        let issuer = requirements
+            .iter()
+            .find(|value| value["capability_id"] == credential_issuer::CAPABILITY_ID)
+            .unwrap();
+        assert_eq!(issuer["cardinality"], "one");
+        assert_eq!(
+            descriptor["configuration_defaults"]["managed_sessions"],
+            false
+        );
+        assert_eq!(
+            descriptor["configuration_schema"]["properties"]["managed_sessions"]["type"],
+            "boolean"
+        );
+    }
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod managed_session_routing_tests {
+    use super::*;
+    use lenso_app_plan::{
+        AppComposition, CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan,
+        PluginInstancePlan,
+    };
+    use lenso_kernel::{NativeRequestEndpoint, ShutdownOutcome};
+    use lenso_native_adapter::{
+        NativePluginFactory, NativePluginFactoryContext, NativePluginInstance,
+    };
+    use lenso_test::TestApp;
+    use std::cell::Cell;
+
+    const CALLER: &str = "password";
+    const PROVIDER: &str = "session-fixture";
+
+    #[derive(Debug, Default)]
+    struct Observed {
+        legacy: RefCell<Vec<(Option<String>, IssueRequest)>>,
+        managed: RefCell<Vec<(Option<String>, IssueManagedRequest)>>,
+        disabled: Cell<bool>,
+    }
+
+    #[derive(Clone, Debug)]
+    struct Fixture(Rc<Observed>);
+
+    impl credential_issuer::CredentialIssuerProvider for Fixture {
+        fn issue(
+            &self,
+            context: InvocationContext,
+            request: IssueRequest,
+        ) -> NativeRequestFuture<credential_issuer::CredentialIssuerIssue> {
+            let expires_at = request.expires_at.clone();
+            self.0
+                .legacy
+                .borrow_mut()
+                .push((context.caller_instance().map(str::to_owned), request));
+            Box::pin(std::future::ready(Ok(Ok(
+                credential_issuer::IssueResponse {
+                    session_id: "legacy-session".into(),
+                    credential: "synthetic-legacy-credential".into(),
+                    expires_at,
+                },
+            ))))
+        }
+
+        fn revoke(
+            &self,
+            _: InvocationContext,
+            _: credential_issuer::RevokeRequest,
+        ) -> NativeRequestFuture<credential_issuer::CredentialIssuerRevoke> {
+            Box::pin(std::future::ready(Ok(Err(
+                credential_issuer::RevokeError::NotFound,
+            ))))
+        }
+
+        fn revoke_credential(
+            &self,
+            _: InvocationContext,
+            _: credential_issuer::RevokeCredentialRequest,
+        ) -> NativeRequestFuture<credential_issuer::CredentialIssuerRevokeCredential> {
+            Box::pin(std::future::ready(Ok(Err(
+                credential_issuer::RevokeCredentialError::NotFound,
+            ))))
+        }
+    }
+
+    impl managed::ManagedSessionProvider for Fixture {
+        fn issue_managed(
+            &self,
+            context: InvocationContext,
+            request: IssueManagedRequest,
+        ) -> NativeRequestFuture<managed::ManagedSessionIssueManaged> {
+            self.0
+                .managed
+                .borrow_mut()
+                .push((context.caller_instance().map(str::to_owned), request));
+            let response = if self.0.disabled.get() {
+                Err(IssueManagedError::Disabled)
+            } else {
+                Ok(managed::IssueManagedResponse {
+                    session_id: "managed-session".into(),
+                    credential: "synthetic-managed-credential".into(),
+                    expires_at: "2030-01-01T01:00:00Z".into(),
+                    absolute_expires_at: "2030-02-01T00:00:00Z".into(),
+                    renew_after: "2030-01-01T00:30:00Z".into(),
+                })
+            };
+            Box::pin(std::future::ready(Ok(response)))
+        }
+
+        fn read_managed(
+            &self,
+            _: InvocationContext,
+            _: managed::ReadManagedRequest,
+        ) -> NativeRequestFuture<managed::ManagedSessionReadManaged> {
+            Box::pin(std::future::ready(Ok(Err(
+                managed::ReadManagedError::Unsupported,
+            ))))
+        }
+
+        fn renew(
+            &self,
+            _: InvocationContext,
+            _: managed::RenewRequest,
+        ) -> NativeRequestFuture<managed::ManagedSessionRenew> {
+            Box::pin(std::future::ready(Ok(Err(
+                managed::RenewError::Unsupported,
+            ))))
+        }
+    }
+
+    impl NativePluginFactory for Fixture {
+        fn package_id(&self) -> &'static str {
+            "test.password-session-provider"
+        }
+
+        fn instantiate(
+            &self,
+            _: NativePluginFactoryContext<'_>,
+        ) -> Result<NativePluginInstance, RuntimeFailure> {
+            Ok(NativePluginInstance::new(vec![
+                Rc::new(credential_issuer::CredentialIssuerEndpoint::new(
+                    self.clone(),
+                )) as Rc<dyn NativeRequestEndpoint>,
+                Rc::new(managed::ManagedSessionEndpoint::new(self.clone()))
+                    as Rc<dyn NativeRequestEndpoint>,
+            ]))
+        }
+    }
+
+    #[derive(Debug)]
+    struct Caller;
+
+    impl NativePluginFactory for Caller {
+        fn package_id(&self) -> &'static str {
+            "test.password-session-caller"
+        }
+
+        fn instantiate(
+            &self,
+            _: NativePluginFactoryContext<'_>,
+        ) -> Result<NativePluginInstance, RuntimeFailure> {
+            Ok(NativePluginInstance::default())
+        }
+    }
+
+    fn app(observed: &Rc<Observed>) -> TestApp {
+        let mut caller = PluginInstancePlan::new(CALLER, "test.password-session-caller");
+        let mut provider = PluginInstancePlan::new(PROVIDER, "test.password-session-provider");
+        let mut bindings = Vec::new();
+        for (id, version, operations) in [
+            (
+                credential_issuer::CAPABILITY_ID,
+                credential_issuer::DESCRIPTOR_VERSION,
+                vec!["issue", "revoke", "revoke_credential"],
+            ),
+            (
+                managed::CAPABILITY_ID,
+                managed::DESCRIPTOR_VERSION,
+                vec![
+                    managed::ISSUE_MANAGED_OPERATION,
+                    managed::READ_MANAGED_OPERATION,
+                    managed::RENEW_OPERATION,
+                ],
+            ),
+        ] {
+            caller = caller.with_requirement(CapabilityRequirementPlan::one(id, version));
+            provider = provider.with_capability(
+                CapabilityEndpointPlan::new(id, version, operations).with_cross_lane_transfer(),
+            );
+            bindings.push(CapabilityBinding::new(CALLER, id, version, PROVIDER));
+        }
+        TestApp::builder(
+            AppComposition::new(vec![caller, provider], bindings)
+                .resolve()
+                .unwrap(),
+        )
+        .with_factory(Caller)
+        .with_factory(Fixture(Rc::clone(observed)))
+        .start()
+        .unwrap()
+    }
+
+    #[test]
+    fn shared_issue_helper_routes_real_generated_clients_without_ttl_or_authority_widening() {
+        let observed = Rc::new(Observed::default());
+        let app = app(&observed);
+        let issuer = app.client::<CredentialIssuerClient>(CALLER).unwrap();
+        let managed = app.client::<ManagedSessionClient>(CALLER).unwrap();
+        let legacy = PasswordAuthConfig::new(
+            "password_routing",
+            "synthetic/database",
+            vec!["proof.operation".into()],
+            3600,
+            3,
+            60,
+        )
+        .unwrap();
+        let invoke = |config: &PasswordAuthConfig, bound| {
+            app.run(issue(
+                config,
+                &issuer,
+                bound,
+                InvocationContext::new(42, None, lenso_kernel::CancellationToken::new()),
+                "verified-password-subject",
+            ))
+        };
+        let before = OffsetDateTime::now_utc();
+        let response =
+            invoke(&legacy, Some(&managed)).unwrap_or_else(|_| panic!("legacy issuance failed"));
+        let after = OffsetDateTime::now_utc();
+        assert_eq!(response.session_id, "legacy-session");
+        assert_eq!(observed.legacy.borrow().len(), 1);
+        assert!(observed.managed.borrow().is_empty());
+        let recorded = observed.legacy.borrow();
+        let (caller, request) = &recorded[0];
+        assert_eq!(caller.as_deref(), Some(CALLER));
+        assert_eq!(request.subject, "verified-password-subject");
+        assert_eq!(request.actor_kind, "user");
+        assert_eq!(request.assurance, "password");
+        assert_eq!(request.audience, legacy.audience);
+        assert!(request.claims.is_empty());
+        let expires = OffsetDateTime::parse(&request.expires_at, &Rfc3339).unwrap();
+        assert!((before + Duration::hours(1)..=after + Duration::hours(1)).contains(&expires));
+        drop(recorded);
+
+        let managed_config = legacy.with_managed_sessions(true);
+        let response = invoke(&managed_config, Some(&managed))
+            .unwrap_or_else(|_| panic!("managed issuance failed"));
+        assert_eq!(response.session_id, "managed-session");
+        assert_eq!(response.credential, "synthetic-managed-credential");
+        assert_eq!(response.expires_at, "2030-01-01T01:00:00Z");
+        assert_eq!(observed.legacy.borrow().len(), 1);
+        let recorded = observed.managed.borrow();
+        let (caller, request) = &recorded[0];
+        assert_eq!(caller.as_deref(), Some(CALLER));
+        assert_eq!(
+            serde_json::to_value(request).unwrap(),
+            serde_json::json!({
+                "subject": "verified-password-subject",
+                "actor_kind": "user", "assurance": "password",
+                "audience": ["proof.operation"], "claims": {}
+            })
+        );
+        drop(recorded);
+
+        assert!(matches!(
+            invoke(&managed_config, None),
+            Err(IssueCallError::Runtime(
+                RuntimeFailure::InvalidResolvedPlan { .. }
+            ))
+        ));
+        assert_eq!(observed.managed.borrow().len(), 1);
+        observed.disabled.set(true);
+        assert!(matches!(
+            invoke(&managed_config, Some(&managed)),
+            Err(IssueCallError::Disabled)
+        ));
+        assert_eq!(observed.managed.borrow().len(), 2);
+        assert_eq!(
+            observed.legacy.borrow().len(),
+            1,
+            "managed rejection must not fall back to legacy issuance"
+        );
+        assert_eq!(
+            app.shutdown(std::time::Duration::from_secs(1)),
+            ShutdownOutcome::Clean
         );
     }
 }

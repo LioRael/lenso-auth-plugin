@@ -1,0 +1,36 @@
+[package]
+name = "lenso-auth-session-renewal-plugin"
+version = "0.1.0"
+description = "Optional browser HTTP adapter for bounded managed session renewal."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.lenso]
+plugin-id = "lenso.auth.session-renewal"
+root-slot = "auth"
+
+[features]
+workers = ["time/wasm-bindgen", "getrandom/wasm_js"]
+
+[dependencies]
+base64.workspace = true
+getrandom.workspace = true
+lenso.workspace = true
+lenso-capability-managed-session = { path = "../lenso-capability-managed-session", version = "0.1.0" }
+lenso-capability-http-endpoint.workspace = true
+lenso-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+lenso-app-plan.workspace = true
+lenso-native-adapter.workspace = true
+lenso-runner.workspace = true
+tokio = { version = "1.52", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

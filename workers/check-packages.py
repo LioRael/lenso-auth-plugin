@@ -18,8 +18,9 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 CARGO = shlex.split(os.environ.get("CARGO", "cargo"))
 OWNERS = {
-    "account": ("account-admin", "auth-delegation", "credential-state"), "oauth-flow": ("oauth-flow",),
-    "password": ("credential-issuer", "identity-directory", "password-auth"),
+    "account": ("account-admin", "auth-delegation", "credential-state", "managed-session"), "oauth-flow": ("oauth-flow",),
+    "password": ("credential-issuer", "identity-directory", "password-auth", "managed-session"),
+    "session-renewal": ("managed-session",),
     "phone": ("credential-issuer", "identity-directory", "phone-auth", "sms-delivery"),
     "device": ("device-auth",), "api-token": ("auth", "credential-state", "api-token-admin"),
     "oidc": ("credential-issuer", "identity-directory", "oidc-provider"),
@@ -107,15 +108,16 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         name = f"lenso-auth-{owner}-plugin"
         directory = package(name, config, workers=True)
         source = ROOT / "crates" / name
-        for relative in ("src/workers.rs", "src/migration.rs"):
-            assert (directory / relative).read_bytes() == (source / relative).read_bytes(), relative
-        for backend in ("postgres", "d1"):
-            relative = Path("migrations") / backend
-            expected = {sql.relative_to(source): sql.read_bytes()
-                        for sql in (source / relative).rglob("*.sql")}
-            packaged = {sql.relative_to(directory): sql.read_bytes()
-                        for sql in (directory / relative).rglob("*.sql")}
-            assert expected and packaged == expected, f"{name}: {backend} migration archive drift"
+        if owner != "session-renewal":
+            for relative in ("src/workers.rs", "src/migration.rs"):
+                assert (directory / relative).read_bytes() == (source / relative).read_bytes(), relative
+            for backend in ("postgres", "d1"):
+                relative = Path("migrations") / backend
+                expected = {sql.relative_to(source): sql.read_bytes()
+                            for sql in (source / relative).rglob("*.sql")}
+                packaged = {sql.relative_to(directory): sql.read_bytes()
+                            for sql in (directory / relative).rglob("*.sql")}
+                assert expected and packaged == expected, f"{name}: {backend} migration archive drift"
         args = ["--manifest-path", directory / "Cargo.toml", "--locked",
                 "--no-default-features", "--features", "workers", "--config", config]
         cargo("check", *args, "--target", "wasm32-unknown-unknown")
@@ -124,4 +126,4 @@ with tempfile.TemporaryDirectory(prefix="lenso-auth-packages-") as temporary:
         for dependency in graph["packages"]:
             if dependency["source"] is None:
                 assert Path(dependency["manifest_path"]).is_relative_to(extracted), dependency["name"]
-        print(f"PASS: extracted {name} Workers wasm package; exact migration plans/SQL; all local dependencies are archives", flush=True)
+        print(f"PASS: extracted {name} Workers wasm package; owned files and all local dependencies are archives", flush=True)

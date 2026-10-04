@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["session_id", "credential", "expires_at", "absolute_expires_at", "renew_after"],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "credential": {
+      "type": "string",
+      "x-lenso-sensitive": true
+    },
+    "expires_at": {
+      "type": "string",
+      "description": "RFC3339 effective idle deadline, bounded by `absolute_expires_at`."
+    },
+    "absolute_expires_at": {
+      "type": "string",
+      "description": "RFC3339 immutable upper bound established at managed issuance."
+    },
+    "renew_after": {
+      "type": "string",
+      "description": "RFC3339 earliest time the current credential may be renewed."
+    }
+  },
+  "additionalProperties": false,
+  "title": "SessionResponse"
+}

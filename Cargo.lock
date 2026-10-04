@@ -1154,6 +1154,7 @@ dependencies = [
  "lenso-capability-credential-issuer",
  "lenso-capability-credential-state",
  "lenso-capability-identity-directory",
+ "lenso-capability-managed-session",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-migration",
@@ -1440,8 +1441,10 @@ dependencies = [
  "getrandom 0.4.3",
  "js-sys",
  "lenso",
+ "lenso-app-plan",
  "lenso-capability-credential-issuer",
  "lenso-capability-identity-directory",
+ "lenso-capability-managed-session",
  "lenso-capability-password-auth",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -1449,6 +1452,7 @@ dependencies = [
  "lenso-migration-d1",
  "lenso-native-adapter",
  "lenso-postgres-kit",
+ "lenso-test",
  "serde",
  "serde_json",
  "sqlx",
@@ -1568,6 +1572,26 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "time",
+]
+
+[[package]]
+name = "lenso-auth-session-renewal-plugin"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "getrandom 0.4.3",
+ "lenso",
+ "lenso-app-plan",
+ "lenso-capability-http-endpoint",
+ "lenso-capability-managed-session",
+ "lenso-kernel",
+ "lenso-native-adapter",
+ "lenso-runner",
+ "serde",
+ "serde_json",
+ "time",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -1904,6 +1928,21 @@ dependencies = [
  "futures",
  "lenso-contract-authoring",
  "lenso-contract-codegen 0.9.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-managed-session"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.2",
  "lenso-contract-runtime",
  "lenso-kernel",
  "lenso-plugin-authoring",

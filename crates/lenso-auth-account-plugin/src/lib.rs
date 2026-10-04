@@ -3,12 +3,14 @@ pub mod host_facilities;
 pub use host_facilities::EventStorageBinding;
 
 mod delegation;
+mod managed;
 #[cfg(feature = "postgres")]
 mod operator;
 mod profile;
 #[cfg(feature = "postgres")]
 mod schema;
 mod storage;
+pub use managed::{ManagedSessionConfig, ManagedSessionPolicy};
 
 use std::{cell::RefCell, fmt, rc::Rc, time::Duration as StdDuration};
 
@@ -43,6 +45,7 @@ use lenso_capability_identity_directory::{
     EnsureIdentityResponse, ReadStatusError, ReadStatusRequest, ReadStatusResponse,
     ReadStatusResponseStatus,
 };
+use lenso_capability_managed_session as managed_session;
 use lenso_capability_secrets as secrets;
 use lenso_capability_secrets::{ResolveRequest, SecretsClient, SecretsInvocationError};
 use lenso_kernel::{InvocationContext, NativeRequestFuture, RuntimeFailure};
@@ -87,9 +90,20 @@ pub struct AccountAuthConfig {
     credential_state_callers: Vec<String>,
     #[serde(default)]
     management_session_ceiling: Option<ManagementCredentialCeiling>,
+    #[serde(default)]
+    managed_sessions: Option<ManagedSessionConfig>,
 }
 
 impl AccountAuthConfig {
+    /// Enable renewal explicitly; the Account Instance owns the policy and callers.
+    pub fn with_managed_sessions(
+        mut self,
+        policy: ManagedSessionConfig,
+    ) -> Result<Self, AccountConfigError> {
+        self.managed_sessions = Some(policy);
+        self.validate()?;
+        Ok(self)
+    }
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         schema: impl Into<String>,
@@ -115,6 +129,7 @@ impl AccountAuthConfig {
             scoped_delegation_targets: Vec::new(),
             credential_state_callers: Vec::new(),
             management_session_ceiling: None,
+            managed_sessions: None,
         };
         value.validate()?;
         Ok(value)
@@ -215,6 +230,9 @@ impl AccountAuthConfig {
     }
 
     fn validate(&self) -> Result<(), AccountConfigError> {
+        if let Some(managed) = &self.managed_sessions {
+            managed.validate(self.management_session_ceiling.is_some())?;
+        }
         if self.credential_state_callers.len() > 64
             || self
                 .credential_state_callers
@@ -312,6 +330,8 @@ impl AccountAuthConfig {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum AccountConfigError {
+    #[error("invalid managed session policy or caller allowlist")]
+    InvalidManagedSessionPolicy,
     #[error("invalid current credential state caller")]
     InvalidCredentialStateCaller,
     #[error("invalid operators session ceiling")]
@@ -393,7 +413,8 @@ impl fmt::Debug for AccountAuthPlugin {
     credential_issuer::CredentialIssuer,
     account_admin::AccountAdmin,
     auth_delegation::Delegation,
-    credential_state::CredentialState
+    credential_state::CredentialState,
+    managed_session::ManagedSession
 )]
 impl AccountAuthPlugin {}
 
@@ -748,6 +769,11 @@ impl AccountAuthPlugin {
         let prepared = self.prepared();
         let current_ceiling = self.config.management_session_ceiling.clone();
         let current_targets = self.config.scoped_delegation_targets.clone();
+        let managed_policy = self
+            .config
+            .managed_sessions
+            .as_ref()
+            .map(|managed| managed.policy.clone());
         Box::pin(async move {
             let prepared = prepared?;
             let Some(credential) = request.credential else {
@@ -761,7 +787,7 @@ impl AccountAuthPlugin {
             }
             let digest =
                 storage::token_digest(&prepared.pepper, &credential.value).map_err(runtime)?;
-            let Some(session) = storage::load_session(&prepared.store, &digest)
+            let Some(mut session) = storage::load_session(&prepared.store, &digest)
                 .await
                 .map_err(runtime)?
             else {
@@ -774,6 +800,41 @@ impl AccountAuthPlugin {
                 return Ok(Err(AuthenticateError::Revoked));
             }
             let now = OffsetDateTime::now_utc();
+            if let Some(policy) = managed_policy {
+                match storage::session_metadata(&prepared.store, &digest, &policy)
+                    .await
+                    .map_err(runtime)?
+                {
+                    Ok(meta) => session.expires_at = session.expires_at.min(meta.expires_at),
+                    Err(storage::RenewSessionOutcome::Unsupported) => {
+                        if let Some(bound) =
+                            storage::policy_expiry(&prepared.store, &session.session_id, &policy)
+                                .await
+                                .map_err(runtime)?
+                        {
+                            session.expires_at = session.expires_at.min(bound);
+                        }
+                    } // legacy/delegated sessions retain their original authority and finite parent bounds
+                    Err(storage::RenewSessionOutcome::Expired) => {
+                        return Ok(Err(AuthenticateError::Expired));
+                    }
+                    Err(storage::RenewSessionOutcome::Revoked) => {
+                        return Ok(Err(AuthenticateError::Revoked));
+                    }
+                    Err(
+                        storage::RenewSessionOutcome::InvalidCredential
+                        | storage::RenewSessionOutcome::StaleCredential,
+                    ) => return Ok(Err(AuthenticateError::Invalid)),
+                    Err(
+                        storage::RenewSessionOutcome::TooEarly
+                        | storage::RenewSessionOutcome::Rotated { .. },
+                    ) => {
+                        return Err(RuntimeFailure::PluginFailure {
+                            detail: "invalid managed metadata outcome".into(),
+                        });
+                    }
+                }
+            }
             if session.expires_at <= now {
                 return Ok(Err(AuthenticateError::Expired));
             }
@@ -963,7 +1024,6 @@ enum AccountError {
         #[source]
         source: sqlx::Error,
     },
-    #[cfg(feature = "workers")]
     #[error("Auth storage operation failed")]
     Storage,
     #[error("random source unavailable")]

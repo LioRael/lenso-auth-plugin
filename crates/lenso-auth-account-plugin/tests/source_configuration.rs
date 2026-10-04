@@ -5,7 +5,9 @@ use lenso_app_plan::{
         PluginRootSnapshot, resolve_plugin_root,
     },
 };
-use lenso_auth_account_plugin::{AccountAuthConfig, assertion_public_key};
+use lenso_auth_account_plugin::{
+    AccountAuthConfig, ManagedSessionConfig, ManagedSessionPolicy, assertion_public_key,
+};
 use lenso_auth_sdk::credential::{ManagementCredentialCeiling, ManagementResourceScope};
 use lenso_capability_secrets as secrets;
 
@@ -31,7 +33,9 @@ fn resolves(config: &AccountAuthConfig) -> bool {
             HostDefaultPlugin::new("test.secrets", "secrets"),
         ],
     );
-    resolve_plugin_root(&host, &PluginRootSnapshot::default()).is_ok()
+    resolve_plugin_root(&host, &PluginRootSnapshot::default())
+        .inspect_err(|error| eprintln!("{error:?}"))
+        .is_ok()
 }
 #[test]
 fn source_catalog_accepts_both_explicit_operators_ceiling_and_default_session_profile() {
@@ -46,6 +50,20 @@ fn source_catalog_accepts_both_explicit_operators_ceiling_and_default_session_pr
     )
     .unwrap();
     assert!(resolves(&default));
+    assert!(resolves(
+        &default
+            .clone()
+            .with_managed_sessions(ManagedSessionConfig {
+                policy: ManagedSessionPolicy {
+                    idle_timeout_seconds: 86400,
+                    absolute_timeout_seconds: 2_592_000,
+                    renew_interval_seconds: 3600
+                },
+                issue_callers: vec!["lenso.auth.password/password".into()],
+                renew_callers: vec!["lenso.auth.session-renewal/renewal".into()],
+            })
+            .unwrap()
+    ));
     assert!(resolves(
         &default.clone().with_storage_ref("auth/account").unwrap()
     ));

@@ -1,4 +1,5 @@
 use crate::AccountError;
+pub(crate) use crate::ManagedSessionPolicy;
 use hmac::{Hmac, Mac};
 use serde_json::Value;
 use sha2::Sha256;
@@ -32,6 +33,96 @@ pub(crate) struct NewSession {
     pub audience: Vec<String>,
     pub claims: BTreeMap<String, Value>,
     pub expires_at: OffsetDateTime,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct NewManagedSession {
+    pub issued_at: OffsetDateTime,
+    pub absolute_expires_at: OffsetDateTime,
+    pub idle_timeout_seconds: u64,
+    pub renew_interval_seconds: u64,
+    pub last_renew_at: OffsetDateTime,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct SessionMetadata {
+    pub session_id: String,
+    pub expires_at: OffsetDateTime,
+    pub absolute_expires_at: OffsetDateTime,
+    pub renew_after: OffsetDateTime,
+}
+
+pub(crate) async fn session_metadata(
+    store: &AccountStore,
+    digest: &[u8],
+    policy: &ManagedSessionPolicy,
+) -> Result<Result<SessionMetadata, RenewSessionOutcome>, AccountError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        AccountStore::Postgres(pg) => postgres::session_metadata(pg, digest, policy).await,
+        #[cfg(feature = "workers")]
+        AccountStore::D1(binding) => d1::session_metadata(binding, digest, policy).await,
+    }
+}
+
+pub(crate) async fn policy_expiry(
+    store: &AccountStore,
+    session_id: &str,
+    policy: &ManagedSessionPolicy,
+) -> Result<Option<OffsetDateTime>, AccountError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        AccountStore::Postgres(pg) => postgres::policy_expiry(pg, session_id, policy).await,
+        #[cfg(feature = "workers")]
+        AccountStore::D1(binding) => d1::policy_expiry(binding, session_id, policy).await,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum RenewSessionOutcome {
+    Rotated {
+        session_id: String,
+        expires_at: OffsetDateTime,
+        absolute_expires_at: OffsetDateTime,
+        renew_after: OffsetDateTime,
+    },
+    InvalidCredential,
+    StaleCredential,
+    Expired,
+    Revoked,
+    TooEarly,
+    Unsupported,
+}
+
+pub(crate) async fn issue_managed_session(
+    store: &AccountStore,
+    session: &NewSession,
+    managed: &NewManagedSession,
+) -> Result<IssueSessionOutcome, AccountError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        AccountStore::Postgres(pg) => postgres::issue_managed_session(pg, session, managed).await,
+        #[cfg(feature = "workers")]
+        AccountStore::D1(binding) => d1::issue_managed_session(binding, session, managed).await,
+    }
+}
+
+pub(crate) async fn renew_session(
+    store: &AccountStore,
+    old_digest: &[u8],
+    new_digest: &[u8],
+    policy: &ManagedSessionPolicy,
+) -> Result<RenewSessionOutcome, AccountError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        AccountStore::Postgres(pg) => {
+            postgres::renew_session(pg, old_digest, new_digest, policy).await
+        }
+        #[cfg(feature = "workers")]
+        AccountStore::D1(binding) => {
+            d1::renew_session(binding, old_digest, new_digest, policy).await
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

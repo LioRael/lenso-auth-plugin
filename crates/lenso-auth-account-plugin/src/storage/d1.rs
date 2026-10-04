@@ -7,6 +7,9 @@ use crate::{RuntimeFailure, format_time, runtime};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use lenso_capability_auth_delegation::GrantError;
 use serde_json::json;
+#[path = "d1_managed.rs"]
+mod managed;
+pub(crate) use managed::{issue_managed_session, policy_expiry, renew_session, session_metadata};
 const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%f000000Z','now')";
 const STATUS: &str = "CASE WHEN i.status='disabled' AND (i.disabled_until IS NULL OR i.disabled_until>strftime('%Y-%m-%dT%H:%M:%f000000Z','now')) THEN 'disabled' ELSE 'active' END";
 fn fail(_: ()) -> AccountError {
@@ -86,7 +89,14 @@ pub(crate) async fn revoke_credential(
     db: &D1Binding,
     digest: &[u8],
 ) -> Result<Option<bool>, AccountError> {
-    revoke(db, "token_digest", digest_value(digest)).await
+    // Historical digests retain logout authority over the same stable session,
+    // but never authentication or renewal authority over its rotated token.
+    let ids = "SELECT session_id FROM auth_sessions WHERE token_digest=?1 UNION SELECT session_id FROM auth_session_rotations WHERE token_digest=?1";
+    let r = db.run(vec![
+        statement(format!("UPDATE auth_sessions SET revoked_at={NOW} WHERE session_id IN ({ids}) AND revoked_at IS NULL"), vec![digest_value(digest)]),
+        statement(format!("SELECT session_id FROM auth_sessions WHERE session_id IN ({ids})"), vec![digest_value(digest)]),
+    ]).await.map_err(fail)?;
+    Ok((!r[1].results.is_empty()).then_some(r[0].meta.changes == 1))
 }
 pub(crate) async fn load_session(
     db: &D1Binding,

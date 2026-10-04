@@ -8,6 +8,9 @@ use crate::{
 };
 use lenso_postgres_kit::OwnedPostgres;
 use sqlx::Row;
+#[path = "postgres_managed.rs"]
+mod managed;
+pub(crate) use managed::{issue_managed_session, policy_expiry, renew_session, session_metadata};
 macro_rules! effective_subject_status_sql {
     () => {
         "CASE WHEN i.status = 'disabled' AND (i.disabled_until IS NULL OR i.disabled_until > transaction_timestamp()) THEN 'disabled' ELSE 'active' END"
@@ -183,7 +186,7 @@ pub(crate) async fn revoke_credential(
     digest: &[u8],
 ) -> Result<Option<bool>, AccountError> {
     sqlx::query_scalar(
-        "WITH updated AS (UPDATE auth_sessions SET revoked_at = transaction_timestamp() WHERE token_digest = $1 AND revoked_at IS NULL RETURNING 1) SELECT CASE WHEN EXISTS (SELECT 1 FROM updated) THEN TRUE WHEN EXISTS (SELECT 1 FROM auth_sessions WHERE token_digest = $1) THEN FALSE ELSE NULL END",
+        "WITH target AS (SELECT session_id FROM auth_sessions WHERE token_digest=$1 UNION SELECT session_id FROM auth_session_rotations WHERE token_digest=$1), updated AS (UPDATE auth_sessions SET revoked_at=clock_timestamp() WHERE session_id IN (SELECT session_id FROM target) AND revoked_at IS NULL RETURNING 1) SELECT CASE WHEN EXISTS(SELECT 1 FROM updated) THEN TRUE WHEN EXISTS(SELECT 1 FROM target) THEN FALSE ELSE NULL END",
     )
     .bind(digest)
     .fetch_one(postgres.pool())

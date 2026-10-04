@@ -26,6 +26,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "add-display-profile",
         "migrations/postgres/005_add_display_profile.sql"
     ),
+    (
+        6,
+        "add-managed-sessions",
+        "migrations/postgres/006_add_managed_sessions.sql"
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["session_id", "expires_at", "absolute_expires_at", "renew_after"],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "absolute_expires_at": {
+      "type": "string"
+    },
+    "renew_after": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "title": "ReadManagedResponse"
+}

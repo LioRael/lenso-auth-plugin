@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    { "const": "invalid_credential" },
+    { "const": "stale_credential" },
+    { "const": "expired" },
+    { "const": "revoked" },
+    { "const": "too_early" },
+    { "const": "permission_denied" },
+    { "const": "not_enabled" },
+    { "const": "unsupported" }
+  ]
+}

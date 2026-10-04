@@ -62,6 +62,10 @@ jobs:
         run: |
           python3 workers/generate-migrations.py --check
           python3 workers/test-migration-generation.py
+      - name: Check managed browser renewal Workers implementation
+        run: cargo clippy --locked --target wasm32-unknown-unknown --features workers -p lenso-auth-session-renewal-plugin -- -D warnings
+      - name: Test browser renewal competition and response loss
+        run: node --test crates/lenso-auth-session-renewal-plugin/browser/session-renewal.test.mjs
       - name: Test Auth event storage lifetime
         run: node --test workers/d1-binding.test.mjs
       - name: Verify source-selected D1 facility

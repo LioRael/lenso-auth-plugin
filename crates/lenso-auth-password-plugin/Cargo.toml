@@ -32,6 +32,7 @@ argon2.workspace = true
 getrandom.workspace = true
 lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.3.0" }
 lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.3.0" }
+lenso-capability-managed-session = { path = "../lenso-capability-managed-session", version = "0.1.0" }
 lenso-capability-password-auth = { path = "../lenso-capability-password-auth", version = "0.3.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
@@ -47,6 +48,10 @@ zeroize.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1.52", features = ["macros", "rt", "time"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+lenso-app-plan.workspace = true
+lenso-test.workspace = true
 
 [lints]
 workspace = true
