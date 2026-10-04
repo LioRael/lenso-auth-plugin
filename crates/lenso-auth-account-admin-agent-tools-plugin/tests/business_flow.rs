@@ -1,6 +1,6 @@
 use lenso_app_plan::{
     AppComposition, CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan,
-    PluginInstancePlan, ResolvedAppPlan,
+    PluginInstancePlan, RequestAdmissionPlan, ResolvedAppPlan,
 };
 use lenso_auth_account_admin_agent_tools_plugin::{
     LIST_SESSIONS_TOOL, LIST_SUBJECTS_TOOL, SET_SUBJECT_STATUS_TOOL,
@@ -11,7 +11,6 @@ use lenso_capability_agent_tool_provider as tool;
 use lenso_capability_auth as auth;
 use lenso_capability_auth_delegation as delegation;
 use lenso_capability_credential_issuer as issuer;
-use lenso_capability_credential_state as credential_state;
 use lenso_capability_identity_directory as directory;
 use lenso_capability_secrets::{
     self as secrets, ResolveError, ResolveRequest, ResolveResponse, Secrets, SecretsEndpoint,
@@ -153,47 +152,21 @@ fn account_config(schema: &str, authorized: bool) -> AccountAuthConfig {
 
 fn plan(schema: &str, tools: bool, authorized: bool) -> ResolvedAppPlan {
     let config = account_config(schema, authorized);
-    let account = PluginInstancePlan::new("account", "lenso.auth.account")
-        .with_configuration(serde_json::to_string(&config).unwrap())
-        .with_capability(endpoint(
-            delegation::CAPABILITY_ID,
-            delegation::DESCRIPTOR_VERSION,
-            &["grant", "grant_scoped", "scoped_receipt"],
-        ))
-        .with_requirement(CapabilityRequirementPlan::one(
-            secrets::CAPABILITY_ID,
-            secrets::DESCRIPTOR_VERSION,
-        ))
-        .with_capability(endpoint(
-            auth::CAPABILITY_ID,
-            auth::DESCRIPTOR_VERSION,
-            &["authenticate"],
-        ))
-        .with_capability(endpoint(
-            directory::CAPABILITY_ID,
-            directory::DESCRIPTOR_VERSION,
-            &["ensure_identity", "read_status"],
-        ))
-        .with_capability(endpoint(
-            issuer::CAPABILITY_ID,
-            issuer::DESCRIPTOR_VERSION,
-            &["issue", "revoke", "revoke_credential"],
-        ))
-        .with_capability(endpoint(
-            admin::CAPABILITY_ID,
-            admin::DESCRIPTOR_VERSION,
-            &[
-                "list_subjects",
-                "list_sessions",
-                "set_subject_status",
-                "read_profile",
-            ],
-        ))
-        .with_capability(endpoint(
-            credential_state::CAPABILITY_ID,
-            credential_state::DESCRIPTOR_VERSION,
-            &[credential_state::INSPECT_OPERATION],
-        ));
+    let descriptor: lenso_app_plan::authoring::PluginDescriptor =
+        serde_json::from_str(lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON).unwrap();
+    let mut account = PluginInstancePlan::new("account", "lenso.auth.account")
+        .with_configuration(serde_json::to_string(&config).unwrap());
+    for capability in descriptor.provided_capabilities() {
+        // Preserve the explicit fixture's admission while deriving the owner API.
+        account = account.with_capability(
+            capability
+                .clone()
+                .with_admission(RequestAdmissionPlan::default()),
+        );
+    }
+    for requirement in descriptor.required_capabilities() {
+        account = account.with_requirement(requirement.clone());
+    }
     let mut caller = PluginInstancePlan::new("caller", CALLER_PACKAGE_ID);
     let mut bindings = vec![CapabilityBinding::new(
         "account",

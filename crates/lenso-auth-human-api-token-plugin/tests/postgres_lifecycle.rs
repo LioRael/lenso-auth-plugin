@@ -3,7 +3,7 @@
 use lenso_access_control_postgres_plugin::{AccessControlConfig, AccessControlOperator};
 use lenso_app_plan::{
     AppComposition, CapabilityBinding, CapabilityEndpointPlan, CapabilityRequirementPlan,
-    PluginInstancePlan, ResolvedAppPlan,
+    PluginInstancePlan, RequestAdmissionPlan, ResolvedAppPlan,
 };
 use lenso_auth_account_plugin::{AccountAuthConfig, AccountAuthOperator};
 use lenso_auth_api_token_plugin::{ApiTokenAuthConfig, ApiTokenAuthOperator};
@@ -237,49 +237,20 @@ fn plan_cache(
             secrets::DESCRIPTOR_VERSION,
         )
     };
-    let mut account = owner(
-        "account",
-        lenso_auth_account_plugin::PACKAGE_ID,
-        serde_json::to_string(&account_config).unwrap(),
-    );
-    for (cap, version, ops) in [
-        (
-            auth::CAPABILITY_ID,
-            auth::DESCRIPTOR_VERSION,
-            vec!["authenticate"],
-        ),
-        (
-            directory::CAPABILITY_ID,
-            directory::DESCRIPTOR_VERSION,
-            vec!["ensure_identity", "read_status"],
-        ),
-        (
-            issuer::CAPABILITY_ID,
-            issuer::DESCRIPTOR_VERSION,
-            vec!["issue", "revoke", "revoke_credential"],
-        ),
-        (
-            account_admin::CAPABILITY_ID,
-            account_admin::DESCRIPTOR_VERSION,
-            vec![
-                "list_sessions",
-                "list_subjects",
-                "set_subject_status",
-                "read_profile",
-            ],
-        ),
-        (
-            delegation::CAPABILITY_ID,
-            delegation::DESCRIPTOR_VERSION,
-            vec!["grant", "grant_scoped", "scoped_receipt"],
-        ),
-        (
-            state::CAPABILITY_ID,
-            state::DESCRIPTOR_VERSION,
-            vec!["inspect"],
-        ),
-    ] {
-        account = endpoint(account, cap, version, &ops);
+    let descriptor: lenso_app_plan::authoring::PluginDescriptor =
+        serde_json::from_str(lenso_auth_account_plugin::PLUGIN_DESCRIPTOR_JSON).unwrap();
+    let mut account = PluginInstancePlan::new("account", lenso_auth_account_plugin::PACKAGE_ID)
+        .with_configuration(serde_json::to_string(&account_config).unwrap());
+    for capability in descriptor.provided_capabilities() {
+        // Retain the original fixture admission for its concurrent replay proof.
+        account = account.with_capability(
+            capability
+                .clone()
+                .with_admission(RequestAdmissionPlan::default()),
+        );
+    }
+    for requirement in descriptor.required_capabilities() {
+        account = account.with_requirement(requirement.clone());
     }
     let mut tokens = owner(
         "tokens",
