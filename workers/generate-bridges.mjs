@@ -3,6 +3,7 @@
 import {readFileSync, writeFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {resolve} from 'node:path';
+import {generateResourceAdapters} from './generate-resource-adapters.mjs';
 
 export const owners = Object.freeze(['account', 'oauth-flow', 'device', 'password', 'oidc', 'phone', 'api-token']);
 export function generatedBridge() {
@@ -22,6 +23,7 @@ export function generateBridges({check = false} = {}) {
     else writeFileSync(path, expected);
   }
   if (drift.length) throw new Error(`Generated D1 bridge drift: ${drift.join(', ')}. Run node workers/generate-bridges.mjs`);
+  generateResourceAdapters({check});
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv.slice(2).some(arg => arg !== '--check')) throw new Error('Usage: node workers/generate-bridges.mjs [--check]');
