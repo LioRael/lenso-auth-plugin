@@ -1,0 +1,172 @@
+Cargo.lock
+  h_9d56aba080c170 1158,1437-1456,1742-1754,2018-2047
+Cargo.toml
+  h_9d56aba080c170 4-6
+crates/lenso-auth-account-plugin/Cargo.toml
+  h_9d56aba080c170 25
+crates/lenso-auth-account-plugin/configuration.schema.json
+  h_9d56aba080c170 209-284
+crates/lenso-auth-account-plugin/migrations/d1/004_operator_bindings.sql
+  h_9d56aba080c170 1-18
+crates/lenso-auth-account-plugin/migrations/postgres/007_operator_bindings.sql
+  h_9d56aba080c170 1-18
+crates/lenso-auth-account-plugin/src/lib.rs
+  h_9d56aba080c170 7-8,20,51,98-99,138,333,340-341,388,427-428,516-517,520-525,529-541,794-795,798,802-807,834-843,933-938,975-985,1010-1022,1063,1067,1081-1087
+crates/lenso-auth-account-plugin/src/managed.rs
+  h_9d56aba080c170 77-82,101-142,161-162,166,169-174,202-214,281-286,301-345
+crates/lenso-auth-account-plugin/src/migration.rs
+  h_9d56aba080c170 23-27,42-45,47,108-118,121-132,142-149
+crates/lenso-auth-account-plugin/src/operator.rs
+  h_9d56aba080c170 6,15-39
+crates/lenso-auth-account-plugin/src/operator_binding.rs
+  h_9d56aba080c170 1-524
+crates/lenso-auth-account-plugin/src/schema.rs
+  h_9d56aba080c170 34-38,48,51-56,61-69,72-73,75-76,78-91
+crates/lenso-auth-account-plugin/src/storage.rs
+  h_9d56aba080c170 2
+crates/lenso-auth-account-plugin/src/storage/operator_binding.rs
+  h_9d56aba080c170 1-172
+crates/lenso-auth-account-plugin/src/storage/operator_binding_tests.rs
+  h_9d56aba080c170 1-256
+crates/lenso-auth-account-plugin/tests/source_configuration.rs
+  h_9d56aba080c170 4-5,12,26-30,40-47,53
+crates/lenso-auth-operator-session-plugin/Cargo.toml
+  h_9d56aba080c170 1-30
+crates/lenso-auth-operator-session-plugin/src/lib.rs
+  h_9d56aba080c170 1-843
+crates/lenso-capability-operator-binding/Cargo.toml
+  h_9d56aba080c170 1-29
+crates/lenso-capability-operator-binding/build.rs
+  h_9d56aba080c170 1-90
+crates/lenso-capability-operator-binding/capability.json
+  h_9d56aba080c170 1-50
+crates/lenso-capability-operator-binding/schemas/activate-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/activate-binding-request.schema.json
+  h_9d56aba080c170 1-21
+crates/lenso-capability-operator-binding/schemas/activate-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-binding/schemas/complete-revocation-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/complete-revocation-request.schema.json
+  h_9d56aba080c170 1-18
+crates/lenso-capability-operator-binding/schemas/complete-revocation-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-binding/schemas/prepare-bootstrap-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/prepare-bootstrap-request.schema.json
+  h_9d56aba080c170 1-24
+crates/lenso-capability-operator-binding/schemas/prepare-bootstrap-response.schema.json
+  h_9d56aba080c170 1-90
+crates/lenso-capability-operator-binding/schemas/prepare-recovery-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/prepare-recovery-request.schema.json
+  h_9d56aba080c170 1-12
+crates/lenso-capability-operator-binding/schemas/prepare-recovery-response.schema.json
+  h_9d56aba080c170 1-90
+crates/lenso-capability-operator-binding/schemas/read-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/read-binding-request.schema.json
+  h_9d56aba080c170 1-12
+crates/lenso-capability-operator-binding/schemas/read-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-binding/schemas/revoke-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/revoke-binding-request.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/revoke-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-binding/src/contract.rs
+  h_9d56aba080c170 1-134
+crates/lenso-capability-operator-binding/src/generated.rs
+  h_9d56aba080c170 1-1529
+crates/lenso-capability-operator-binding/src/lib.rs
+  h_9d56aba080c170 1-7
+crates/lenso-capability-operator-session/Cargo.toml
+  h_9d56aba080c170 1-29
+crates/lenso-capability-operator-session/build.rs
+  h_9d56aba080c170 1-90
+crates/lenso-capability-operator-session/capability.json
+  h_9d56aba080c170 1-43
+crates/lenso-capability-operator-session/schemas/bootstrap-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/bootstrap-binding-request.schema.json
+  h_9d56aba080c170 1-7
+crates/lenso-capability-operator-session/schemas/bootstrap-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-session/schemas/exchange-session-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/exchange-session-request.schema.json
+  h_9d56aba080c170 1-7
+crates/lenso-capability-operator-session/schemas/exchange-session-response.schema.json
+  h_9d56aba080c170 1-19
+crates/lenso-capability-operator-session/schemas/read-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/read-binding-request.schema.json
+  h_9d56aba080c170 1-7
+crates/lenso-capability-operator-session/schemas/read-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-session/schemas/recover-revocation-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/recover-revocation-request.schema.json
+  h_9d56aba080c170 1-12
+crates/lenso-capability-operator-session/schemas/recover-revocation-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-session/schemas/revoke-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/revoke-binding-request.schema.json
+  h_9d56aba080c170 1-12
+crates/lenso-capability-operator-session/schemas/revoke-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-session/src/contract.rs
+  h_9d56aba080c170 1-90
+crates/lenso-capability-operator-session/src/generated.rs
+  h_9d56aba080c170 1-1276
+crates/lenso-capability-operator-session/src/lib.rs
+  h_9d56aba080c170 1-7
+docs/operator-account-binding.md
+  h_9d56aba080c170 1-35
+experiments/operator-binding-app/.gitignore
+  h_9d56aba080c170 1
+experiments/operator-binding-app/Cargo.lock
+  h_9d56aba080c170 1-2789
+experiments/operator-binding-app/Cargo.toml
+  h_9d56aba080c170 1-35
+experiments/operator-binding-app/README.md
+  h_9d56aba080c170 1-78
+experiments/operator-binding-app/src/lib.rs
+  h_9d56aba080c170 1-403
+experiments/operator-binding-app/tests/native_binding.rs
+  h_9d56aba080c170 1-663
+experiments/operator-binding-d1-model/.gitignore
+  h_9d56aba080c170 1-4
+experiments/operator-binding-d1-model/Cargo.lock
+  h_9d56aba080c170 1-493
+experiments/operator-binding-d1-model/Cargo.toml
+  h_9d56aba080c170 1-27
+experiments/operator-binding-d1-model/README.md
+  h_9d56aba080c170 1-43
+experiments/operator-binding-d1-model/package.json
+  h_9d56aba080c170 1-11
+experiments/operator-binding-d1-model/proof-worker.mjs
+  h_9d56aba080c170 1-21
+experiments/operator-binding-d1-model/qualify.mjs
+  h_9d56aba080c170 1-195
+experiments/operator-binding-d1-model/src/lib.rs
+  h_9d56aba080c170 1-169
+workers/check-packages.py
+  h_9d56aba080c170 21,24,112
+workers/generate-migrations.py
+  h_9d56aba080c170 83,87-89,92-99,109-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3ea23eac68834c5efdb38e05b127e4fe0f6eee0",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
