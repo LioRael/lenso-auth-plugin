@@ -1,0 +1,37 @@
+docs/auth-normal-dependencies.md
+  h_9d56aba080c170 1-31,37-50
+  h_9d56aba080c170 32-36
+crates/lenso-auth-account-plugin/src/host_facilities/state-resource.mjs
+  h_9d56aba080c170 1-60
+workers/resource-adapter.test.mjs
+  h_9d56aba080c170 1-79
+crates/lenso-auth-password-plugin/src/host_facilities/state-resource.mjs
+  h_9d56aba080c170 1-60
+crates/lenso-auth-account-plugin/Cargo.toml
+  h_9d56aba080c170 38-43,45
+docs/auth-resource-adapters.md
+  h_9d56aba080c170 1-41
+workers/generate-resource-adapters.mjs
+  h_9d56aba080c170 1-48
+crates/lenso-auth-password-plugin/Cargo.toml
+  h_9d56aba080c170 33-34,36
+Cargo.lock
+  h_9d56aba080c170 1120,1123-1126,1150-1156,1189-1190,1192,1216-1217,1240,1291,1294,1322,1325,1328-1329,1331,1385,1388,1416-1417,1442,1446-1448,1466-1467,1469,1498-1499,1541,1598-1612,1641,1708-1723,1818-1848,1852,1910-1940,1944,2068-2083,2174-2189
+workers/generate-bridges.mjs
+  h_9d56aba080c170 6,26
+crates/lenso-auth-operator-session-plugin/Cargo.toml
+  h_9d56aba080c170 17-20
+crates/lenso-auth-session-renewal-plugin/Cargo.toml
+  h_9d56aba080c170 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f8a0f56a359215773dbd5474f5c09e69114c928a",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
