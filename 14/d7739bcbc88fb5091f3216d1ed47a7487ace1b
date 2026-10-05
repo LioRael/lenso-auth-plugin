@@ -1,0 +1,68 @@
+adapters/password-web-session/.gitignore
+  h_9d56aba080c170 1-3
+adapters/password-web-session/Cargo.toml
+  h_9d56aba080c170 1-29
+adapters/password-web-session/README.md
+  h_9d56aba080c170 1-68
+adapters/password-web-session/browser/main.ts
+  h_9d56aba080c170 1-170
+adapters/password-web-session/configuration.schema.json
+  h_9d56aba080c170 1-11
+adapters/password-web-session/package.json
+  h_9d56aba080c170 1
+adapters/password-web-session/scripts/build-assets.ts
+  h_9d56aba080c170 1-5
+adapters/password-web-session/src/lib.rs
+  h_9d56aba080c170 1-398
+adapters/password-web-session/src/tests.rs
+  h_9d56aba080c170 1-166
+console/.gitignore
+  h_9d56aba080c170 1-3
+console/Cargo.toml
+  h_9d56aba080c170 1-32
+console/bun.lock
+  h_9d56aba080c170 1-136
+console/config.schema.json
+  h_9d56aba080c170 1-15
+console/console/page.tsx
+  h_9d56aba080c170 1-152
+console/console/workspace.ts
+  h_9d56aba080c170 1-5
+console/package.json
+  h_9d56aba080c170 1
+console/scripts/build-assets.ts
+  h_9d56aba080c170 1-14
+console/src/lib.rs
+  h_9d56aba080c170 1-595
+console/src/tests.rs
+  h_9d56aba080c170 1-273
+docs/console-workspace.md
+  h_9d56aba080c170 1-74
+session-console/.gitignore
+  h_9d56aba080c170 1-2
+session-console/Cargo.toml
+  h_9d56aba080c170 1-24
+session-console/README.md
+  h_9d56aba080c170 1-33
+session-console/browser/session-global.ts
+  h_9d56aba080c170 1-26
+session-console/config.schema.json
+  h_9d56aba080c170 1
+session-console/package.json
+  h_9d56aba080c170 1
+session-console/scripts/build-assets.ts
+  h_9d56aba080c170 1-5
+session-console/src/lib.rs
+  h_9d56aba080c170 1-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14d7739bcbc88fb5091f3216d1ed47a7487ace1b",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
