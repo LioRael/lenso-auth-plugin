@@ -13,7 +13,7 @@ crates/lenso-auth-password-plugin/src/host_facilities/state-resource.mjs
 docs/auth-normal-dependencies.md
   h_9d56aba080c170 1-45
 docs/auth-resource-adapters.md
-  h_9d56aba080c170 1-41
+  h_9d56aba080c170 1-41,1-2,4-36,40-41
 workers/generate-bridges.mjs
   h_9d56aba080c170 6,26
 workers/generate-resource-adapters.mjs
