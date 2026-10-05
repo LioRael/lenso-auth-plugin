@@ -8,7 +8,15 @@ Three implementation manifests normalize fourteen existing SDK/Role edges to
 exact Git699 (`699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167`), preserving versions:
 Account seven, Password three and Operator Session four. The eight distinct
 shared SDK/Role packages are byte-identical between Git699 and formal main.
-Cargo.lock adds those exact Git identities; existing package versions remain.
+External consumers lock those exact Git identities; package versions remain.
+
+The owner root and its three independent App test roots patch those Git edges
+to the byte-identical shared packages in this repository. This keeps their
+existing local clients, providers and lifecycle fixtures on one Rust contract
+source, including native request frame types. These root-only Cargo patches
+are ignored when another workspace consumes the owner through Git. Owner test
+locks preserve all package versions; normal consumers still resolve Git699.
+Production Rust, contracts and the original lifecycle test bodies are unchanged.
 
 Consumers select one final immutable successor revision for all four
 implementations and three new Roles: Account, Password, Session Renewal,

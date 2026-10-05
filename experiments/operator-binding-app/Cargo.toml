@@ -33,3 +33,16 @@ lenso-capability-access-control-admin = { git = "https://github.com/LioRael/lens
 lenso-capability-access-control-directory = { git = "https://github.com/LioRael/lenso-access-control-plugin", rev = "94b6d06cff1e6f17a06e771df232f662cae28ad5" }
 lenso-audit-log-postgres-plugin = { git = "https://github.com/LioRael/lenso-audit-log-plugin", rev = "83b4e52e8c6eaf2bbe5356dccd1e3a59b872c8e9" }
 lenso-capability-audit-log = { git = "https://github.com/LioRael/lenso-audit-log-plugin", rev = "83b4e52e8c6eaf2bbe5356dccd1e3a59b872c8e9" }
+
+# Owner fixture graphs use the byte-identical Git699 shared packages from this
+# workspace so linked providers and clients share one Rust contract identity.
+# Cargo ignores these root-only patches when this owner is consumed through Git.
+[patch."https://github.com/LioRael/lenso-auth-plugin"]
+lenso-auth-sdk = { path = "../../crates/lenso-auth-sdk" }
+lenso-capability-account-admin = { path = "../../crates/lenso-capability-account-admin" }
+lenso-capability-auth-delegation = { path = "../../crates/lenso-capability-auth-delegation" }
+lenso-capability-auth = { path = "../../crates/lenso-capability-auth" }
+lenso-capability-credential-state = { path = "../../crates/lenso-capability-credential-state" }
+lenso-capability-credential-issuer = { path = "../../crates/lenso-capability-credential-issuer" }
+lenso-capability-identity-directory = { path = "../../crates/lenso-capability-identity-directory" }
+lenso-capability-password-auth = { path = "../../crates/lenso-capability-password-auth" }

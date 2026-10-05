@@ -96,3 +96,16 @@ module_name_repetitions = "allow"
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 must_use_candidate = "allow"
+
+# Owner fixture graphs use the byte-identical Git699 shared packages from this
+# workspace so linked providers and clients share one Rust contract identity.
+# Cargo ignores these root-only patches when this owner is consumed through Git.
+[patch."https://github.com/LioRael/lenso-auth-plugin"]
+lenso-auth-sdk = { path = "crates/lenso-auth-sdk" }
+lenso-capability-account-admin = { path = "crates/lenso-capability-account-admin" }
+lenso-capability-auth-delegation = { path = "crates/lenso-capability-auth-delegation" }
+lenso-capability-auth = { path = "crates/lenso-capability-auth" }
+lenso-capability-credential-state = { path = "crates/lenso-capability-credential-state" }
+lenso-capability-credential-issuer = { path = "crates/lenso-capability-credential-issuer" }
+lenso-capability-identity-directory = { path = "crates/lenso-capability-identity-directory" }
+lenso-capability-password-auth = { path = "crates/lenso-capability-password-auth" }
