@@ -1,0 +1,28 @@
+Cargo.lock
+  h_9d56aba080c170 1120,1123-1126,1150-1156,1189-1190,1192,1216-1217,1240,1291,1294,1322,1325,1328-1329,1331,1385,1388,1416-1417,1442,1446-1448,1466-1467,1469,1498-1499,1541,1626
+Cargo.toml
+  h_9d56aba080c170 99-111
+docs/auth-normal-dependencies.md
+  h_9d56aba080c170 11-19
+experiments/managed-session-app/Cargo.toml
+  h_9d56aba080c170 50-62
+experiments/operator-binding-app/Cargo.lock
+  h_9d56aba080c170 2790-2793
+experiments/operator-binding-app/Cargo.toml
+  h_9d56aba080c170 36-48
+experiments/operator-binding-workers-app/Cargo.lock
+  h_9d56aba080c170 2000-2003
+experiments/operator-binding-workers-app/Cargo.toml
+  h_9d56aba080c170 40-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cbaa561c82d675de31b92ae590af4ea1fbefc2a8",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
