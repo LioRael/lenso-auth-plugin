@@ -19,7 +19,7 @@ base64.workspace = true
 getrandom.workspace = true
 lenso.workspace = true
 lenso-capability-managed-session = { path = "../lenso-capability-managed-session", version = "0.1.0" }
-lenso-capability-http-endpoint.workspace = true
+lenso-capability-http-endpoint = "0.3.7"
 lenso-kernel.workspace = true
 serde.workspace = true
 serde_json.workspace = true

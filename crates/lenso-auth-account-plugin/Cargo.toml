@@ -35,14 +35,14 @@ base64.workspace = true
 futures.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
-lenso-auth-sdk = { path = "../lenso-auth-sdk", version = "0.2.4" }
-lenso-capability-account-admin = { path = "../lenso-capability-account-admin", version = "0.1.0" }
-lenso-capability-auth-delegation = { path = "../lenso-capability-auth-delegation", version = "0.1.0" }
-lenso-capability-auth = { path = "../lenso-capability-auth", version = "0.2.0" }
-lenso-capability-credential-state = { path = "../lenso-capability-credential-state", version = "0.1.0" }
-lenso-capability-credential-issuer = { path = "../lenso-capability-credential-issuer", version = "0.3.0" }
+lenso-auth-sdk = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.2.4" }
+lenso-capability-account-admin = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.1.0" }
+lenso-capability-auth-delegation = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.1.0" }
+lenso-capability-auth = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.2.0" }
+lenso-capability-credential-state = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.1.0" }
+lenso-capability-credential-issuer = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
 lenso-capability-managed-session = { path = "../lenso-capability-managed-session", version = "0.1.0" }
-lenso-capability-identity-directory = { path = "../lenso-capability-identity-directory", version = "0.3.0" }
+lenso-capability-identity-directory = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
 lenso-native-adapter.workspace = true

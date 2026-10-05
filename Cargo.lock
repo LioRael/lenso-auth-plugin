@@ -1117,13 +1117,13 @@ dependencies = [
  "lenso",
  "lenso-app-plan",
  "lenso-auth-account-plugin",
- "lenso-capability-account-admin",
+ "lenso-capability-account-admin 0.1.0",
  "lenso-capability-agent-tool-provider",
  "lenso-capability-auth 0.2.0",
- "lenso-capability-auth-delegation",
- "lenso-capability-credential-issuer",
- "lenso-capability-credential-state",
- "lenso-capability-identity-directory",
+ "lenso-capability-auth-delegation 0.1.0",
+ "lenso-capability-credential-issuer 0.3.0",
+ "lenso-capability-credential-state 0.1.0",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-native-adapter",
@@ -1147,13 +1147,13 @@ dependencies = [
  "js-sys",
  "lenso",
  "lenso-app-plan",
- "lenso-auth-sdk 0.2.4",
- "lenso-capability-account-admin",
- "lenso-capability-auth 0.2.0",
- "lenso-capability-auth-delegation",
- "lenso-capability-credential-issuer",
- "lenso-capability-credential-state",
- "lenso-capability-identity-directory",
+ "lenso-auth-sdk 0.2.4 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-account-admin 0.1.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-auth 0.2.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-auth-delegation 0.1.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-credential-issuer 0.3.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-credential-state 0.1.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-identity-directory 0.3.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
  "lenso-capability-managed-session",
  "lenso-capability-operator-binding",
  "lenso-capability-secrets",
@@ -1186,10 +1186,10 @@ dependencies = [
  "lenso-auth-account-plugin",
  "lenso-auth-sdk 0.2.4",
  "lenso-capability-auth 0.2.0",
- "lenso-capability-auth-delegation",
- "lenso-capability-credential-issuer",
+ "lenso-capability-auth-delegation 0.1.0",
+ "lenso-capability-credential-issuer 0.3.0",
  "lenso-capability-http-endpoint",
- "lenso-capability-identity-directory",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-native-adapter",
@@ -1213,8 +1213,8 @@ dependencies = [
  "getrandom 0.4.3",
  "lenso",
  "lenso-capability-anonymous-auth",
- "lenso-capability-credential-issuer",
- "lenso-capability-identity-directory",
+ "lenso-capability-credential-issuer 0.3.0",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-kernel",
  "lenso-native-adapter",
  "serde",
@@ -1237,7 +1237,7 @@ dependencies = [
  "lenso-auth-sdk 0.2.4",
  "lenso-capability-api-token-admin",
  "lenso-capability-auth 0.2.0",
- "lenso-capability-credential-state",
+ "lenso-capability-credential-state 0.1.0",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-migration",
@@ -1288,10 +1288,10 @@ dependencies = [
  "base64",
  "futures",
  "lenso",
- "lenso-capability-credential-issuer",
+ "lenso-capability-credential-issuer 0.3.0",
  "lenso-capability-federated-auth",
  "lenso-capability-http-client",
- "lenso-capability-identity-directory",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-oauth-flow",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -1319,16 +1319,16 @@ dependencies = [
  "lenso-capability-access-control",
  "lenso-capability-access-control-admin",
  "lenso-capability-access-control-directory",
- "lenso-capability-account-admin",
+ "lenso-capability-account-admin 0.1.0",
  "lenso-capability-api-token-admin",
  "lenso-capability-auth 0.2.0",
- "lenso-capability-auth-delegation",
+ "lenso-capability-auth-delegation 0.1.0",
  "lenso-capability-auth-profile",
  "lenso-capability-auth-profile-cache",
- "lenso-capability-credential-issuer",
- "lenso-capability-credential-state",
+ "lenso-capability-credential-issuer 0.3.0",
+ "lenso-capability-credential-state 0.1.0",
  "lenso-capability-human-api-token",
- "lenso-capability-identity-directory",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-native-adapter",
@@ -1382,10 +1382,10 @@ dependencies = [
  "jsonwebtoken",
  "lenso",
  "lenso-app-plan",
- "lenso-capability-credential-issuer",
+ "lenso-capability-credential-issuer 0.3.0",
  "lenso-capability-federated-auth",
  "lenso-capability-http-client",
- "lenso-capability-identity-directory",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-oauth-flow",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -1413,8 +1413,8 @@ dependencies = [
  "js-sys",
  "jsonwebtoken",
  "lenso",
- "lenso-capability-credential-issuer",
- "lenso-capability-identity-directory",
+ "lenso-capability-credential-issuer 0.3.0",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-oidc-provider",
  "lenso-capability-secrets",
  "lenso-kernel",
@@ -1439,13 +1439,13 @@ name = "lenso-auth-operator-session-plugin"
 version = "0.1.0"
 dependencies = [
  "lenso",
- "lenso-auth-sdk 0.2.4",
+ "lenso-auth-sdk 0.2.4 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
  "lenso-capability-access-control",
  "lenso-capability-access-control-admin",
  "lenso-capability-audit-log",
- "lenso-capability-auth 0.2.0",
- "lenso-capability-credential-issuer",
- "lenso-capability-credential-state",
+ "lenso-capability-auth 0.2.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-credential-issuer 0.3.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-credential-state 0.1.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
  "lenso-capability-operator-binding",
  "lenso-capability-operator-session",
  "lenso-kernel",
@@ -1463,10 +1463,10 @@ dependencies = [
  "js-sys",
  "lenso",
  "lenso-app-plan",
- "lenso-capability-credential-issuer",
- "lenso-capability-identity-directory",
+ "lenso-capability-credential-issuer 0.3.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-capability-identity-directory 0.3.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
  "lenso-capability-managed-session",
- "lenso-capability-password-auth",
+ "lenso-capability-password-auth 0.3.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
  "lenso-capability-secrets",
  "lenso-kernel",
  "lenso-migration",
@@ -1495,8 +1495,8 @@ dependencies = [
  "hmac 0.12.1",
  "js-sys",
  "lenso",
- "lenso-capability-credential-issuer",
- "lenso-capability-identity-directory",
+ "lenso-capability-credential-issuer 0.3.0",
+ "lenso-capability-identity-directory 0.3.0",
  "lenso-capability-phone-auth",
  "lenso-capability-secrets",
  "lenso-capability-sms-delivery",
@@ -1538,7 +1538,7 @@ dependencies = [
  "lenso-app-plan",
  "lenso-auth-account-plugin",
  "lenso-auth-profile-cache-plugin",
- "lenso-capability-account-admin",
+ "lenso-capability-account-admin 0.1.0",
  "lenso-capability-auth-profile",
  "lenso-capability-auth-profile-cache",
  "lenso-capability-secrets",
@@ -1596,6 +1596,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-auth-sdk"
+version = "0.2.4"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
+dependencies = [
+ "base64",
+ "ed25519-dalek 3.0.0",
+ "lenso-capability-auth 0.2.0 (git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167)",
+ "lenso-kernel",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "time",
+]
+
+[[package]]
 name = "lenso-auth-session-renewal-plugin"
 version = "0.1.0"
 dependencies = [
@@ -1623,7 +1638,7 @@ dependencies = [
  "getrandom 0.4.3",
  "lenso",
  "lenso-app-plan",
- "lenso-capability-credential-issuer",
+ "lenso-capability-credential-issuer 0.3.0",
  "lenso-capability-federated-auth",
  "lenso-capability-http-endpoint",
  "lenso-kernel",
@@ -1678,6 +1693,22 @@ dependencies = [
 [[package]]
 name = "lenso-capability-account-admin"
 version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.2",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-account-admin"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
 dependencies = [
  "futures",
  "lenso-contract-authoring",
@@ -1785,8 +1816,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-auth"
+version = "0.2.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.9.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-auth-delegation"
 version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.2",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-auth-delegation"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
 dependencies = [
  "futures",
  "lenso-contract-authoring",
@@ -1845,8 +1908,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-credential-issuer"
+version = "0.3.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.9.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-credential-state"
 version = "0.1.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.10.2",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-credential-state"
+version = "0.1.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
 dependencies = [
  "futures",
  "lenso-contract-authoring",
@@ -1971,6 +2066,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "lenso-capability-identity-directory"
+version = "0.3.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.9.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lenso-capability-managed-session"
 version = "0.1.0"
 dependencies = [
@@ -2048,6 +2159,22 @@ dependencies = [
 [[package]]
 name = "lenso-capability-password-auth"
 version = "0.3.0"
+dependencies = [
+ "futures",
+ "lenso-contract-authoring",
+ "lenso-contract-codegen 0.9.0",
+ "lenso-contract-runtime",
+ "lenso-kernel",
+ "lenso-plugin-authoring",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "lenso-capability-password-auth"
+version = "0.3.0"
+source = "git+https://github.com/LioRael/lenso-auth-plugin?rev=699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167#699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167"
 dependencies = [
  "futures",
  "lenso-contract-authoring",
