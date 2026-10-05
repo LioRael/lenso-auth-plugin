@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["allowed_origin", "session_cookie_name", "csrf_cookie_name"],
+  "properties": {
+    "allowed_origin": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "session_cookie_name": { "type": "string", "minLength": 8, "maxLength": 128 },
+    "csrf_cookie_name": { "type": "string", "minLength": 8, "maxLength": 128 }
+  }
+}

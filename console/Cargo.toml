@@ -1,0 +1,32 @@
+[package]
+name = "lenso-auth-account-console-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+rust-version = "1.94"
+
+[workspace]
+resolver = "2"
+
+[package.metadata.lenso]
+plugin-id = "lenso.auth.account.console"
+root-slot = "console-workspaces"
+
+[dependencies]
+base64 = "0.22"
+futures = "0.3"
+lenso = "=0.5.29"
+lenso-kernel = "=0.3.12"
+lenso-auth-sdk = { path = "../crates/lenso-auth-sdk" }
+lenso-capability-account-admin = { path = "../crates/lenso-capability-account-admin" }
+lenso-capability-credential-state = { path = "../crates/lenso-capability-credential-state" }
+lenso-capability-credential-issuer = { path = "../crates/lenso-capability-credential-issuer" }
+lenso-capability-access-control = { git = "https://github.com/LioRael/lenso-access-control-plugin", rev = "966ffe6d9ef80a7c4a509458e8a948110520010f" }
+lenso-capability-ui-contribution = { git = "https://github.com/LioRael/lenso-console", rev = "f27b0edba5cbbb3120955a6614cafc3ca3d4565e" }
+lenso-capability-workspace-service = { git = "https://github.com/LioRael/lenso-console", rev = "f27b0edba5cbbb3120955a6614cafc3ca3d4565e" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+
+[lints.rust]
+unsafe_code = "forbid"

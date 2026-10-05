@@ -1,0 +1,29 @@
+[package]
+name = "lenso-auth-password-web-session-plugin"
+version = "0.1.0"
+edition = "2024"
+publish = false
+rust-version = "1.94"
+
+[workspace]
+resolver = "2"
+
+[package.metadata.lenso]
+plugin-id = "lenso.auth.password-web-session"
+root-slot = "auth"
+
+[dependencies]
+base64 = "0.22"
+getrandom = "0.4"
+lenso = "=0.5.29"
+lenso-kernel = "=0.3.12"
+lenso-capability-http-endpoint = "=0.3.7"
+lenso-capability-password-auth = { path = "../../crates/lenso-capability-password-auth" }
+lenso-capability-credential-issuer = { path = "../../crates/lenso-capability-credential-issuer" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+time = { version = "0.3", features = ["parsing", "formatting"] }
+url = "2.5"
+
+[lints.rust]
+unsafe_code = "forbid"
