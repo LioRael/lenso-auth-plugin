@@ -33,10 +33,73 @@ async fn qualify_pending() {
             db.pool.execute(AssertSqlSafe("CREATE FUNCTION access.fixture_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.role_id LIKE 'operator-binding.%' THEN RAISE EXCEPTION 'synthetic Access unavailable'; END IF; RETURN NEW; END $$")).await.unwrap();
             db.pool.execute(AssertSqlSafe("CREATE TRIGGER fixture_fail BEFORE INSERT ON access.access_control_roles FOR EACH ROW EXECUTE FUNCTION access.fixture_fail()")).await.unwrap();
         }
-        assert!(bootstrap(&app, OWNER, &owner_actor).await.is_err());
+        // Preserve the outer Runtime failure from a real storage fault rather
+        // than unwrapping it through the happy-path bootstrap helper.
+        let failed = app
+            .invoke_with_context::<workflow::OperatorSessionBootstrapBinding>(
+                OWNER,
+                workflow::BOOTSTRAP_BINDING_OPERATION,
+                context(&app, &owner_actor),
+                workflow::EmptyRequest {},
+            )
+            .await;
+        match failure {
+            "access" => assert!(matches!(
+                failed,
+                Ok(Err(workflow::BootstrapBindingError::AccessUnavailable))
+            )),
+            "audit" => assert!(matches!(
+                failed,
+                Ok(Err(workflow::BootstrapBindingError::AuditUnavailable))
+            )),
+            "activate" => assert!(
+                matches!(
+                    failed,
+                    Ok(Err(workflow::BootstrapBindingError::NotActive
+                        | workflow::BootstrapBindingError::Unauthenticated))
+                        | Err(lenso_kernel::RuntimeFailure::PluginFailure { .. }
+                            | lenso_kernel::RuntimeFailure::PluginRestartExhausted { .. }
+                            | lenso_kernel::RuntimeFailure::AdmissionClosed)
+                ),
+                "unexpected activation fault: {failed:?}"
+            ),
+            _ => unreachable!(),
+        }
+        tokio::task::yield_now().await;
+        let admission = app
+            .invoke::<state::CredentialState>(
+                OWNER,
+                state::INSPECT_OPERATION,
+                state::InspectRequest {
+                    credential_id: "synthetic-admission-probe".into(),
+                    session_id: "synthetic-admission-probe".into(),
+                },
+            )
+            .await;
+        assert!(matches!(
+            admission,
+            Err(lenso_kernel::RuntimeFailure::AdmissionClosed)
+        ));
         assert_eq!(db.binding_status().await, "pending");
         assert_eq!(db.bindings().await, 1);
         assert_eq!(db.sessions().await, 0);
+        let (revision, audit, policy): (i64, String, String) = sqlx::query_as(AssertSqlSafe(
+            "SELECT revision,audit_event_id,policy_revision FROM operators.auth_operator_bindings",
+        ))
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        assert_eq!(revision, 1);
+        assert!(audit.is_empty() && policy.is_empty());
+        if failure == "activate" {
+            let applied: i64 = sqlx::query_scalar(AssertSqlSafe(
+                "SELECT count(*) FROM audit_log.events WHERE action='applied'",
+            ))
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+            assert_eq!(applied, 1);
+        }
         let id: String = sqlx::query_scalar(AssertSqlSafe(
             "SELECT binding_id FROM operators.auth_operator_bindings",
         ))
@@ -50,6 +113,9 @@ async fn qualify_pending() {
         .await
         .unwrap();
         assert!(!intent.is_empty());
+        // A real storage fault closed admission. Probe denials in a fresh App.
+        stop_failed(app).await;
+        let app = start(&db, &owner, true).await;
         assert!(
             resume(&app, ORDINARY, &owner_actor, &id, "1")
                 .await
@@ -70,7 +136,7 @@ async fn qualify_pending() {
                 .await
                 .is_err()
         );
-        stop_failed(app).await;
+        stop(app).await;
         let sql = if failure == "audit" {
             "DROP TRIGGER fixture_fail ON audit_log.events"
         } else if failure == "activate" {

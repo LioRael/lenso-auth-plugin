@@ -60,11 +60,22 @@ async function start(scenario) {
   ownerSession=await ok('issue',{subject:owner});
   ordinarySession=await ok('issue',{subject:ordinary});
 }
-async function storageFault(operation,args,expected) {
+async function storageFault(operation,args,expected,activationWriteFault=false) {
   const result=await call(operation,args);
-  assert.ok(result.Err===expected||['plugin_failure','admission_closed'].includes(result.Runtime?.kind),'fault must surface real domain/outer runtime failure');
+  const activationRuntime=activationWriteFault&&operation==='bootstrap'&&expected==='not_active'&&result.Runtime?.kind==='runtime_failure';
+  assert.ok(result.Err===expected||['plugin_failure','admission_closed'].includes(result.Runtime?.kind)||activationRuntime,'fault must surface real domain/outer runtime failure');
   assert.equal(result.admission_after_failure,'closed','real Kernel must close admission after actual owner storage fault');
   assert.ok(['clean','runtime_failure'].includes(result.shutdown),'actual shutdown outcome must be recorded without rewriting');
+  if(activationWriteFault) {
+    assert.equal(result.shutdown,'clean','controlled activation write fault must retain the observed clean shutdown');
+    assert.equal(await bindingStatus(),'pending','activation fault must never report active');
+    assert.equal(await scalar('operators','SELECT count(*) FROM auth_operator_bindings'),1);
+    assert.equal(await scalar('operators','SELECT revision FROM auth_operator_bindings'),1);
+    assert.equal(await sessions(),0,'activation fault cannot issue an operator credential');
+    assert.equal(await scalar('audit',"SELECT count(*) FROM audit_events WHERE event_name='auth.operator-binding.applied'"),1,'activation fault must occur after the single applied Audit commit');
+    assert.equal(await scalar('operators','SELECT audit_event_id FROM auth_operator_bindings'),'','uncommitted activation must not acquire a receipt');
+    assert.equal(await scalar('operators','SELECT policy_revision FROM auth_operator_bindings'),'');
+  }
   faultObservations.push({operation,expected,domain_error:result.Err??null,outer_runtime_failure:result.Runtime??null,admission:result.admission_after_failure,shutdown:result.shutdown});
 }
 async function failAudit(action) {
@@ -156,7 +167,7 @@ try {
     if(fault==='audit')await failAudit('applied');
     else if(fault==='activate')await sql('operators',"CREATE TRIGGER fixture_fail BEFORE UPDATE ON auth_operator_bindings WHEN NEW.status='active' BEGIN SELECT RAISE(ABORT,'synthetic activation unavailable'); END");
     else await sql('access',"CREATE TRIGGER fixture_fail BEFORE INSERT ON access_control_roles WHEN NEW.role_id LIKE 'operator-binding.%' BEGIN SELECT RAISE(ABORT,'synthetic Access unavailable'); END");
-    await storageFault('bootstrap',{credential:ownerSession.credential},fault==='activate'?'not_active':fault+'_unavailable');
+    await storageFault('bootstrap',{credential:ownerSession.credential},fault==='activate'?'not_active':fault+'_unavailable',fault==='activate');
     assert.equal(await bindingStatus(),'pending');
     await denied('exchange',{credential:ownerSession.credential},'not_active');assert.equal(await sessions(),0);
     pass(`Actual ${fault} D1 write fault leaves pending binding; fresh App denies exchange with zero operator sessions`);
