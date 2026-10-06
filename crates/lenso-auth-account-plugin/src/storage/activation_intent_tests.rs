@@ -63,44 +63,35 @@ async fn activation_intent_survives_response_loss_and_rejects_revision_scope_and
         .unwrap()
         .is_none()
     );
-    let activated = activate(
-        &store,
-        &cfg,
-        &pending.binding_id,
-        1,
-        "audit_fixed",
-        "policy_1",
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    let replay = activate(
-        &store,
-        &cfg,
-        &pending.binding_id,
-        1,
-        "audit_other",
-        "policy_2",
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    assert_completion_and_revocation_preserve_intent(&store, &cfg, &pending.binding_id, &first)
+        .await;
+    tests::cleanup(store, url, schema).await;
+}
+
+async fn assert_completion_and_revocation_preserve_intent(
+    store: &AccountStore,
+    cfg: &OperatorBindingConfig,
+    binding_id: &str,
+    first: &Record,
+) {
+    let activated = activate(store, cfg, binding_id, 1, "audit_fixed", "policy_1")
+        .await
+        .unwrap()
+        .unwrap();
+    let replay = activate(store, cfg, binding_id, 1, "audit_other", "policy_2")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(replay.audit_event_id, activated.audit_event_id);
     assert_eq!(replay.policy_revision, activated.policy_revision);
     assert_eq!(replay.activation_started_at, first.activation_started_at);
-    revoke(
-        &store,
-        &cfg,
-        &pending.binding_id,
-        "usr_source",
-        "2026-10-06T10:03:00Z",
-    )
-    .await
-    .unwrap();
+    revoke(store, cfg, binding_id, "usr_source", "2026-10-06T10:03:00Z")
+        .await
+        .unwrap();
     let revoked = prepare_activation_intent(
-        &store,
-        &cfg,
-        &pending.binding_id,
+        store,
+        cfg,
+        binding_id,
         1,
         "2026-10-06T10:04:00.000000000Z",
         "[]",
@@ -111,5 +102,4 @@ async fn activation_intent_survives_response_loss_and_rejects_revision_scope_and
     assert_eq!(revoked.status, "revoked");
     assert_eq!(revoked.revision, 2);
     assert_eq!(revoked.activation_permissions, first.activation_permissions);
-    tests::cleanup(store, url, schema).await;
 }

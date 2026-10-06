@@ -59,9 +59,9 @@ fn fresh_control_has_only_selected_audience_and_respects_source_and_window_expir
                 expected
             )]
         );
-        let issued = OffsetDateTime::parse(&wire.issued_at, &Rfc3339).unwrap();
+        let validity_start = OffsetDateTime::parse(&wire.issued_at, &Rfc3339).unwrap();
         let expires = OffsetDateTime::parse(&wire.expires_at, &Rfc3339).unwrap();
-        assert!(expires - issued <= Duration::seconds(5));
+        assert!(expires - validity_start <= Duration::seconds(5));
         assert!(expires <= source_end && expires <= window_end);
     }
 }
