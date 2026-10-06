@@ -5,8 +5,8 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.operator-binding@1";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:d7d67432176265e688ec3c42c202221280c8fe5e77a0cc1241b8ca6faec83c51";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:61c0146cf215d91f69f7783aab4b13b206f1cee9c881a2f3b8d8695ebe0e4339";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const OPERATOR_BINDING_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,30 +16,31 @@ pub const OPERATOR_BINDING_CONTRACT: CapabilityReference<OperatorBindingClient> 
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_operator_binding { () => { "{\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"activate_binding\",\"complete_revocation\",\"prepare_bootstrap\",\"prepare_recovery\",\"read_binding\",\"revoke_binding\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_operator_binding { () => { "{\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"activate_binding\",\"complete_revocation\",\"prepare_activation\",\"prepare_bootstrap\",\"prepare_recovery\",\"read_binding\",\"revoke_binding\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_operator_binding_client {
-    () => { "{\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_optional_operator_binding_client {
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_many_operator_binding_client {
-    () => { "{\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-binding@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
 }
 
 pub const ACTIVATE_BINDING_OPERATION: &str = "activate_binding";
 pub const COMPLETE_REVOCATION_OPERATION: &str = "complete_revocation";
+pub const PREPARE_ACTIVATION_OPERATION: &str = "prepare_activation";
 pub const PREPARE_BOOTSTRAP_OPERATION: &str = "prepare_bootstrap";
 pub const PREPARE_RECOVERY_OPERATION: &str = "prepare_recovery";
 pub const READ_BINDING_OPERATION: &str = "read_binding";
@@ -146,6 +147,82 @@ pub struct CompleteRevocationRequest {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CompleteRevocationError {
+    AccessUnavailable,
+    AuditUnavailable,
+    BootstrapConsumed,
+    BootstrapExpired,
+    InvalidRequest,
+    NotActive,
+    NotEnabled,
+    NotFound,
+    PermissionDenied,
+    Unauthenticated,
+    Unknown(UnknownDomainError),
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PrepareActivationRequest {
+    #[serde(rename = "binding_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub binding_id: String,
+    #[serde(rename = "operation")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub operation: PrepareActivationRequestOperation,
+    #[serde(rename = "permissions")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub permissions: Vec<String>,
+    #[serde(rename = "revision")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub revision: String,
+    #[serde(rename = "source_assertion_expires_at")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub source_assertion_expires_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum PrepareActivationRequestOperation {
+    #[serde(rename = "create_role")]
+    CreateRole,
+    #[serde(rename = "set_role_permissions")]
+    SetRolePermissions,
+    #[serde(rename = "assign_role")]
+    AssignRole,
+}
+
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct PrepareActivationResponse {
+    #[serde(rename = "audit_idempotency_key")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub audit_idempotency_key: String,
+    #[serde(rename = "audit_occurred_at")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub audit_occurred_at: String,
+    #[serde(rename = "binding")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub binding: Binding,
+    #[serde(rename = "control_assertion")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub control_assertion: String,
+    #[serde(rename = "permissions")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub permissions: Vec<String>,
+}
+
+impl fmt::Debug for PrepareActivationResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PrepareActivationResponse")
+            .field("audit_idempotency_key", &self.audit_idempotency_key)
+            .field("audit_occurred_at", &self.audit_occurred_at)
+            .field("binding", &self.binding)
+            .field("control_assertion", &"<redacted>")
+            .field("permissions", &self.permissions)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PrepareActivationError {
     AccessUnavailable,
     AuditUnavailable,
     BootstrapConsumed,
@@ -325,6 +402,29 @@ impl RequestCapability for OperatorBindingCompleteRevocation {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
         Rc::clone(&typed_endpoint.provider).complete_revocation(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct OperatorBindingPrepareActivation;
+impl RequestCapability for OperatorBindingPrepareActivation {
+    type Request = PrepareActivationRequest;
+    type Response = PrepareActivationResponse;
+    type DomainError = PrepareActivationError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != PREPARE_ACTIVATION_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<OperatorBindingRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).prepare_activation(context, request)
     }
 }
 
@@ -518,6 +618,71 @@ impl serde::Serialize for CompleteRevocationError {
 }
 
 impl<'de> serde::Deserialize<'de> for CompleteRevocationError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "access_unavailable" => Ok(Self::AccessUnavailable),
+                "audit_unavailable" => Ok(Self::AuditUnavailable),
+                "bootstrap_consumed" => Ok(Self::BootstrapConsumed),
+                "bootstrap_expired" => Ok(Self::BootstrapExpired),
+                "invalid_request" => Ok(Self::InvalidRequest),
+                "not_active" => Ok(Self::NotActive),
+                "not_enabled" => Ok(Self::NotEnabled),
+                "not_found" => Ok(Self::NotFound),
+                "permission_denied" => Ok(Self::PermissionDenied),
+                "unauthenticated" => Ok(Self::Unauthenticated),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
+impl serde::Serialize for PrepareActivationError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::AccessUnavailable => serializer.serialize_str("access_unavailable"),
+            Self::AuditUnavailable => serializer.serialize_str("audit_unavailable"),
+            Self::BootstrapConsumed => serializer.serialize_str("bootstrap_consumed"),
+            Self::BootstrapExpired => serializer.serialize_str("bootstrap_expired"),
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::NotActive => serializer.serialize_str("not_active"),
+            Self::NotEnabled => serializer.serialize_str("not_enabled"),
+            Self::NotFound => serializer.serialize_str("not_found"),
+            Self::PermissionDenied => serializer.serialize_str("permission_denied"),
+            Self::Unauthenticated => serializer.serialize_str("unauthenticated"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PrepareActivationError {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -824,6 +989,13 @@ pub fn decode_complete_revocation_response(wire: &str) -> Result<Binding, serde_
 pub fn encode_complete_revocation_error(value: &CompleteRevocationError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_complete_revocation_error(wire: &str) -> Result<CompleteRevocationError, serde_json::Error> { decode_portable_json(wire) }
 
+pub fn encode_prepare_activation_request(value: &PrepareActivationRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_prepare_activation_request(wire: &str) -> Result<PrepareActivationRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_prepare_activation_response(value: &PrepareActivationResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_prepare_activation_response(wire: &str) -> Result<PrepareActivationResponse, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_prepare_activation_error(value: &PrepareActivationError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_prepare_activation_error(wire: &str) -> Result<PrepareActivationError, serde_json::Error> { decode_portable_json(wire) }
+
 pub fn encode_prepare_bootstrap_request(value: &PrepareBootstrapRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_prepare_bootstrap_request(wire: &str) -> Result<PrepareBootstrapRequest, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_prepare_bootstrap_response(value: &PrepareBootstrapResponse) -> Result<String, serde_json::Error> { encode_portable_json(value) }
@@ -906,6 +1078,35 @@ impl __LensoIntoOperatorBindingCompleteRevocationResult for Result<Binding, Oper
             Ok(value) => Ok(Ok(value)),
             Err(OperatorBindingCompleteRevocationInvocationError::Domain(error)) => Ok(Err(error)),
             Err(OperatorBindingCompleteRevocationInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
+pub trait __LensoIntoOperatorBindingPrepareActivationResult {
+    fn __lenso_into_result(self) -> Result<Result<PrepareActivationResponse, PrepareActivationError>, RuntimeFailure>;
+}
+impl __LensoIntoOperatorBindingPrepareActivationResult for Result<PrepareActivationResponse, PrepareActivationError> {
+    fn __lenso_into_result(self) -> Result<Result<PrepareActivationResponse, PrepareActivationError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoOperatorBindingPrepareActivationResult for Result<Result<PrepareActivationResponse, PrepareActivationError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<PrepareActivationResponse, PrepareActivationError>, RuntimeFailure> { self }
+}
+impl __LensoIntoOperatorBindingPrepareActivationResult for Result<PrepareActivationResponse, lenso_plugin_authoring::PluginError<PrepareActivationError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<PrepareActivationResponse, PrepareActivationError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoOperatorBindingPrepareActivationResult for Result<PrepareActivationResponse, OperatorBindingPrepareActivationInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<PrepareActivationResponse, PrepareActivationError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(OperatorBindingPrepareActivationInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OperatorBindingPrepareActivationInvocationError::Runtime(error)) => Err(error),
         }
     }
 }
@@ -1029,6 +1230,7 @@ impl __LensoIntoOperatorBindingRevokeBindingResult for Result<Binding, OperatorB
 pub trait OperatorBindingProvider: fmt::Debug + 'static {
     fn activate_binding(&self, context: InvocationContext, request: ActivateBindingRequest) -> NativeRequestFuture<OperatorBindingActivateBinding>;
     fn complete_revocation(&self, context: InvocationContext, request: CompleteRevocationRequest) -> NativeRequestFuture<OperatorBindingCompleteRevocation>;
+    fn prepare_activation(&self, context: InvocationContext, request: PrepareActivationRequest) -> NativeRequestFuture<OperatorBindingPrepareActivation>;
     fn prepare_bootstrap(&self, context: InvocationContext, request: PrepareBootstrapRequest) -> NativeRequestFuture<OperatorBindingPrepareBootstrap>;
     fn prepare_recovery(&self, context: InvocationContext, request: RecoveryRequest) -> NativeRequestFuture<OperatorBindingPrepareRecovery>;
     fn read_binding(&self, context: InvocationContext, request: ReadBindingRequest) -> NativeRequestFuture<OperatorBindingReadBinding>;
@@ -1053,6 +1255,13 @@ macro_rules! __lenso_native_lower_operator_binding {
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::complete_revocation(&plugin, context, request).await;
                 $crate::__LensoIntoOperatorBindingCompleteRevocationResult::__lenso_into_result(result)
+            })
+        }
+        fn prepare_activation(&self, context: __LensoNativeSupportOperatorBinding::InvocationContext, request: $crate::PrepareActivationRequest) -> __LensoNativeSupportOperatorBinding::NativeRequestFuture<$crate::OperatorBindingPrepareActivation> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::prepare_activation(&plugin, context, request).await;
+                $crate::__LensoIntoOperatorBindingPrepareActivationResult::__lenso_into_result(result)
             })
         }
         fn prepare_bootstrap(&self, context: __LensoNativeSupportOperatorBinding::InvocationContext, request: $crate::PrepareBootstrapRequest) -> __LensoNativeSupportOperatorBinding::NativeRequestFuture<$crate::OperatorBindingPrepareBootstrap> {
@@ -1107,6 +1316,14 @@ macro_rules! __lenso_native_lower_object_operator_binding {
                 let plugin = object.get()?;
                 let result = <$plugin>::complete_revocation(plugin.as_ref(), context, request).await;
                 $crate::__LensoIntoOperatorBindingCompleteRevocationResult::__lenso_into_result(result)
+            })
+        }
+        fn prepare_activation(&self, context: __LensoNativeSupportOperatorBinding::InvocationContext, request: $crate::PrepareActivationRequest) -> __LensoNativeSupportOperatorBinding::NativeRequestFuture<$crate::OperatorBindingPrepareActivation> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::prepare_activation(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOperatorBindingPrepareActivationResult::__lenso_into_result(result)
             })
         }
         fn prepare_bootstrap(&self, context: __LensoNativeSupportOperatorBinding::InvocationContext, request: $crate::PrepareBootstrapRequest) -> __LensoNativeSupportOperatorBinding::NativeRequestFuture<$crate::OperatorBindingPrepareBootstrap> {
@@ -1165,6 +1382,13 @@ macro_rules! __lenso_native_lower_trait_object_operator_binding {
                 <$plugin as $crate::OperatorBindingProvider>::complete_revocation(plugin.as_ref(), context, request).await
             })
         }
+        fn prepare_activation(&self, context: __LensoNativeSupportOperatorBinding::InvocationContext, request: $crate::PrepareActivationRequest) -> __LensoNativeSupportOperatorBinding::NativeRequestFuture<$crate::OperatorBindingPrepareActivation> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OperatorBindingProvider>::prepare_activation(plugin.as_ref(), context, request).await
+            })
+        }
         fn prepare_bootstrap(&self, context: __LensoNativeSupportOperatorBinding::InvocationContext, request: $crate::PrepareBootstrapRequest) -> __LensoNativeSupportOperatorBinding::NativeRequestFuture<$crate::OperatorBindingPrepareBootstrap> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -1216,6 +1440,7 @@ impl<P: OperatorBindingProvider> NativeRequestEndpoint for OperatorBindingEndpoi
     fn operations(&self) -> &'static [&'static str] { &[
         ACTIVATE_BINDING_OPERATION,
         COMPLETE_REVOCATION_OPERATION,
+        PREPARE_ACTIVATION_OPERATION,
         PREPARE_BOOTSTRAP_OPERATION,
         PREPARE_RECOVERY_OPERATION,
         READ_BINDING_OPERATION,
@@ -1242,6 +1467,19 @@ impl<P: OperatorBindingProvider> NativeRequestEndpoint for OperatorBindingEndpoi
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).complete_revocation(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            PREPARE_ACTIVATION_OPERATION => {
+                let Ok(request) = request.downcast::<PrepareActivationRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).prepare_activation(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -1341,6 +1579,7 @@ macro_rules! __lenso_native_provide_operator_binding {
 pub struct OperatorBindingClient {
     activate_binding: NativeRequestHandle<OperatorBindingActivateBinding>,
     complete_revocation: NativeRequestHandle<OperatorBindingCompleteRevocation>,
+    prepare_activation: NativeRequestHandle<OperatorBindingPrepareActivation>,
     prepare_bootstrap: NativeRequestHandle<OperatorBindingPrepareBootstrap>,
     prepare_recovery: NativeRequestHandle<OperatorBindingPrepareRecovery>,
     read_binding: NativeRequestHandle<OperatorBindingReadBinding>,
@@ -1380,6 +1619,18 @@ impl OperatorBindingClient {
         self.complete_revocation.invoke_with_context(COMPLETE_REVOCATION_OPERATION, context, request).await
             .map_err(OperatorBindingCompleteRevocationInvocationError::Runtime)?
             .map_err(OperatorBindingCompleteRevocationInvocationError::Domain)
+    }
+
+    pub async fn prepare_activation(&self, request: PrepareActivationRequest) -> Result<PrepareActivationResponse, OperatorBindingPrepareActivationInvocationError> {
+        self.prepare_activation.invoke(PREPARE_ACTIVATION_OPERATION, request).await
+            .map_err(OperatorBindingPrepareActivationInvocationError::Runtime)?
+            .map_err(OperatorBindingPrepareActivationInvocationError::Domain)
+    }
+
+    pub async fn prepare_activation_with_context(&self, context: InvocationContext, request: PrepareActivationRequest) -> Result<PrepareActivationResponse, OperatorBindingPrepareActivationInvocationError> {
+        self.prepare_activation.invoke_with_context(PREPARE_ACTIVATION_OPERATION, context, request).await
+            .map_err(OperatorBindingPrepareActivationInvocationError::Runtime)?
+            .map_err(OperatorBindingPrepareActivationInvocationError::Domain)
     }
 
     pub async fn prepare_bootstrap(&self, request: PrepareBootstrapRequest) -> Result<PrepareBootstrapResponse, OperatorBindingPrepareBootstrapInvocationError> {
@@ -1442,6 +1693,7 @@ impl CapabilityClient for OperatorBindingClient {
         Ok(Self {
             activate_binding: dependencies.one::<OperatorBindingActivateBinding>()?,
             complete_revocation: dependencies.one::<OperatorBindingCompleteRevocation>()?,
+            prepare_activation: dependencies.one::<OperatorBindingPrepareActivation>()?,
             prepare_bootstrap: dependencies.one::<OperatorBindingPrepareBootstrap>()?,
             prepare_recovery: dependencies.one::<OperatorBindingPrepareRecovery>()?,
             read_binding: dependencies.one::<OperatorBindingReadBinding>()?,
@@ -1478,6 +1730,7 @@ impl CapabilityClientMany for OperatorBindingClient {
                     Self {
                     activate_binding: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorBindingActivateBinding>()?,
                     complete_revocation: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorBindingCompleteRevocation>()?,
+                    prepare_activation: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorBindingPrepareActivation>()?,
                     prepare_bootstrap: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorBindingPrepareBootstrap>()?,
                     prepare_recovery: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorBindingPrepareRecovery>()?,
                     read_binding: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorBindingReadBinding>()?,
@@ -1505,6 +1758,11 @@ pub enum OperatorBindingActivateBindingInvocationError {
 #[derive(Clone, Debug, PartialEq)]
 pub enum OperatorBindingCompleteRevocationInvocationError {
     Domain(CompleteRevocationError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum OperatorBindingPrepareActivationInvocationError {
+    Domain(PrepareActivationError),
     Runtime(RuntimeFailure),
 }
 #[derive(Clone, Debug, PartialEq)]

@@ -5,8 +5,8 @@ use lenso_kernel::{InvocationContext, NativeRequestEndpoint, NativeRequestFuture
 
 use lenso_plugin_authoring::{BoundCapabilityClient, CapabilityClient, CapabilityClientMany, CapabilityReference};
 pub const CAPABILITY_ID: &str = "lenso.auth.operator-session@1";
-pub const DESCRIPTOR_VERSION: &str = "1.0.0";
-pub const DESCRIPTOR_DIGEST: &str = "sha256:354978b1c93ecde9d8f356162a3767c63773e500667bcb7a7aee3c68cfdd2533";
+pub const DESCRIPTOR_VERSION: &str = "1.1.0";
+pub const DESCRIPTOR_DIGEST: &str = "sha256:84c30183fea3c12133a4c2b1ceb8ebc368228740b1157c5e94d8ac338e77f825";
 pub const PORTABLE: bool = true;
 pub const CROSS_LANE_TRANSFER: bool = true;
 pub const OPERATOR_SESSION_CAPABILITY_ID: &str = CAPABILITY_ID;
@@ -16,32 +16,33 @@ pub const OPERATOR_SESSION_CONTRACT: CapabilityReference<OperatorSessionClient> 
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! __lenso_provided_operator_session { () => { "{\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.0.0\",\"operations\":[\"bootstrap_binding\",\"exchange_session\",\"read_binding\",\"recover_revocation\",\"revoke_binding\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
+macro_rules! __lenso_provided_operator_session { () => { "{\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.1.0\",\"operations\":[\"bootstrap_binding\",\"exchange_session\",\"read_binding\",\"recover_revocation\",\"resume_binding\",\"revoke_binding\"],\"operation_kinds\":{},\"default_admission\":{\"queue_capacity\":0,\"max_concurrency\":1},\"operation_admissions\":{},\"event_admission\":null,\"cross_lane_transfer\":true}" }; }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_operator_session_client {
-    () => { "{\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"one\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"one\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_optional_operator_session_client {
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"optional\"}") };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"optional\"}") };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __lenso_required_many_operator_session_client {
-    () => { "{\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}" };
-    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.0.0\",\"cardinality\":\"many\"}") };
+    () => { "{\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}" };
+    ($requirement_id:literal) => { concat!("{\"requirement_id\":", stringify!($requirement_id), ",\"capability_id\":\"lenso.auth.operator-session@1\",\"descriptor_version\":\"1.1.0\",\"cardinality\":\"many\"}") };
 }
 
 pub const BOOTSTRAP_BINDING_OPERATION: &str = "bootstrap_binding";
 pub const EXCHANGE_SESSION_OPERATION: &str = "exchange_session";
 pub const READ_BINDING_OPERATION: &str = "read_binding";
 pub const RECOVER_REVOCATION_OPERATION: &str = "recover_revocation";
+pub const RESUME_BINDING_OPERATION: &str = "resume_binding";
 pub const REVOKE_BINDING_OPERATION: &str = "revoke_binding";
 
 pub use lenso_contract_runtime::{UnknownDomainError};
@@ -195,6 +196,31 @@ pub enum RecoverRevocationError {
     Unknown(UnknownDomainError),
 }
 
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ResumeBindingRequest {
+    #[serde(rename = "binding_id")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub binding_id: String,
+    #[serde(rename = "revision")]
+    #[serde(deserialize_with = "lenso_contract_runtime::serde::deserialize_required")]
+    pub revision: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ResumeBindingError {
+    AccessUnavailable,
+    AuditUnavailable,
+    BootstrapConsumed,
+    BootstrapExpired,
+    InvalidRequest,
+    NotActive,
+    NotEnabled,
+    NotFound,
+    PermissionDenied,
+    Unauthenticated,
+    Unknown(UnknownDomainError),
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum RevokeBindingError {
     AccessUnavailable,
@@ -299,6 +325,29 @@ impl RequestCapability for OperatorSessionRecoverRevocation {
             return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
         };
         Rc::clone(&typed_endpoint.provider).recover_revocation(context, request)
+    }
+}
+
+#[derive(Debug)]
+pub struct OperatorSessionResumeBinding;
+impl RequestCapability for OperatorSessionResumeBinding {
+    type Request = ResumeBindingRequest;
+    type Response = Binding;
+    type DomainError = ResumeBindingError;
+    const ID: &'static str = CAPABILITY_ID;
+    const DESCRIPTOR_VERSION: &'static str = DESCRIPTOR_VERSION;
+
+    fn invoke_native(endpoint: &dyn NativeRequestEndpoint, operation: &str, request: Self::Request, context: InvocationContext) -> NativeRequestFuture<Self> {
+        if operation != RESUME_BINDING_OPERATION {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        }
+        let Some(typed_endpoint) = endpoint
+            .typed_endpoint()
+            .and_then(|endpoint| endpoint.downcast_ref::<OperatorSessionRequestEndpoint>())
+        else {
+            return lenso_kernel::invoke_typed_or_erased_native_request::<Self>(endpoint, operation, request, context);
+        };
+        Rc::clone(&typed_endpoint.provider).resume_binding(context, request)
     }
 }
 
@@ -585,6 +634,71 @@ impl<'de> serde::Deserialize<'de> for RecoverRevocationError {
     }
 }
 
+impl serde::Serialize for ResumeBindingError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        match self {
+            Self::AccessUnavailable => serializer.serialize_str("access_unavailable"),
+            Self::AuditUnavailable => serializer.serialize_str("audit_unavailable"),
+            Self::BootstrapConsumed => serializer.serialize_str("bootstrap_consumed"),
+            Self::BootstrapExpired => serializer.serialize_str("bootstrap_expired"),
+            Self::InvalidRequest => serializer.serialize_str("invalid_request"),
+            Self::NotActive => serializer.serialize_str("not_active"),
+            Self::NotEnabled => serializer.serialize_str("not_enabled"),
+            Self::NotFound => serializer.serialize_str("not_found"),
+            Self::PermissionDenied => serializer.serialize_str("permission_denied"),
+            Self::Unauthenticated => serializer.serialize_str("unauthenticated"),
+            Self::Unknown(value) => {
+                let mut map = serializer.serialize_map(Some(1 + usize::from(value.payload.is_some()) + value.extra.len()))?;
+                map.serialize_entry("code", &value.code)?;
+                if let Some(payload) = &value.payload {
+                    map.serialize_entry("payload", payload)?;
+                }
+                for (key, extra) in &value.extra {
+                    map.serialize_entry(key, extra)?;
+                }
+                map.end()
+            },
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ResumeBindingError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = <serde_json::Value as serde::Deserialize>::deserialize(deserializer)?;
+        match value {
+            serde_json::Value::String(code) => match code.as_str() {
+                "access_unavailable" => Ok(Self::AccessUnavailable),
+                "audit_unavailable" => Ok(Self::AuditUnavailable),
+                "bootstrap_consumed" => Ok(Self::BootstrapConsumed),
+                "bootstrap_expired" => Ok(Self::BootstrapExpired),
+                "invalid_request" => Ok(Self::InvalidRequest),
+                "not_active" => Ok(Self::NotActive),
+                "not_enabled" => Ok(Self::NotEnabled),
+                "not_found" => Ok(Self::NotFound),
+                "permission_denied" => Ok(Self::PermissionDenied),
+                "unauthenticated" => Ok(Self::Unauthenticated),
+                _ => Ok(Self::Unknown(UnknownDomainError { code, payload: None, extra: std::collections::BTreeMap::new() })),
+            },
+            serde_json::Value::Object(mut object) => {
+                let Some(code) = object.remove("code").and_then(|value| value.as_str().map(ToOwned::to_owned)) else {
+                    return Err(serde::de::Error::custom("Domain Error object is missing a string code"));
+                };
+                let payload = object.remove("payload");
+                let extra = object.into_iter().collect::<std::collections::BTreeMap<_, _>>();
+                Ok(Self::Unknown(UnknownDomainError { code, payload, extra }))
+            }
+            other => Err(serde::de::Error::custom(format!("Domain Error must be a string or object, got {other}"))),
+        }
+    }
+}
+
 impl serde::Serialize for RevokeBindingError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -677,6 +791,13 @@ pub fn encode_recover_revocation_response(value: &Binding) -> Result<String, ser
 pub fn decode_recover_revocation_response(wire: &str) -> Result<Binding, serde_json::Error> { decode_portable_json(wire) }
 pub fn encode_recover_revocation_error(value: &RecoverRevocationError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_recover_revocation_error(wire: &str) -> Result<RecoverRevocationError, serde_json::Error> { decode_portable_json(wire) }
+
+pub fn encode_resume_binding_request(value: &ResumeBindingRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_resume_binding_request(wire: &str) -> Result<ResumeBindingRequest, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_resume_binding_response(value: &Binding) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_resume_binding_response(wire: &str) -> Result<Binding, serde_json::Error> { decode_portable_json(wire) }
+pub fn encode_resume_binding_error(value: &ResumeBindingError) -> Result<String, serde_json::Error> { encode_portable_json(value) }
+pub fn decode_resume_binding_error(wire: &str) -> Result<ResumeBindingError, serde_json::Error> { decode_portable_json(wire) }
 
 pub fn encode_revoke_binding_request(value: &RevokeBindingRequest) -> Result<String, serde_json::Error> { encode_portable_json(value) }
 pub fn decode_revoke_binding_request(wire: &str) -> Result<RevokeBindingRequest, serde_json::Error> { decode_portable_json(wire) }
@@ -802,6 +923,35 @@ impl __LensoIntoOperatorSessionRecoverRevocationResult for Result<Binding, Opera
 }
 
 #[doc(hidden)]
+pub trait __LensoIntoOperatorSessionResumeBindingResult {
+    fn __lenso_into_result(self) -> Result<Result<Binding, ResumeBindingError>, RuntimeFailure>;
+}
+impl __LensoIntoOperatorSessionResumeBindingResult for Result<Binding, ResumeBindingError> {
+    fn __lenso_into_result(self) -> Result<Result<Binding, ResumeBindingError>, RuntimeFailure> { Ok(self) }
+}
+impl __LensoIntoOperatorSessionResumeBindingResult for Result<Result<Binding, ResumeBindingError>, RuntimeFailure> {
+    fn __lenso_into_result(self) -> Result<Result<Binding, ResumeBindingError>, RuntimeFailure> { self }
+}
+impl __LensoIntoOperatorSessionResumeBindingResult for Result<Binding, lenso_plugin_authoring::PluginError<ResumeBindingError, RuntimeFailure>> {
+    fn __lenso_into_result(self) -> Result<Result<Binding, ResumeBindingError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(lenso_plugin_authoring::PluginError::Domain(error)) => Ok(Err(error)),
+            Err(lenso_plugin_authoring::PluginError::Runtime(error)) => Err(error),
+        }
+    }
+}
+impl __LensoIntoOperatorSessionResumeBindingResult for Result<Binding, OperatorSessionResumeBindingInvocationError> {
+    fn __lenso_into_result(self) -> Result<Result<Binding, ResumeBindingError>, RuntimeFailure> {
+        match self {
+            Ok(value) => Ok(Ok(value)),
+            Err(OperatorSessionResumeBindingInvocationError::Domain(error)) => Ok(Err(error)),
+            Err(OperatorSessionResumeBindingInvocationError::Runtime(error)) => Err(error),
+        }
+    }
+}
+
+#[doc(hidden)]
 pub trait __LensoIntoOperatorSessionRevokeBindingResult {
     fn __lenso_into_result(self) -> Result<Result<Binding, RevokeBindingError>, RuntimeFailure>;
 }
@@ -835,6 +985,7 @@ pub trait OperatorSessionProvider: fmt::Debug + 'static {
     fn exchange_session(&self, context: InvocationContext, request: EmptyRequest) -> NativeRequestFuture<OperatorSessionExchangeSession>;
     fn read_binding(&self, context: InvocationContext, request: EmptyRequest) -> NativeRequestFuture<OperatorSessionReadBinding>;
     fn recover_revocation(&self, context: InvocationContext, request: RevokeBindingRequest) -> NativeRequestFuture<OperatorSessionRecoverRevocation>;
+    fn resume_binding(&self, context: InvocationContext, request: ResumeBindingRequest) -> NativeRequestFuture<OperatorSessionResumeBinding>;
     fn revoke_binding(&self, context: InvocationContext, request: RevokeBindingRequest) -> NativeRequestFuture<OperatorSessionRevokeBinding>;
 }
 
@@ -870,6 +1021,13 @@ macro_rules! __lenso_native_lower_operator_session {
             ::std::boxed::Box::pin(async move {
                 let result = <$plugin>::recover_revocation(&plugin, context, request).await;
                 $crate::__LensoIntoOperatorSessionRecoverRevocationResult::__lenso_into_result(result)
+            })
+        }
+        fn resume_binding(&self, context: __LensoNativeSupportOperatorSession::InvocationContext, request: $crate::ResumeBindingRequest) -> __LensoNativeSupportOperatorSession::NativeRequestFuture<$crate::OperatorSessionResumeBinding> {
+            let plugin = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let result = <$plugin>::resume_binding(&plugin, context, request).await;
+                $crate::__LensoIntoOperatorSessionResumeBindingResult::__lenso_into_result(result)
             })
         }
         fn revoke_binding(&self, context: __LensoNativeSupportOperatorSession::InvocationContext, request: $crate::RevokeBindingRequest) -> __LensoNativeSupportOperatorSession::NativeRequestFuture<$crate::OperatorSessionRevokeBinding> {
@@ -921,6 +1079,14 @@ macro_rules! __lenso_native_lower_object_operator_session {
                 $crate::__LensoIntoOperatorSessionRecoverRevocationResult::__lenso_into_result(result)
             })
         }
+        fn resume_binding(&self, context: __LensoNativeSupportOperatorSession::InvocationContext, request: $crate::ResumeBindingRequest) -> __LensoNativeSupportOperatorSession::NativeRequestFuture<$crate::OperatorSessionResumeBinding> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                let result = <$plugin>::resume_binding(plugin.as_ref(), context, request).await;
+                $crate::__LensoIntoOperatorSessionResumeBindingResult::__lenso_into_result(result)
+            })
+        }
         fn revoke_binding(&self, context: __LensoNativeSupportOperatorSession::InvocationContext, request: $crate::RevokeBindingRequest) -> __LensoNativeSupportOperatorSession::NativeRequestFuture<$crate::OperatorSessionRevokeBinding> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -967,6 +1133,13 @@ macro_rules! __lenso_native_lower_trait_object_operator_session {
                 <$plugin as $crate::OperatorSessionProvider>::recover_revocation(plugin.as_ref(), context, request).await
             })
         }
+        fn resume_binding(&self, context: __LensoNativeSupportOperatorSession::InvocationContext, request: $crate::ResumeBindingRequest) -> __LensoNativeSupportOperatorSession::NativeRequestFuture<$crate::OperatorSessionResumeBinding> {
+            let object = self.clone();
+            ::std::boxed::Box::pin(async move {
+                let plugin = object.get()?;
+                <$plugin as $crate::OperatorSessionProvider>::resume_binding(plugin.as_ref(), context, request).await
+            })
+        }
         fn revoke_binding(&self, context: __LensoNativeSupportOperatorSession::InvocationContext, request: $crate::RevokeBindingRequest) -> __LensoNativeSupportOperatorSession::NativeRequestFuture<$crate::OperatorSessionRevokeBinding> {
             let object = self.clone();
             ::std::boxed::Box::pin(async move {
@@ -999,6 +1172,7 @@ impl<P: OperatorSessionProvider> NativeRequestEndpoint for OperatorSessionEndpoi
         EXCHANGE_SESSION_OPERATION,
         READ_BINDING_OPERATION,
         RECOVER_REVOCATION_OPERATION,
+        RESUME_BINDING_OPERATION,
         REVOKE_BINDING_OPERATION,
     ] }
     fn typed_endpoint(&self) -> Option<&dyn std::any::Any> { Some(&self.request_endpoint) }
@@ -1048,6 +1222,19 @@ impl<P: OperatorSessionProvider> NativeRequestEndpoint for OperatorSessionEndpoi
                     return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
                 };
                 let invocation = Rc::clone(&self.provider).recover_revocation(context, *request);
+                Box::pin(async move {
+                    invocation.await.map(|result| {
+                        result
+                            .map(|value| Box::new(value) as Box<dyn std::any::Any>)
+                            .map_err(|error| Box::new(error) as Box<dyn std::any::Any>)
+                    })
+                })
+            },
+            RESUME_BINDING_OPERATION => {
+                let Ok(request) = request.downcast::<ResumeBindingRequest>() else {
+                    return Box::pin(futures::future::ready(Err(RuntimeFailure::ProtocolViolation { capability: CAPABILITY_ID })));
+                };
+                let invocation = Rc::clone(&self.provider).resume_binding(context, *request);
                 Box::pin(async move {
                     invocation.await.map(|result| {
                         result
@@ -1110,6 +1297,7 @@ pub struct OperatorSessionClient {
     exchange_session: NativeRequestHandle<OperatorSessionExchangeSession>,
     read_binding: NativeRequestHandle<OperatorSessionReadBinding>,
     recover_revocation: NativeRequestHandle<OperatorSessionRecoverRevocation>,
+    resume_binding: NativeRequestHandle<OperatorSessionResumeBinding>,
     revoke_binding: NativeRequestHandle<OperatorSessionRevokeBinding>,
 }
 impl OperatorSessionClient {
@@ -1172,6 +1360,18 @@ impl OperatorSessionClient {
             .map_err(OperatorSessionRecoverRevocationInvocationError::Domain)
     }
 
+    pub async fn resume_binding(&self, request: ResumeBindingRequest) -> Result<Binding, OperatorSessionResumeBindingInvocationError> {
+        self.resume_binding.invoke(RESUME_BINDING_OPERATION, request).await
+            .map_err(OperatorSessionResumeBindingInvocationError::Runtime)?
+            .map_err(OperatorSessionResumeBindingInvocationError::Domain)
+    }
+
+    pub async fn resume_binding_with_context(&self, context: InvocationContext, request: ResumeBindingRequest) -> Result<Binding, OperatorSessionResumeBindingInvocationError> {
+        self.resume_binding.invoke_with_context(RESUME_BINDING_OPERATION, context, request).await
+            .map_err(OperatorSessionResumeBindingInvocationError::Runtime)?
+            .map_err(OperatorSessionResumeBindingInvocationError::Domain)
+    }
+
     pub async fn revoke_binding(&self, request: RevokeBindingRequest) -> Result<Binding, OperatorSessionRevokeBindingInvocationError> {
         self.revoke_binding.invoke(REVOKE_BINDING_OPERATION, request).await
             .map_err(OperatorSessionRevokeBindingInvocationError::Runtime)?
@@ -1198,6 +1398,7 @@ impl CapabilityClient for OperatorSessionClient {
             exchange_session: dependencies.one::<OperatorSessionExchangeSession>()?,
             read_binding: dependencies.one::<OperatorSessionReadBinding>()?,
             recover_revocation: dependencies.one::<OperatorSessionRecoverRevocation>()?,
+            resume_binding: dependencies.one::<OperatorSessionResumeBinding>()?,
             revoke_binding: dependencies.one::<OperatorSessionRevokeBinding>()?,
         })
     }
@@ -1233,6 +1434,7 @@ impl CapabilityClientMany for OperatorSessionClient {
                     exchange_session: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorSessionExchangeSession>()?,
                     read_binding: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorSessionReadBinding>()?,
                     recover_revocation: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorSessionRecoverRevocation>()?,
+                    resume_binding: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorSessionResumeBinding>()?,
                     revoke_binding: binding.handle().ok_or(RuntimeFailure::Unavailable { capability: CAPABILITY_ID })?.typed::<OperatorSessionRevokeBinding>()?,
                     },
                 ))
@@ -1267,6 +1469,11 @@ pub enum OperatorSessionReadBindingInvocationError {
 #[derive(Clone, Debug, PartialEq)]
 pub enum OperatorSessionRecoverRevocationInvocationError {
     Domain(RecoverRevocationError),
+    Runtime(RuntimeFailure),
+}
+#[derive(Clone, Debug, PartialEq)]
+pub enum OperatorSessionResumeBindingInvocationError {
+    Domain(ResumeBindingError),
     Runtime(RuntimeFailure),
 }
 #[derive(Clone, Debug, PartialEq)]

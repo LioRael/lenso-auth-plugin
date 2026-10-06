@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["binding_id", "revision", "operation", "permissions", "source_assertion_expires_at"],
+  "properties": {
+    "binding_id": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "operation": {
+      "$ref": "#/$defs/PrepareActivationRequestOperation"
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_assertion_expires_at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "PrepareActivationRequestOperation": {
+      "enum": ["create_role", "set_role_permissions", "assign_role"]
+    }
+  },
+  "title": "PrepareActivationRequest"
+}
