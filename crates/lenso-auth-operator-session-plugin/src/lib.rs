@@ -524,7 +524,9 @@ impl OperatorSessionPlugin {
                 bindings::OperatorBindingPrepareActivationInvocationError::Runtime(e) => {
                     Failure::Runtime(e)
                 }
-                _ => Failure::NotActive,
+                bindings::OperatorBindingPrepareActivationInvocationError::Domain(_) => {
+                    Failure::NotActive
+                }
             })?;
         let b = &prepared.binding;
         if !self.binding_matches(b)
