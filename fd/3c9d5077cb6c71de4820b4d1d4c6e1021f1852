@@ -1,0 +1,14 @@
+crates/lenso-auth-operator-session-plugin/src/lib.rs
+  h_9d56aba080c170 527-529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd3c9d5077cb6c71de4820b4d1d4c6e1021f1852",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
