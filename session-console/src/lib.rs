@@ -17,10 +17,10 @@ fn validate(config: &SessionConsoleConfig) -> Result<(), lenso_kernel::RuntimeFa
     let name = |name: &str| {
         name.starts_with("__Host-")
             && name.len() > 7
-            && name.len() <= 256
+            && name.len() <= 128
             && name
                 .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
     };
     if !name(&config.session_cookie_name)
         || !name(&config.csrf_cookie_name)
@@ -65,3 +65,26 @@ impl SessionConsole {
 }
 
 pub fn link() {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookie_names_match_existing_renewal_transport() {
+        let mut config = SessionConsoleConfig {
+            session_cookie_name: "__Host-session".into(),
+            csrf_cookie_name: "__Host-csrf".into(),
+        };
+        assert!(validate(&config).is_ok());
+        config.csrf_cookie_name = "__Host-custom.csrf".into();
+        assert!(validate(&config).is_err());
+        config.csrf_cookie_name = format!("__Host-{}", "a".repeat(121));
+        assert!(validate(&config).is_ok());
+        config.csrf_cookie_name.push('a');
+        assert!(validate(&config).is_err());
+        config.csrf_cookie_name = "__Host-csrf".into();
+        config.session_cookie_name = "__Host-custom.session".into();
+        assert!(validate(&config).is_err());
+    }
+}

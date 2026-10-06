@@ -1,1 +1,1 @@
-{"type":"object","additionalProperties":false,"required":["session_cookie_name","csrf_cookie_name"],"properties":{"session_cookie_name":{"type":"string","minLength":8,"maxLength":256},"csrf_cookie_name":{"type":"string","minLength":8,"maxLength":256}}}
+{"type":"object","additionalProperties":false,"required":["session_cookie_name","csrf_cookie_name"],"properties":{"session_cookie_name":{"type":"string","minLength":8,"maxLength":128},"csrf_cookie_name":{"type":"string","minLength":8,"maxLength":128}}}
