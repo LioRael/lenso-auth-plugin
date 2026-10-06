@@ -1,0 +1,18 @@
+experiments/operator-binding-app/tests/pending_activation.rs
+  h_9d56aba080c170 64-67,86-95
+experiments/operator-binding-workers-app/proof-worker.mjs
+  h_9d56aba080c170 12-26,30,34,39
+experiments/operator-binding-workers-app/qualify-workers.mjs
+  h_9d56aba080c170 11,77,146-153,167,169-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b58069a6a3f64023f118433a827791752e5914fe",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
