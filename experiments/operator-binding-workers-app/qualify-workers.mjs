@@ -8,6 +8,7 @@ import {join,resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('.',import.meta.url));
 const repository=resolve(root,'../..');
+const targetRoot=resolve(process.env.CARGO_TARGET_DIR??join(root,'target'));
 const cargo=process.env.LENSO_CARGO??'cargo';
 const require=createRequire(process.env.LENSO_WRANGLER_PACKAGE??import.meta.url);
 const wranglerPackage=require.resolve('wrangler/package.json');
@@ -73,7 +74,7 @@ try {
   execFileSync(cargo,['build','--locked','--offline','--target','wasm32-unknown-unknown','--release'],{cwd:root,stdio:'inherit'});
   const bindgen=process.env.LENSO_WASM_BINDGEN??'wasm-bindgen';
   assert.equal(execFileSync(bindgen,['--version'],{encoding:'utf8'}).trim(),'wasm-bindgen 0.2.127');
-  execFileSync(bindgen,['--target','web','--out-dir','pkg','--out-name','operator_binding_app','target/wasm32-unknown-unknown/release/lenso_operator_binding_workers_app_proof.wasm'],{cwd:root,stdio:'inherit'});
+  execFileSync(bindgen,['--target','web','--out-dir','pkg','--out-name','operator_binding_app',join(targetRoot,'wasm32-unknown-unknown/release/lenso_operator_binding_workers_app_proof.wasm')],{cwd:root,stdio:'inherit'});
   await build({entryPoints:[resolve(root,'proof-worker.mjs')],outfile:output,bundle:true,format:'esm',platform:'browser',target:'es2022',plugins:[
     {name:'wasm',setup(b){b.onResolve({filter:/\.wasm$/},a=>({path:a.path,external:true}));}},
     {name:'owners',setup(b){b.onResolve({filter:/^(@lenso\/workers-runtime|@fixture\/access-state|@fixture\/audit-store)$/},a=>({path:{'@lenso/workers-runtime':runtimePackage,'@fixture/access-state':accessModule,'@fixture/audit-store':auditModule}[a.path]}));}},
@@ -142,6 +143,14 @@ try {
   assert.equal(recovered.revoked,true);assert.equal(recovered.active,false);assert.equal(recovered.revocation_pending,false);assert.ok(recovered.revocation_audit_event_id);assert.equal(recovered.revoked_by,binding.operator_subject);
   await closedAuth(session.credential);await denied('exchange',{credential:ownerSession.credential},'not_active');
   pass('Fresh event controlled exact source-owner recovery drains real Audit outbox, preserves original revoker and never restores login');
+  await start('slow-scope-commit');
+  const delayStarted=Date.now();
+  const delayed=await ok('bootstrap',{credential:ownerSession.credential,fixture_scope_delay_ms:6000});
+  assert.ok(Date.now()-delayStarted>=6000,'scope commit response must actually cross five seconds');
+  assert.equal(delayed.active,true);assert.equal(await sessions(),0);
+  assert.equal(await scalar('access','SELECT count(*) FROM access_control_scopes'),1);
+  assert.equal(await scalar('audit',"SELECT count(*) FROM audit_events WHERE event_name='auth.operator-binding.applied'"),1);
+  pass('Real Access scope commit followed by six-second reply delay uses fresh per-operation controls and preserved Driver deadline');
   for(const fault of ['audit','access','activate']) {
     await start(fault);
     if(fault==='audit')await failAudit('applied');
@@ -155,7 +164,16 @@ try {
     await sql(fault==='audit'?'audit':fault==='access'?'access':'operators','DROP TRIGGER fixture_fail');
     const request={credential:ownerSession.credential,binding_id:pendingRow.binding_id,revision:String(pendingRow.revision)};
     await denied('resume',{...request,caller:ORDINARY},'permission_denied');
+    await denied('resume',{...request,credential:ordinarySession.credential},'permission_denied');
     await denied('resume',{...request,revision:'2'},'not_active');
+    await denied('resume',{...request,revision:'01'},'invalid_request');
+    await denied('resume',{...request,binding_id:'opb_wrong'},'not_active');
+    await sql('access',"DELETE FROM access_control_role_permissions WHERE permission='access-control.roles.manage' AND role_id IN (SELECT role_id FROM access_control_roles WHERE protected=1)");
+    await denied('resume',request,'access_unavailable');
+    assert.equal(await bindingStatus(),'pending');assert.equal(await sessions(),0);
+    await sql('access',"INSERT INTO access_control_role_permissions(scope_kind,scope_id,role_id,permission) SELECT scope_kind,scope_id,role_id,'access-control.roles.manage' FROM access_control_roles WHERE protected=1");
+    ownerSession=await ok('issue',{subject:owner});
+    request.credential=ownerSession.credential;
     const resumed=await ok('resume',request);
     const replay=await ok('resume',request);
     assert.equal(resumed.active,true);assert.equal(resumed.binding_id,pendingRow.binding_id);

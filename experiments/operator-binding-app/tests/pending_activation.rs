@@ -61,6 +61,10 @@ async fn qualify_pending() {
                 .is_err()
         );
         assert!(resume(&app, OWNER, &owner_actor, &id, "2").await.is_err());
+        assert!(matches!(
+            resume(&app, OWNER, &owner_actor, &id, "01").await,
+            Err(workflow::ResumeBindingError::InvalidRequest)
+        ));
         assert!(
             resume(&app, OWNER, &owner_actor, "opb_wrong", "1")
                 .await
@@ -79,6 +83,16 @@ async fn qualify_pending() {
         let app = start(&db, &owner, true).await;
         let session = issue(&app, &owner).await;
         let fresh_actor = actor(&app, OWNER, &session.credential).await;
+        db.pool.execute(AssertSqlSafe("DELETE FROM access.access_control_role_permissions WHERE permission='access-control.roles.manage' AND role_id IN (SELECT role_id FROM access.access_control_roles WHERE protected)"))
+            .await.unwrap();
+        assert!(matches!(
+            resume(&app, OWNER, &fresh_actor, &id, "1").await,
+            Err(workflow::ResumeBindingError::AccessUnavailable)
+        ));
+        assert_eq!(db.binding_status().await, "pending");
+        assert_eq!(db.sessions().await, 0);
+        db.pool.execute(AssertSqlSafe("INSERT INTO access.access_control_role_permissions(scope_kind,scope_id,role_id,permission) SELECT scope_kind,scope_id,role_id,'access-control.roles.manage' FROM access.access_control_roles WHERE protected"))
+            .await.unwrap();
         let active = resume(&app, OWNER, &fresh_actor, &id, "1").await.unwrap();
         assert!(active.active);
         assert_eq!(active.binding_id, id);
