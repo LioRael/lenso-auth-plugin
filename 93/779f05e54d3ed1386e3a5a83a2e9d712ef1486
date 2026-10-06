@@ -1,0 +1,68 @@
+Cargo.toml
+  h_9d56aba080c170 112-114
+crates/lenso-auth-account-plugin/Cargo.toml
+  h_9d56aba080c170 44
+crates/lenso-auth-account-plugin/migrations/d1/005_operator_activation_intents.sql
+  h_9d56aba080c170 1-2
+crates/lenso-auth-account-plugin/migrations/postgres/008_operator_activation_intents.sql
+  h_9d56aba080c170 1-2
+crates/lenso-auth-account-plugin/src/activation_response_tests.rs
+  h_9d56aba080c170 1-120
+crates/lenso-auth-account-plugin/src/lib.rs
+  h_9d56aba080c170 5-6
+crates/lenso-auth-account-plugin/src/migration.rs
+  h_9d56aba080c170 28-32,51-54,117-127,153-157
+crates/lenso-auth-account-plugin/src/operator_binding.rs
+  h_9d56aba080c170 78-79,239-266,268-375,454-458,482-508,695-774
+crates/lenso-auth-account-plugin/src/schema.rs
+  h_9d56aba080c170 39-43,61-65,85-86,89-90,93-94,96-107
+crates/lenso-auth-account-plugin/src/storage/activation_intent_tests.rs
+  h_9d56aba080c170 1-115
+crates/lenso-auth-account-plugin/src/storage/operator_binding.rs
+  h_9d56aba080c170 10,53-58,116-167,231-234
+crates/lenso-auth-account-plugin/src/storage/operator_binding_tests.rs
+  h_9d56aba080c170 9-10,17,31,54,236
+crates/lenso-auth-operator-session-plugin/src/activation_context_tests.rs
+  h_9d56aba080c170 1-170
+crates/lenso-auth-operator-session-plugin/src/lib.rs
+  h_9d56aba080c170 158-159,178-179,304-313,322,353,355-360,385,456-673,675-690,692-710,714,716-718,722-751,756,758-759,761-769,773,791-800,804,816-824,828,840,1067-1079,1146-1187
+crates/lenso-capability-operator-binding/src/contract.rs
+  h_9d56aba080c170 95-122,126,131-135
+crates/lenso-capability-operator-session/src/contract.rs
+  h_9d56aba080c170 50-56,66,71-75
+docs/operator-pending-activation.md
+  h_9d56aba080c170 1-78
+experiments/managed-session-app/Cargo.toml
+  h_9d56aba080c170 63-65
+experiments/operator-binding-app/Cargo.toml
+  h_9d56aba080c170 49-51
+experiments/operator-binding-app/tests/native_binding.rs
+  h_9d56aba080c170 32,156,666-668
+experiments/operator-binding-app/tests/pending_activation.rs
+  h_9d56aba080c170 1-129
+experiments/operator-binding-d1-model/qualify.mjs
+  h_9d56aba080c170 34,96,104,138-143,195
+experiments/operator-binding-d1-model/src/lib.rs
+  h_9d56aba080c170 60-61,129-139
+experiments/operator-binding-workers-app/Cargo.toml
+  h_9d56aba080c170 53-55
+experiments/operator-binding-workers-app/qualify-workers.mjs
+  h_9d56aba080c170 145,148,150,154-167
+experiments/operator-binding-workers-app/src/workers.rs
+  h_9d56aba080c170 170-171,269,356,376-387
+workers/check-activation-intent.py
+  h_9d56aba080c170 1-81
+workers/generate-migrations.py
+  h_9d56aba080c170 87-89,103-107
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "93779f05e54d3ed1386e3a5a83a2e9d712ef1486",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
