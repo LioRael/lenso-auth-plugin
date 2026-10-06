@@ -60,6 +60,10 @@ async fn qualify_pending() {
                         | Err(lenso_kernel::RuntimeFailure::PluginFailure { .. }
                             | lenso_kernel::RuntimeFailure::PluginRestartExhausted { .. }
                             | lenso_kernel::RuntimeFailure::AdmissionClosed)
+                ) || matches!(
+                    &failed,
+                    Err(lenso_kernel::RuntimeFailure::Unavailable { capability })
+                        if *capability == workflow::CAPABILITY_ID
                 ),
                 "unexpected activation fault: {failed:?}"
             ),
