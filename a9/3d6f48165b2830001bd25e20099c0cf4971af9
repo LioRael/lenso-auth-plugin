@@ -1,0 +1,32 @@
+crates/lenso-capability-operator-binding/capability.json
+  h_9d56aba080c170 3,7-13
+crates/lenso-capability-operator-binding/schemas/prepare-activation-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-binding/schemas/prepare-activation-request.schema.json
+  h_9d56aba080c170 1-32
+crates/lenso-capability-operator-binding/schemas/prepare-activation-response.schema.json
+  h_9d56aba080c170 1-102
+crates/lenso-capability-operator-binding/src/generated.rs
+  h_9d56aba080c170 8-9,19,24-25,31,37-38,43,163-238,408-430,653-717,992-998,1085-1113,1233,1260-1266,1321-1328,1385-1391,1443,1478-1490,1582,1624-1635,1696,1733,1764-1768
+crates/lenso-capability-operator-session/capability.json
+  h_9d56aba080c170 3,7-13
+crates/lenso-capability-operator-session/schemas/resume-binding-error.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/resume-binding-request.schema.json
+  h_9d56aba080c170 1-15
+crates/lenso-capability-operator-session/schemas/resume-binding-response.schema.json
+  h_9d56aba080c170 1-74
+crates/lenso-capability-operator-session/src/generated.rs
+  h_9d56aba080c170 8-9,19,24-25,31,37-38,45,199-223,331-353,637-701,795-801,925-953,988,1026-1032,1082-1089,1136-1142,1175,1233-1245,1300,1363-1374,1401,1437,1475-1479
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a93d6f48165b2830001bd25e20099c0cf4971af9",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
