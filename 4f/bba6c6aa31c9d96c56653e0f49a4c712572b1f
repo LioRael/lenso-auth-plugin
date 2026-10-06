@@ -1,0 +1,18 @@
+Cargo.toml
+  h_9d56aba080c170 115-124
+console/Cargo.toml
+  h_9d56aba080c170 25-28
+crates/lenso-auth-account-plugin/Cargo.toml
+  h_9d56aba080c170 38-39,41-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4fbba6c6aa31c9d96c56653e0f49a4c712572b1f",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
