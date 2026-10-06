@@ -79,6 +79,12 @@ pub(crate) struct Record {
     pub activation_permissions: String,
 }
 impl Record {
+    fn activation_matches(&self, bootstrap_subject: &str, revision: i64) -> bool {
+        matches!(self.status.as_str(), "pending" | "active")
+            && self.revision == revision
+            && self.source_subject == bootstrap_subject
+    }
+
     fn wire(&self) -> role::Binding {
         role::Binding {
             source_issuer: self.source_issuer.clone(),
@@ -318,10 +324,7 @@ impl AccountAuthPlugin {
             else {
                 return Ok(Err(role::PrepareActivationError::NotFound));
             };
-            if !matches!(row.status.as_str(), "pending" | "active")
-                || row.revision != revision
-                || row.source_subject != cfg.bootstrap_subject
-            {
+            if !row.activation_matches(&cfg.bootstrap_subject, revision) {
                 return Ok(Err(role::PrepareActivationError::NotActive));
             }
             if !activation_identities_active(&prepared.store, &row, source.as_ref(), &context)
@@ -349,9 +352,7 @@ impl AccountAuthPlugin {
             } else {
                 row
             };
-            if !matches!(row.status.as_str(), "pending" | "active")
-                || row.revision != revision
-                || row.source_subject != cfg.bootstrap_subject
+            if !row.activation_matches(&cfg.bootstrap_subject, revision)
                 || row.activation_permissions != intended_permissions
                 || OffsetDateTime::parse(&row.activation_started_at, &Rfc3339).is_err()
             {
@@ -369,7 +370,7 @@ impl AccountAuthPlugin {
                 permissions,
                 source_expires_at,
                 window_end,
-                request.operation,
+                &request.operation,
             )
         })
     }
@@ -699,7 +700,7 @@ pub(super) fn activation_response(
     permissions: Vec<String>,
     source_expires_at: OffsetDateTime,
     window_end: OffsetDateTime,
-    operation: role::PrepareActivationRequestOperation,
+    operation: &role::PrepareActivationRequestOperation,
 ) -> Result<Result<role::PrepareActivationResponse, role::PrepareActivationError>, RuntimeFailure> {
     let operation = match operation {
         role::PrepareActivationRequestOperation::CreateRole => "create_role",

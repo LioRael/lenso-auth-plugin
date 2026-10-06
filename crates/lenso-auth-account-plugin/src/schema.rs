@@ -82,7 +82,7 @@ pub(crate) async fn prepare_features(
     match OwnedPostgres::prepare(database_url, operator_schema_plan(schema)?).await {
         Ok(pg) => Ok(pg),
         Err(PostgresKitError::UpgradeRequired {
-            current: 5 | 6 | 7,
+            current: 5..=7,
             expected: 8,
             ..
         }) if !operator_required => {

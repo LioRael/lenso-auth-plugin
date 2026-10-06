@@ -44,7 +44,7 @@ fn fresh_control_has_only_selected_audience_and_respects_source_and_window_expir
             vec!["fixture.read".into()],
             source_end,
             window_end,
-            operation,
+            &operation,
         )
         .unwrap()
         .unwrap();
@@ -76,7 +76,7 @@ fn durable_receipt_survives_refresh_and_completed_binding_mints_no_control() {
         vec!["fixture.read".into()],
         end,
         end,
-        operator_binding_contract::PrepareActivationRequestOperation::CreateRole,
+        &operator_binding_contract::PrepareActivationRequestOperation::CreateRole,
     )
     .unwrap()
     .unwrap();
@@ -86,7 +86,7 @@ fn durable_receipt_survives_refresh_and_completed_binding_mints_no_control() {
         vec!["fixture.read".into()],
         end,
         end,
-        operator_binding_contract::PrepareActivationRequestOperation::AssignRole,
+        &operator_binding_contract::PrepareActivationRequestOperation::AssignRole,
     )
     .unwrap()
     .unwrap();
@@ -99,7 +99,7 @@ fn durable_receipt_survives_refresh_and_completed_binding_mints_no_control() {
         vec!["fixture.read".into()],
         end,
         end,
-        operator_binding_contract::PrepareActivationRequestOperation::AssignRole,
+        &operator_binding_contract::PrepareActivationRequestOperation::AssignRole,
     )
     .unwrap()
     .unwrap();
@@ -112,7 +112,7 @@ fn durable_receipt_survives_refresh_and_completed_binding_mints_no_control() {
             vec!["fixture.read".into()],
             OffsetDateTime::now_utc() - Duration::seconds(1),
             end,
-            operator_binding_contract::PrepareActivationRequestOperation::CreateRole
+            &operator_binding_contract::PrepareActivationRequestOperation::CreateRole
         )
         .unwrap(),
         Err(operator_binding_contract::PrepareActivationError::Unauthenticated)
