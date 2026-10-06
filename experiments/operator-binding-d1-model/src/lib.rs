@@ -57,6 +57,8 @@ mod operator_binding {
         pub revoked_by: String,
         pub revoked_at: String,
         pub revocation_audit_event_id: String,
+        pub activation_started_at: String,
+        pub activation_permissions: String,
     }
 }
 fn text(input: &Value, field: &str) -> Result<String, JsValue> {
@@ -121,6 +123,17 @@ pub async fn invoke(input: String, batch: js_sys::Function) -> Result<String, Js
                 &text(&input, "subject")?,
                 &text(&input, "binding_id")?,
                 &text(&input, "operator")?,
+            )
+            .await,
+        ),
+        "prepare_activation_intent" => wire(
+            binding_store::prepare_activation_intent(
+                &store,
+                &cfg,
+                &text(&input, "binding_id")?,
+                revision(&input)?,
+                &text(&input, "occurred")?,
+                &text(&input, "permissions")?,
             )
             .await,
         ),

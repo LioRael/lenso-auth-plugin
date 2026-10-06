@@ -46,3 +46,6 @@ lenso-capability-credential-state = { path = "../../crates/lenso-capability-cred
 lenso-capability-credential-issuer = { path = "../../crates/lenso-capability-credential-issuer" }
 lenso-capability-identity-directory = { path = "../../crates/lenso-capability-identity-directory" }
 lenso-capability-password-auth = { path = "../../crates/lenso-capability-password-auth" }
+
+# Preserve the unchanged cbaa ManagedSession identity in owner-only fixtures.
+lenso-capability-managed-session = { path = "../../crates/lenso-capability-managed-session" }

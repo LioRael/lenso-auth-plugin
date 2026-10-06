@@ -155,6 +155,8 @@ enum Failure {
     PermissionDenied,
     NotActive,
     BootstrapConsumed,
+    BootstrapExpired,
+    InvalidRequest,
     AuditUnavailable,
     AccessUnavailable,
 }
@@ -173,6 +175,8 @@ macro_rules! invocation_error {
             Failure::PermissionDenied => Inv::Domain(Domain::PermissionDenied),
             Failure::NotActive => Inv::Domain(Domain::NotActive),
             Failure::BootstrapConsumed => Inv::Domain(Domain::BootstrapConsumed),
+            Failure::BootstrapExpired => Inv::Domain(Domain::BootstrapExpired),
+            Failure::InvalidRequest => Inv::Domain(Domain::InvalidRequest),
             Failure::AuditUnavailable => Inv::Domain(Domain::AuditUnavailable),
             Failure::AccessUnavailable => Inv::Domain(Domain::AccessUnavailable),
         }
@@ -298,6 +302,16 @@ impl OperatorSessionPlugin {
         action: &str,
         binding: Option<&bindings::Binding>,
     ) -> Result<String, Failure> {
+        self.append_event(c, subject, action, binding, None).await
+    }
+    async fn append_event(
+        &self,
+        c: &InvocationContext,
+        subject: &str,
+        action: &str,
+        binding: Option<&bindings::Binding>,
+        intent: Option<&bindings::PrepareActivationResponse>,
+    ) -> Result<String, Failure> {
         let mut metadata = BTreeMap::from([
             (
                 "deployment".into(),
@@ -305,7 +319,7 @@ impl OperatorSessionPlugin {
             ),
             (
                 "permissions".into(),
-                serde_json::json!(self.config.permissions),
+                serde_json::json!(intent.map_or(&self.config.permissions, |p| &p.permissions)),
             ),
         ]);
         if let Some(b) = binding {
@@ -336,11 +350,14 @@ impl OperatorSessionPlugin {
                         ),
                         display: None,
                     },
-                    idempotency_key: None,
+                    idempotency_key: intent.map(|p| p.audit_idempotency_key.clone()),
                     metadata,
-                    occurred_at: OffsetDateTime::now_utc()
-                        .format(&Rfc3339)
-                        .map_err(|_| Failure::AuditUnavailable)?,
+                    occurred_at: match intent {
+                        Some(p) => p.audit_occurred_at.clone(),
+                        None => OffsetDateTime::now_utc()
+                            .format(&Rfc3339)
+                            .map_err(|_| Failure::AuditUnavailable)?,
+                    },
                     outcome: audit::AppendEventRequestOutcome::Success,
                     severity: audit::AppendEventRequestSeverity::Info,
                     reason: None,
@@ -365,34 +382,7 @@ impl OperatorSessionPlugin {
         parent: &InvocationContext,
         operation: &str,
     ) -> Result<InvocationContext, Failure> {
-        let assertion_wire = serde_json::from_str(raw).map_err(|_| Failure::AccessUnavailable)?;
-        let AuthOutcome::Authenticated(control) =
-            decode_auth_response(lenso_capability_auth::AuthResponse {
-                kind: lenso_capability_auth::AuthResponseKind::Authenticated,
-                assertion: Some(assertion_wire),
-            })
-            .map_err(|_| Failure::AccessUnavailable)?
-        else {
-            return Err(Failure::AccessUnavailable);
-        };
-        if control.issuer() != self.config.operators_issuer
-            || control.subject() != binding.operator_subject
-        {
-            return Err(Failure::AccessUnavailable);
-        }
-        // Authority cannot replace the sealed accounts context; use a bounded internal invocation.
-        let context = control
-            .attach(InvocationContext::new(
-                parent.request_id(),
-                Some(std::time::Duration::from_secs(5)),
-                parent.cancellation(),
-            ))
-            .map_err(|_| Failure::AccessUnavailable)?;
-        self.config
-            .verifier(true)?
-            .project_context::<User>(&context, admin::CAPABILITY_ID, operation, &Clock)
-            .map_err(|_| Failure::AccessUnavailable)?;
-        Ok(context)
+        self.config.control_context(raw, binding, parent, operation)
     }
     async fn bootstrap(&self, c: InvocationContext) -> Result<role::Binding, Failure> {
         if !c
@@ -429,8 +419,6 @@ impl OperatorSessionPlugin {
         if !self.binding_matches(&binding) {
             return Err(Failure::PermissionDenied);
         }
-        let control_context =
-            self.control_context(&prepared.control_assertion, &binding, &c, "create_role")?;
         match self
             .access_admin
             .bootstrap_scope_with_context(
@@ -465,41 +453,324 @@ impl OperatorSessionPlugin {
             }
             Err(_) => return Err(Failure::AccessUnavailable),
         }
-        let policy_revision = self.grant_role(control_context, &binding).await?;
-        let audit = self
-            .append(&c, actor.subject(), "applied", Some(&binding))
-            .await?;
-        let active = self
+        self.finish_activation(&c, &binding, "bootstrap_binding")
+            .await
+    }
+    fn bootstrap_caller(&self, c: &InvocationContext) -> Result<(), Failure> {
+        if c.caller_instance()
+            .is_some_and(|id| self.config.bootstrap_callers.iter().any(|v| v == id))
+        {
+            Ok(())
+        } else {
+            Err(Failure::PermissionDenied)
+        }
+    }
+    async fn require_management(
+        &self,
+        c: &InvocationContext,
+        b: &bindings::Binding,
+    ) -> Result<(), Failure> {
+        for permission in [
+            "access-control.roles.manage",
+            "access-control.bindings.manage",
+        ] {
+            if !self.permission(c, &b.operator_subject, permission).await? {
+                return Err(Failure::AccessUnavailable);
+            }
+        }
+        Ok(())
+    }
+    async fn activation_snapshot(
+        &self,
+        c: &InvocationContext,
+        expected: &bindings::Binding,
+        source_operation: &str,
+        operation: bindings::PrepareActivationRequestOperation,
+    ) -> Result<bindings::PrepareActivationResponse, Failure> {
+        self.bootstrap_caller(c)?;
+        let actor = self.current_user(c, source_operation, false).await?;
+        if actor.subject() != self.config.bootstrap_subject
+            || actor.subject() != expected.source_subject
+            || !self.binding_matches(expected)
+        {
+            return Err(Failure::PermissionDenied);
+        }
+        self.require_management(c, expected).await?;
+        let mut permissions = self.config.permissions.clone();
+        permissions.sort();
+        let prepared = self
             .bindings
-            .activate_binding_with_context(
-                c,
-                bindings::ActivateBindingRequest {
-                    binding_id: binding.binding_id,
-                    revision: binding.revision,
-                    audit_event_id: audit,
-                    policy_revision,
+            .prepare_activation_with_context(
+                c.clone(),
+                bindings::PrepareActivationRequest {
+                    binding_id: expected.binding_id.clone(),
+                    revision: expected.revision.clone(),
+                    operation,
+                    permissions: permissions.clone(),
+                    source_assertion_expires_at: actor.to_wire().expires_at,
+                },
+            )
+            .await
+            .map_err(|error| match error {
+                bindings::OperatorBindingPrepareActivationInvocationError::Domain(
+                    bindings::PrepareActivationError::BootstrapExpired,
+                ) => Failure::BootstrapExpired,
+                bindings::OperatorBindingPrepareActivationInvocationError::Domain(
+                    bindings::PrepareActivationError::InvalidRequest,
+                ) => Failure::InvalidRequest,
+                bindings::OperatorBindingPrepareActivationInvocationError::Domain(
+                    bindings::PrepareActivationError::Unauthenticated,
+                ) => Failure::Unauthenticated,
+                bindings::OperatorBindingPrepareActivationInvocationError::Runtime(e) => {
+                    Failure::Runtime(e)
+                }
+                _ => Failure::NotActive,
+            })?;
+        let b = &prepared.binding;
+        if !self.binding_matches(b)
+            || b.source_subject != actor.subject()
+            || b.binding_id != expected.binding_id
+            || b.revision != expected.revision
+            || b.operator_subject != expected.operator_subject
+            || b.revoked
+            || prepared.permissions != permissions
+            || prepared.audit_idempotency_key.is_empty()
+            || OffsetDateTime::parse(&prepared.audit_occurred_at, &Rfc3339).is_err()
+        {
+            return Err(Failure::NotActive);
+        }
+        // Do not continue with an incoming assertion which expired during storage I/O.
+        self.config
+            .verifier(false)?
+            .project_context::<User>(c, role::CAPABILITY_ID, source_operation, &Clock)
+            .map_err(|_| Failure::Unauthenticated)?;
+        Ok(prepared)
+    }
+    async fn fresh_control(
+        &self,
+        c: &InvocationContext,
+        binding: &bindings::Binding,
+        source_operation: &str,
+        operation: bindings::PrepareActivationRequestOperation,
+        audience_operation: &str,
+    ) -> Result<(InvocationContext, bindings::PrepareActivationResponse), Failure> {
+        let prepared = self
+            .activation_snapshot(c, binding, source_operation, operation)
+            .await?;
+        if prepared.binding.active {
+            return Err(Failure::NotActive);
+        }
+        let internal = self.control_context(
+            &prepared.control_assertion,
+            &prepared.binding,
+            c,
+            audience_operation,
+        )?;
+        Ok((internal, prepared))
+    }
+    async fn require_business_permissions(
+        &self,
+        c: &InvocationContext,
+        b: &bindings::Binding,
+    ) -> Result<(), Failure> {
+        for permission in self
+            .config
+            .permissions
+            .iter()
+            .map(String::as_str)
+            .chain(std::iter::once(LOGIN_PERMISSION))
+        {
+            if !self.permission(c, &b.operator_subject, permission).await? {
+                return Err(Failure::AccessUnavailable);
+            }
+        }
+        Ok(())
+    }
+    async fn applied_receipt(
+        &self,
+        c: &InvocationContext,
+        prepared: bindings::PrepareActivationResponse,
+    ) -> Result<role::Binding, Failure> {
+        let b = prepared.binding;
+        if !b.active || b.revoked || b.audit_event_id.is_empty() || b.policy_revision.is_empty() {
+            return Err(Failure::NotActive);
+        }
+        self.require_business_permissions(c, &b).await?;
+        Ok(wire(b))
+    }
+    async fn resume(
+        &self,
+        c: InvocationContext,
+        request: role::ResumeBindingRequest,
+    ) -> Result<role::Binding, Failure> {
+        self.bootstrap_caller(&c)?;
+        let revision = request
+            .revision
+            .parse::<i64>()
+            .map_err(|_| Failure::InvalidRequest)?;
+        if revision < 1 || request.revision != revision.to_string() || !label(&request.binding_id) {
+            return Err(Failure::InvalidRequest);
+        }
+        let actor = self.current_user(&c, "resume_binding", false).await?;
+        if actor.subject() != self.config.bootstrap_subject {
+            return Err(Failure::PermissionDenied);
+        }
+        let binding = self
+            .bindings
+            .read_binding_with_context(
+                c.clone(),
+                bindings::ReadBindingRequest {
+                    source_subject: actor.subject().into(),
                 },
             )
             .await
             .map_err(|_| Failure::NotActive)?;
-        if !active.active
-            || !self.binding_matches(&active)
-            || active.source_subject != actor.subject()
+        if binding.binding_id != request.binding_id
+            || binding.revision != request.revision
+            || binding.source_subject != actor.subject()
+            || !self.binding_matches(&binding)
+            || binding.revoked
         {
             return Err(Failure::NotActive);
         }
-        Ok(wire(active))
+        // This path never prepares a new binding or replays Access.bootstrap_scope.
+        let prepared = self
+            .activation_snapshot(
+                &c,
+                &binding,
+                "resume_binding",
+                bindings::PrepareActivationRequestOperation::CreateRole,
+            )
+            .await?;
+        if prepared.binding.active {
+            return self.applied_receipt(&c, prepared).await;
+        }
+        self.finish_activation(&c, &binding, "resume_binding").await
+    }
+    async fn finish_activation(
+        &self,
+        c: &InvocationContext,
+        binding: &bindings::Binding,
+        source_operation: &str,
+    ) -> Result<role::Binding, Failure> {
+        let (policy_revision, intent) = self.grant_role(c, binding, source_operation).await?;
+        let current = self
+            .activation_snapshot(
+                c,
+                binding,
+                source_operation,
+                bindings::PrepareActivationRequestOperation::AssignRole,
+            )
+            .await?;
+        if current.binding.active {
+            return self.applied_receipt(c, current).await;
+        }
+        if current.audit_occurred_at != intent.audit_occurred_at
+            || current.audit_idempotency_key != intent.audit_idempotency_key
+        {
+            return Err(Failure::NotActive);
+        }
+        self.require_business_permissions(c, binding).await?;
+        let audit = self
+            .append_event(
+                c,
+                &binding.source_subject,
+                "applied",
+                Some(binding),
+                Some(&current),
+            )
+            .await?;
+        // Audit can be slow; check the live source and Access again before the CAS.
+        let current = self
+            .activation_snapshot(
+                c,
+                binding,
+                source_operation,
+                bindings::PrepareActivationRequestOperation::AssignRole,
+            )
+            .await?;
+        if current.binding.active {
+            return self.applied_receipt(c, current).await;
+        }
+        self.require_business_permissions(c, binding).await?;
+        self.config
+            .verifier(false)?
+            .project_context::<User>(c, role::CAPABILITY_ID, source_operation, &Clock)
+            .map_err(|_| Failure::Unauthenticated)?;
+        self.complete_activation(c, binding, source_operation, audit, policy_revision)
+            .await
+    }
+    async fn complete_activation(
+        &self,
+        c: &InvocationContext,
+        binding: &bindings::Binding,
+        source_operation: &str,
+        audit: String,
+        policy_revision: String,
+    ) -> Result<role::Binding, Failure> {
+        let active = self
+            .bindings
+            .activate_binding_with_context(
+                c.clone(),
+                bindings::ActivateBindingRequest {
+                    binding_id: binding.binding_id.clone(),
+                    revision: binding.revision.clone(),
+                    audit_event_id: audit.clone(),
+                    policy_revision,
+                },
+            )
+            .await;
+        match active {
+            Ok(active)
+                if active.active
+                    && !active.revoked
+                    && self.binding_matches(&active)
+                    && active.binding_id == binding.binding_id
+                    && active.revision == binding.revision
+                    && active.source_subject == binding.source_subject
+                    && active.operator_subject == binding.operator_subject
+                    && active.audit_event_id == audit
+                    && !active.policy_revision.is_empty() =>
+            {
+                Ok(wire(active))
+            }
+            // A CAS/response can race a concurrent completion. Only durable exact receipts count.
+            _ => {
+                let current = self
+                    .activation_snapshot(
+                        c,
+                        binding,
+                        source_operation,
+                        bindings::PrepareActivationRequestOperation::AssignRole,
+                    )
+                    .await?;
+                if current.binding.audit_event_id != audit {
+                    return Err(Failure::NotActive);
+                }
+                self.applied_receipt(c, current).await
+            }
+        }
     }
     async fn grant_role(
         &self,
-        control_context: InvocationContext,
+        c: &InvocationContext,
         binding: &bindings::Binding,
-    ) -> Result<String, Failure> {
+        source_operation: &str,
+    ) -> Result<(String, bindings::PrepareActivationResponse), Failure> {
         let role_id = format!("operator-binding.{}", binding.binding_id);
+        let (control, _) = self
+            .fresh_control(
+                c,
+                binding,
+                source_operation,
+                bindings::PrepareActivationRequestOperation::CreateRole,
+                "create_role",
+            )
+            .await?;
         match self
             .access_admin
             .create_role_with_context(
-                control_context.clone(),
+                control,
                 admin::CreateRoleRequest {
                     scope: admin::CreateRoleRequestScope {
                         kind: self.config.scope_kind.clone(),
@@ -517,11 +788,20 @@ impl OperatorSessionPlugin {
             )) => {}
             Err(_) => return Err(Failure::AccessUnavailable),
         }
-        let mut permissions = self.config.permissions.clone();
+        let (control, intent) = self
+            .fresh_control(
+                c,
+                binding,
+                source_operation,
+                bindings::PrepareActivationRequestOperation::SetRolePermissions,
+                "set_role_permissions",
+            )
+            .await?;
+        let mut permissions = intent.permissions;
         permissions.push(LOGIN_PERMISSION.into());
         self.access_admin
             .set_role_permissions_with_context(
-                control_context.clone(),
+                control,
                 admin::SetRolePermissionsRequest {
                     scope: admin::SetRolePermissionsRequestScope {
                         kind: self.config.scope_kind.clone(),
@@ -533,10 +813,19 @@ impl OperatorSessionPlugin {
             )
             .await
             .map_err(|_| Failure::AccessUnavailable)?;
+        let (control, intent) = self
+            .fresh_control(
+                c,
+                binding,
+                source_operation,
+                bindings::PrepareActivationRequestOperation::AssignRole,
+                "assign_role",
+            )
+            .await?;
         let applied = self
             .access_admin
             .assign_role_with_context(
-                control_context,
+                control,
                 admin::AssignRoleRequest {
                     scope: admin::AssignRoleRequestScope {
                         kind: self.config.scope_kind.clone(),
@@ -548,7 +837,7 @@ impl OperatorSessionPlugin {
             )
             .await
             .map_err(|_| Failure::AccessUnavailable)?;
-        Ok(applied.policy_revision)
+        Ok((applied.policy_revision, intent))
     }
     async fn read(&self, c: InvocationContext) -> Result<role::Binding, Failure> {
         let actor = self.current_user(&c, "read_binding", false).await?;
@@ -775,6 +1064,19 @@ impl OperatorSessionPlugin {
             .map_err(|_| Failure::NotActive)?;
         Ok(wire(complete))
     }
+    async fn resume_binding(
+        &self,
+        context: InvocationContext,
+        request: role::ResumeBindingRequest,
+    ) -> Result<role::Binding, role::OperatorSessionResumeBindingInvocationError> {
+        self.resume(context, request).await.map_err(|e| {
+            invocation_error!(
+                e,
+                role::OperatorSessionResumeBindingInvocationError,
+                role::ResumeBindingError
+            )
+        })
+    }
     async fn recover_revocation(
         &self,
         context: InvocationContext,
@@ -841,3 +1143,45 @@ impl OperatorSessionPlugin {
         })
     }
 }
+
+impl OperatorSessionConfig {
+    fn control_context(
+        &self,
+        raw: &str,
+        binding: &bindings::Binding,
+        parent: &InvocationContext,
+        operation: &str,
+    ) -> Result<InvocationContext, Failure> {
+        let assertion_wire = serde_json::from_str(raw).map_err(|_| Failure::AccessUnavailable)?;
+        let AuthOutcome::Authenticated(control) =
+            decode_auth_response(lenso_capability_auth::AuthResponse {
+                kind: lenso_capability_auth::AuthResponseKind::Authenticated,
+                assertion: Some(assertion_wire),
+            })
+            .map_err(|_| Failure::AccessUnavailable)?
+        else {
+            return Err(Failure::AccessUnavailable);
+        };
+        if control.issuer() != self.operators_issuer
+            || control.subject() != binding.operator_subject
+        {
+            return Err(Failure::AccessUnavailable);
+        }
+        // Authority cannot replace the sealed accounts context; use a bounded internal invocation.
+        let context = control
+            .attach(InvocationContext::new(
+                parent.request_id(),
+                parent.deadline(),
+                parent.cancellation(),
+            ))
+            .map_err(|_| Failure::AccessUnavailable)?;
+        self.verifier(true)?
+            .project_context::<User>(&context, admin::CAPABILITY_ID, operation, &Clock)
+            .map_err(|_| Failure::AccessUnavailable)?;
+        Ok(context)
+    }
+}
+
+#[cfg(test)]
+#[path = "activation_context_tests.rs"]
+mod activation_context_tests;

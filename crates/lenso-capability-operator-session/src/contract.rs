@@ -47,6 +47,13 @@ pub struct RevokeBindingRequest {
 #[derive(lenso::JsonSchema, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 #[schemars(deny_unknown_fields)]
+pub struct ResumeBindingRequest {
+    pub binding_id: String,
+    pub revision: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
 pub struct SessionResponse {
     pub session_id: String,
     #[schemars(extend("x-lenso-sensitive"=true))]
@@ -56,11 +63,16 @@ pub struct SessionResponse {
 #[lenso::capability(
     id = "lenso.auth.operator-session",
     major = 1,
-    version = "1.0.0",
+    version = "1.1.0",
     portable = true,
     cross_lane_transfer = true
 )]
 pub trait OperatorSession {
+    async fn resume_binding(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: ResumeBindingRequest,
+    ) -> Result<Binding, BindingError>;
     async fn recover_revocation(
         &self,
         context: lenso::Ctx<'_>,

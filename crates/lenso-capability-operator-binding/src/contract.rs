@@ -92,14 +92,47 @@ pub struct CompleteRevocationRequest {
 pub struct RecoveryRequest {
     pub binding_id: String,
 }
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrepareActivationRequestOperation {
+    CreateRole,
+    SetRolePermissions,
+    AssignRole,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct PrepareActivationRequest {
+    pub binding_id: String,
+    pub revision: String,
+    pub operation: PrepareActivationRequestOperation,
+    pub permissions: Vec<String>,
+    pub source_assertion_expires_at: String,
+}
+#[derive(lenso::JsonSchema, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+#[schemars(deny_unknown_fields)]
+pub struct PrepareActivationResponse {
+    pub binding: Binding,
+    #[schemars(extend("x-lenso-sensitive" = true))]
+    pub control_assertion: String,
+    pub audit_occurred_at: String,
+    pub audit_idempotency_key: String,
+    pub permissions: Vec<String>,
+}
 #[lenso::capability(
     id = "lenso.auth.operator-binding",
     major = 1,
-    version = "1.0.0",
+    version = "1.1.0",
     portable = true,
     cross_lane_transfer = true
 )]
 pub trait OperatorBinding {
+    async fn prepare_activation(
+        &self,
+        context: lenso::Ctx<'_>,
+        request: PrepareActivationRequest,
+    ) -> Result<PrepareActivationResponse, BindingError>;
     async fn prepare_recovery(
         &self,
         context: lenso::Ctx<'_>,

@@ -31,7 +31,7 @@ const sourceFiles=[
   "crates/lenso-auth-account-plugin/src/workers.rs",
   "crates/lenso-auth-account-plugin/src/migration.rs",
   "workers/d1-binding.mjs",
-  ...["001_account.sql","002_pagination_indexes.sql","003_managed_sessions.sql","004_operator_bindings.sql"].map(name=>`crates/lenso-auth-account-plugin/migrations/d1/${name}`),
+  ...["001_account.sql","002_pagination_indexes.sql","003_managed_sessions.sql","004_operator_bindings.sql","005_operator_activation_intents.sql"].map(name=>`crates/lenso-auth-account-plugin/migrations/d1/${name}`),
 ];
 const fixtureFiles=["Cargo.toml","Cargo.lock","src/lib.rs","proof-worker.mjs","qualify.mjs"];
 const hashes=async(files,base)=>Object.fromEntries(await Promise.all(files.map(async file=>[file,createHash("sha256").update(await readFile(resolve(base,file))).digest("hex")])));
@@ -93,7 +93,7 @@ try {
   assert.equal(await schemaSnapshot(),v4);
   assert.deepEqual(await migrate("upgrade_operator"),{Ok:true});
   assert.equal(await schemaSnapshot(),v4);
-  cases.push("Explicit generated operator upgrade reaches exact v4; all feature selections verify read-only and repeated upgrade is idempotent");
+  cases.push("Explicit generated operator upgrade reaches exact v5; all feature selections verify read-only and repeated upgrade is idempotent");
   extra=start("local-fresh-operator-account");
   const extraDb=await extra.getD1Database("ACCOUNT_DB");
   assert.deepEqual(await callOn(extra,{operation:"migration",action:"setup_operator"}),{Ok:true});
@@ -101,7 +101,7 @@ try {
   assert.deepEqual(await callOn(extra,{operation:"migration",action:"verify",operator_required:true}),{Ok:true});
   assert.equal(await schemaSnapshot(extraDb),freshBefore);
   await extra.dispose();extra=undefined;
-  cases.push("Actual generated explicit fresh operator setup creates v4 directly and read-only binding-required verification succeeds");
+  cases.push("Actual generated explicit fresh operator setup creates v5 directly and read-only binding-required verification succeeds");
 
   assert.deepEqual(await read("binding_id","unknown"),{Ok:null});
   assert.deepEqual(await unchanged(()=>read("binding_id OR 1=1","unknown")),{Err:"storage"});
@@ -134,6 +134,12 @@ try {
   }
   assert.deepEqual(await unchanged(()=>prepare("source-main","other-scope-candidate","operator-main",{...config,scope_id:"other-scope"})),{Err:"storage"});
   cases.push("Issuer, deployment, scope kind and scope ID isolate all reads and transitions; conflicting source tuple cannot be rebound through another scope");
+
+  const intent=await call({operation:"prepare_activation_intent",binding_id:pending.binding_id,revision:1,occurred:"2026-10-06T10:00:00.000000000Z",permissions:'["synthetic.settings.write"]'});
+  assert.equal(intent.Ok.activation_started_at,"2026-10-06T10:00:00.000000000Z");
+  const retryIntent=await unchanged(()=>call({operation:"prepare_activation_intent",binding_id:pending.binding_id,revision:1,occurred:"2026-10-06T10:01:00.000000000Z",permissions:'["synthetic.changed"]'}));
+  assert.deepEqual(retryIntent,intent);
+  cases.push("Actual owner D1 intent CAS retains original timestamp and permission payload across changed or response-loss retries");
 
   const activeRace=await Promise.all([activate(pending.binding_id,1,"activation-A","policy-A"),activate(pending.binding_id,1,"activation-B","policy-B")]);
   const active=(await read("binding_id",pending.binding_id)).Ok;
@@ -186,7 +192,7 @@ try {
 
   assert.deepEqual(await hashes(sourceFiles,repository),sourceHashes,"Owner source changed during proof; rerun against frozen source");
   assert.deepEqual(await hashes(fixtureFiles,root),fixtureHashes,"Fixture source changed during proof");
-  const receipt={schema:"lenso.auth.operator-binding-local-d1@1",backend:"actual-local-workerd-d1",passed:true,cloudResourcesCreated:false,sourceHashes,fixtureHashes,toolVersions:{rustc:execFileSync(process.env.RUSTC??"rustc",["--version"],{encoding:"utf8"}).trim(),wasmBindgen:execFileSync(process.env.LENSO_WASM_BINDGEN??"wasm-bindgen",["--version"],{encoding:"utf8"}).trim(),wrangler:wranglerRequire("./package.json").version,miniflare:wranglerRequire("miniflare/package.json").version},scope:"Actual Account-owned storage/operator_binding.rs, generated migration v2/v3/v4 operators and owner D1 bridge. Store/Config/Record and request framing shims; synthetic identity seeds only. No Kernel, Capability projection, caller ACL, Access/Audit collaboration, session admission or browser/Ingress gate. Independent wasm-bindgen .127 fixture; actual Auth .128 App cohort requires separate qualification.",cases};
+  const receipt={schema:"lenso.auth.operator-binding-local-d1@1",backend:"actual-local-workerd-d1",passed:true,cloudResourcesCreated:false,sourceHashes,fixtureHashes,toolVersions:{rustc:execFileSync(process.env.RUSTC??"rustc",["--version"],{encoding:"utf8"}).trim(),wasmBindgen:execFileSync(process.env.LENSO_WASM_BINDGEN??"wasm-bindgen",["--version"],{encoding:"utf8"}).trim(),wrangler:wranglerRequire("./package.json").version,miniflare:wranglerRequire("miniflare/package.json").version},scope:"Actual Account-owned storage/operator_binding.rs, generated migration v2/v3/v4/v5 operators and owner D1 bridge. Store/Config/Record and request framing shims; synthetic identity seeds only. No Kernel, Capability projection, caller ACL, Access/Audit collaboration, session admission or browser/Ingress gate. Independent wasm-bindgen .127 fixture; actual Auth .128 App cohort requires separate qualification.",cases};
   if(receiptPath)await writeFile(receiptPath,JSON.stringify(receipt,null,2)+"\n");
   process.stdout.write(JSON.stringify(receipt,null,2)+"\n");
 } finally {

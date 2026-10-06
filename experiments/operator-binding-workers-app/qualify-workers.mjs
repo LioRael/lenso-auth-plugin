@@ -142,14 +142,29 @@ try {
   assert.equal(recovered.revoked,true);assert.equal(recovered.active,false);assert.equal(recovered.revocation_pending,false);assert.ok(recovered.revocation_audit_event_id);assert.equal(recovered.revoked_by,binding.operator_subject);
   await closedAuth(session.credential);await denied('exchange',{credential:ownerSession.credential},'not_active');
   pass('Fresh event controlled exact source-owner recovery drains real Audit outbox, preserves original revoker and never restores login');
-  for(const fault of ['audit','access']) {
+  for(const fault of ['audit','access','activate']) {
     await start(fault);
     if(fault==='audit')await failAudit('applied');
+    else if(fault==='activate')await sql('operators',"CREATE TRIGGER fixture_fail BEFORE UPDATE ON auth_operator_bindings WHEN NEW.status='active' BEGIN SELECT RAISE(ABORT,'synthetic activation unavailable'); END");
     else await sql('access',"CREATE TRIGGER fixture_fail BEFORE INSERT ON access_control_roles WHEN NEW.role_id LIKE 'operator-binding.%' BEGIN SELECT RAISE(ABORT,'synthetic Access unavailable'); END");
-    await storageFault('bootstrap',{credential:ownerSession.credential},fault+'_unavailable');
+    await storageFault('bootstrap',{credential:ownerSession.credential},fault==='activate'?'not_active':fault+'_unavailable');
     assert.equal(await bindingStatus(),'pending');
     await denied('exchange',{credential:ownerSession.credential},'not_active');assert.equal(await sessions(),0);
     pass(`Actual ${fault} D1 write fault leaves pending binding; fresh App denies exchange with zero operator sessions`);
+    const pendingRow=await db.operators.prepare("SELECT binding_id,revision,activation_started_at FROM auth_operator_bindings").first();
+    await sql(fault==='audit'?'audit':fault==='access'?'access':'operators','DROP TRIGGER fixture_fail');
+    const request={credential:ownerSession.credential,binding_id:pendingRow.binding_id,revision:String(pendingRow.revision)};
+    await denied('resume',{...request,caller:ORDINARY},'permission_denied');
+    await denied('resume',{...request,revision:'2'},'not_active');
+    const resumed=await ok('resume',request);
+    const replay=await ok('resume',request);
+    assert.equal(resumed.active,true);assert.equal(resumed.binding_id,pendingRow.binding_id);
+    assert.equal(replay.audit_event_id,resumed.audit_event_id);assert.equal(replay.policy_revision,resumed.policy_revision);
+    assert.equal(await scalar('audit',"SELECT count(*) FROM audit_events WHERE event_name='auth.operator-binding.applied'"),1);
+    assert.equal(await scalar('access',"SELECT count(*) FROM access_control_scopes"),1);
+    assert.equal(await scalar('operators',"SELECT activation_started_at FROM auth_operator_bindings"),pendingRow.activation_started_at);
+    assert.equal(await sessions(),0);
+    pass(`Actual ${fault} pending resumes in fresh events at exact id/revision; one stable applied Audit, no new scope or operator credential`);
   }
   const evidence={qualification:'actual_workerd_synthetic_app',passed:cases.length,cases,faultObservations,cohort:{...toolVersions,kernel:'0.3.12',facade:'0.5.29',wasm_bindgen:'0.2.127',js_sys:'0.3.104',wasm_bindgen_futures:'0.4.77',access_git:'94b6d06cff1e6f17a06e771df232f662cae28ad5',audit_git:'83b4e52e8c6eaf2bbe5356dccd1e3a59b872c8e9',wrangler:JSON.parse(await readFile(wranglerPackage,'utf8')).version,node:process.version},host:{resolution:'actual owner Descriptors -> HostCatalog -> PluginRoot',empty_slot:'HostSlot::optional(source_accounts)',operators_enabled:'exact Source Account',operators_disabled:'empty source_accounts Slot',storage:'logical Account refs and target private matching D1 attachments'},limits:['Synthetic public RuntimeDriver performs mechanical task/timer work; not older WorkersDriver package qualification','Private synthetic request bridge uses protocol-neutral generated APIs; no Relay/HTTP ingress/CSRF qualification','Access and Audit retain external-owner legacy facility/configuration interfaces','No identical serialized Native/Workers graph claim; Native fixture is separate','No production credentials, database, migrations or deployment'],sha256:{wasm:hash(await readFile(resolve(root,'pkg/operator_binding_app_bg.wasm'))),cargo_lock:hash(await readFile(resolve(root,'Cargo.lock'))),package_lock:hash(await readFile(resolve(root,'package-lock.json'))),auth_owner_js:hash(await readFile(resolve(repository,'crates/lenso-auth-account-plugin/src/host_facilities/state.mjs'))),access_owner_js:hash(await readFile(accessModule)),audit_owner_js:hash(await readFile(auditModule))}};
   if(receipt)await writeFile(receipt,JSON.stringify(evidence,null,2)+'\n');

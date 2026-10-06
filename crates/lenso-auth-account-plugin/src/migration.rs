@@ -25,6 +25,11 @@ const MIGRATIONS: &[Migration] = &[
         "operator-bindings",
         include_str!("../migrations/d1/004_operator_bindings.sql"),
     ),
+    Migration::new(
+        5,
+        "operator-activation-intents",
+        include_str!("../migrations/d1/005_operator_activation_intents.sql"),
+    ),
 ];
 const SQL: &[SqlMigration] = &[
     SqlMigration {
@@ -42,6 +47,10 @@ const SQL: &[SqlMigration] = &[
     SqlMigration {
         migration: MIGRATIONS[3],
         statement_ends: &[781],
+    },
+    SqlMigration {
+        migration: MIGRATIONS[4],
+        statement_ends: &[93, 189],
     },
 ];
 pub fn operator_plan() -> Result<Plan, Error> {
@@ -105,6 +114,17 @@ pub fn plan() -> Result<Plan, Error> {
         }),
     )
 }
+pub fn previous_operator_plan() -> Result<Plan, Error> {
+    Plan::new(
+        "lenso.auth.account",
+        &SQL[..4],
+        &MIGRATIONS[..4],
+        Some(LegacySchema {
+            table: "auth_account_schema",
+            fingerprint: "e2ab982504b77776e928387519fb612fcd4b0213007713ad5389d79910a1db12",
+        }),
+    )
+}
 pub fn managed_plan() -> Result<Plan, Error> {
     Plan::new(
         "lenso.auth.account",
@@ -128,6 +148,11 @@ pub async fn verify_features(
     match operator_plan()?.verify(binding).await {
         Ok(()) => return Ok(true),
         Err(Error::UpgradeRequired) if !operator_required => {}
+        Err(error) => return Err(error),
+    }
+    match previous_operator_plan()?.verify(binding).await {
+        Ok(()) => return Ok(true),
+        Err(Error::UpgradeRequired) => {}
         Err(error) => return Err(error),
     }
     match managed_plan()?.verify(binding).await {

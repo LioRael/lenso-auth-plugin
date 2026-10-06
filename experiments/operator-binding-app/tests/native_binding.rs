@@ -29,6 +29,7 @@ impl Database {
         let base = std::env::var("LENSO_POSTGRES_TEST_URL").expect("synthetic PG URL required");
         assert!(
             base == "postgres://renewal_fixture@127.0.0.1:55494/postgres"
+                || base == "postgres://renewal_fixture@127.0.0.1:55504/postgres"
                 || (std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
                     && base == "postgres://postgres@localhost:5432/postgres"),
             "refuse non-fixture PG"
@@ -152,6 +153,7 @@ async fn issue(app: &NativeApp, subject: &str) -> issuer::IssueResponse {
             assurance: "password".into(),
             audience: [
                 "bootstrap_binding",
+                "resume_binding",
                 "read_binding",
                 "exchange_session",
                 "recover_revocation",
@@ -661,3 +663,6 @@ async fn qualify() {
 async fn actual_kernel_two_realms_access_audit_binding() {
     tokio::task::LocalSet::new().run_until(qualify()).await;
 }
+
+#[path = "pending_activation.rs"]
+mod pending_activation;

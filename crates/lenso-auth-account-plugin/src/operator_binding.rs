@@ -75,6 +75,8 @@ pub(crate) struct Record {
     pub revoked_by: String,
     pub revoked_at: String,
     pub revocation_audit_event_id: String,
+    pub activation_started_at: String,
+    pub activation_permissions: String,
 }
 impl Record {
     fn wire(&self) -> role::Binding {
@@ -234,7 +236,143 @@ pub(crate) async fn session_admitted(
                     == Some(row.revision.to_string().as_str())
         }))
 }
+async fn activation_identities_active(
+    store: &storage::AccountStore,
+    row: &Record,
+    source: Option<&super::directory::DirectoryClient>,
+    context: &InvocationContext,
+) -> Result<bool, RuntimeFailure> {
+    let Some(source) = source else {
+        return Ok(false);
+    };
+    let source_active = source
+        .read_status_with_context(
+            context.clone(),
+            super::directory::ReadStatusRequest {
+                subject: row.source_subject.clone(),
+            },
+        )
+        .await
+        .is_ok_and(|value| {
+            value.subject == row.source_subject
+                && value.status == super::directory::ReadStatusResponseStatus::Active
+        });
+    let operator_active = storage::subject_status(store, &row.operator_subject)
+        .await
+        .map_err(runtime)?
+        .is_some_and(|status| status == "active");
+    Ok(source_active && operator_active)
+}
+
 impl AccountAuthPlugin {
+    pub(crate) fn prepare_activation(
+        &self,
+        context: InvocationContext,
+        request: role::PrepareActivationRequest,
+    ) -> NativeRequestFuture<role::OperatorBindingPrepareActivation> {
+        let cfg = self.config.operator_bindings.clone();
+        let prepared = self.prepared();
+        let source = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
+        let ceiling = self.config.management_session_ceiling.clone();
+        Box::pin(async move {
+            let Some(cfg) = cfg else {
+                return Ok(Err(role::PrepareActivationError::NotEnabled));
+            };
+            if !cfg.admitted(&context) {
+                return Ok(Err(role::PrepareActivationError::PermissionDenied));
+            }
+            if !cfg.bootstrap_open() {
+                return Ok(Err(role::PrepareActivationError::BootstrapExpired));
+            }
+            let Ok(source_expires_at) =
+                OffsetDateTime::parse(&request.source_assertion_expires_at, &Rfc3339)
+            else {
+                return Ok(Err(role::PrepareActivationError::InvalidRequest));
+            };
+            let Ok(revision) = request.revision.parse::<i64>() else {
+                return Ok(Err(role::PrepareActivationError::InvalidRequest));
+            };
+            if revision < 1
+                || request.revision != revision.to_string()
+                || !valid_name(&request.binding_id)
+            {
+                return Ok(Err(role::PrepareActivationError::InvalidRequest));
+            }
+            let permissions = match activation_permissions(request.permissions, ceiling.as_ref()) {
+                Ok(permissions) => permissions,
+                Err(error) => return Ok(Err(error)),
+            };
+            let prepared = prepared?;
+            let Some(row) = storage::operator_binding::read(
+                &prepared.store,
+                &cfg,
+                "binding_id",
+                &request.binding_id,
+            )
+            .await
+            .map_err(runtime)?
+            else {
+                return Ok(Err(role::PrepareActivationError::NotFound));
+            };
+            if !matches!(row.status.as_str(), "pending" | "active")
+                || row.revision != revision
+                || row.source_subject != cfg.bootstrap_subject
+            {
+                return Ok(Err(role::PrepareActivationError::NotActive));
+            }
+            if !activation_identities_active(&prepared.store, &row, source.as_ref(), &context)
+                .await?
+            {
+                return Ok(Err(role::PrepareActivationError::NotActive));
+            }
+            let intended_permissions = serde_json::to_string(&permissions).map_err(runtime)?;
+            let now = OffsetDateTime::now_utc();
+            let row = if row.activation_started_at.is_empty()
+                && row.activation_permissions.is_empty()
+                && row.status == "pending"
+            {
+                storage::operator_binding::prepare_activation_intent(
+                    &prepared.store,
+                    &cfg,
+                    &row.binding_id,
+                    revision,
+                    &super::format_time(now)?,
+                    &intended_permissions,
+                )
+                .await
+                .map_err(runtime)?
+                .ok_or_else(|| runtime("activation intent unavailable"))?
+            } else {
+                row
+            };
+            if !matches!(row.status.as_str(), "pending" | "active")
+                || row.revision != revision
+                || row.source_subject != cfg.bootstrap_subject
+                || row.activation_permissions != intended_permissions
+                || OffsetDateTime::parse(&row.activation_started_at, &Rfc3339).is_err()
+            {
+                return Ok(Err(role::PrepareActivationError::NotActive));
+            }
+            // Recheck after I/O; the explicit window never extends itself.
+            if !cfg.bootstrap_open() {
+                return Ok(Err(role::PrepareActivationError::BootstrapExpired));
+            }
+            let window_end =
+                OffsetDateTime::parse(&cfg.bootstrap_expires_at, &Rfc3339).map_err(runtime)?;
+            activation_response(
+                &prepared.issuer,
+                row,
+                permissions,
+                source_expires_at,
+                window_end,
+                request.operation,
+            )
+        })
+    }
     pub(crate) fn prepare_bootstrap(
         &self,
         context: InvocationContext,
@@ -313,6 +451,11 @@ impl AccountAuthPlugin {
     ) -> NativeRequestFuture<role::OperatorBindingActivateBinding> {
         let cfg = self.config.operator_bindings.clone();
         let prepared = self.prepared();
+        let source = self
+            .source_accounts
+            .first()
+            .map(lenso::BoundCapabilityClient::client)
+            .cloned();
         Box::pin(async move {
             let Some(cfg) = cfg else {
                 return Ok(Err(role::ActivateBindingError::NotEnabled));
@@ -336,6 +479,33 @@ impl AccountAuthPlugin {
                 return Ok(Err(role::ActivateBindingError::InvalidRequest));
             }
             let prepared = prepared?;
+            let Some(current) = storage::operator_binding::read(
+                &prepared.store,
+                &cfg,
+                "binding_id",
+                &request.binding_id,
+            )
+            .await
+            .map_err(runtime)?
+            else {
+                return Ok(Err(role::ActivateBindingError::NotFound));
+            };
+            if current.source_subject != cfg.bootstrap_subject
+                || current.revision != revision
+                || !matches!(current.status.as_str(), "pending" | "active")
+                || !activation_identities_active(
+                    &prepared.store,
+                    &current,
+                    source.as_ref(),
+                    &context,
+                )
+                .await?
+            {
+                return Ok(Err(role::ActivateBindingError::NotActive));
+            }
+            if !cfg.bootstrap_open() {
+                return Ok(Err(role::ActivateBindingError::BootstrapExpired));
+            }
             let Some(row) = storage::operator_binding::activate(
                 &prepared.store,
                 &cfg,
@@ -521,4 +691,84 @@ impl AccountAuthPlugin {
             Ok(Ok(row.wire()))
         })
     }
+}
+
+pub(super) fn activation_response(
+    issuer: &lenso_auth_sdk::ActorAssertionIssuer,
+    row: Record,
+    permissions: Vec<String>,
+    source_expires_at: OffsetDateTime,
+    window_end: OffsetDateTime,
+    operation: role::PrepareActivationRequestOperation,
+) -> Result<Result<role::PrepareActivationResponse, role::PrepareActivationError>, RuntimeFailure> {
+    let operation = match operation {
+        role::PrepareActivationRequestOperation::CreateRole => "create_role",
+        role::PrepareActivationRequestOperation::SetRolePermissions => "set_role_permissions",
+        role::PrepareActivationRequestOperation::AssignRole => "assign_role",
+    };
+    let now = OffsetDateTime::now_utc();
+    let expires_at = std::cmp::min(
+        now + Duration::seconds(5),
+        std::cmp::min(source_expires_at, window_end),
+    );
+    if expires_at <= now {
+        return Ok(Err(role::PrepareActivationError::Unauthenticated));
+    }
+    let validity = Validity::new(now, expires_at)
+        .map_err(|_| runtime("invalid activation assertion validity"))?;
+    let control_assertion = if row.status == "pending" {
+        let assertion = issuer.issue(
+            row.operator_subject.clone(),
+            "user",
+            "bootstrap",
+            vec![lenso_auth_sdk::audience(
+                "lenso.access-control-admin@1",
+                operation,
+            )],
+            validity,
+            BTreeMap::new(),
+        );
+        serde_json::to_string(&assertion.to_wire()).map_err(runtime)?
+    } else {
+        // Completed receipts never mint new activation authority.
+        String::new()
+    };
+    let key_source = serde_json::to_vec(&(
+        &row.source_issuer,
+        &row.deployment,
+        &row.scope_kind,
+        &row.scope_id,
+        &row.binding_id,
+        row.revision,
+    ))
+    .map_err(runtime)?;
+    Ok(Ok(role::PrepareActivationResponse {
+        binding: row.wire(),
+        control_assertion,
+        audit_occurred_at: row.activation_started_at,
+        audit_idempotency_key: format!(
+            "operator-activation.{:x}",
+            sha2::Sha256::digest(key_source)
+        ),
+        permissions,
+    }))
+}
+
+fn activation_permissions(
+    mut permissions: Vec<String>,
+    ceiling: Option<&lenso_auth_sdk::credential::ManagementCredentialCeiling>,
+) -> Result<Vec<String>, role::PrepareActivationError> {
+    if permissions.is_empty()
+        || permissions.len() > 64
+        || permissions
+            .iter()
+            .any(|p| !valid_name(p) || ceiling.is_none_or(|c| !c.permissions.contains(p)))
+    {
+        return Err(role::PrepareActivationError::InvalidRequest);
+    }
+    permissions.sort();
+    if permissions.windows(2).any(|p| p[0] == p[1]) {
+        return Err(role::PrepareActivationError::InvalidRequest);
+    }
+    Ok(permissions)
 }

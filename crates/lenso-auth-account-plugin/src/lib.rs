@@ -2,6 +2,8 @@
 pub mod host_facilities;
 pub use host_facilities::EventStorageBinding;
 
+#[cfg(test)]
+mod activation_response_tests;
 mod delegation;
 mod managed;
 mod operator_binding;

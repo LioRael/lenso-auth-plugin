@@ -84,6 +84,9 @@ pub async fn adopt_legacy(binding: &D1Binding) -> Result<(), Error> { plan()?.ad
         text += '\n' + f'''pub fn plan() -> Result<Plan, Error> {{
     Plan::new("lenso.auth.account", &SQL[..2], &MIGRATIONS[..2], Some(LegacySchema {{ table: "{marker[1]}", fingerprint: "{marker[2]}" }}))
 }}
+pub fn previous_operator_plan() -> Result<Plan, Error> {{
+    Plan::new("lenso.auth.account", &SQL[..4], &MIGRATIONS[..4], Some(LegacySchema {{ table: "{marker[1]}", fingerprint: "{marker[2]}" }}))
+}}
 pub fn managed_plan() -> Result<Plan, Error> {{
     Plan::new("lenso.auth.account", &SQL[..3], &MIGRATIONS[..3], Some(LegacySchema {{ table: "{marker[1]}", fingerprint: "{marker[2]}" }}))
 }}
@@ -95,6 +98,11 @@ pub async fn verify_features(binding: &D1Binding, managed_required: bool, operat
     match operator_plan()?.verify(binding).await {{
         Ok(()) => return Ok(true),
         Err(Error::UpgradeRequired) if !operator_required => {{}},
+        Err(error) => return Err(error),
+    }}
+    match previous_operator_plan()?.verify(binding).await {{
+        Ok(()) => return Ok(true),
+        Err(Error::UpgradeRequired) => {{}},
         Err(error) => return Err(error),
     }}
     match managed_plan()?.verify(binding).await {{

@@ -36,6 +36,11 @@ const MIGRATIONS: &[Migration] = sql_migrations![
         "operator-bindings",
         "migrations/postgres/007_operator_bindings.sql"
     ),
+    (
+        8,
+        "operator-activation-intents",
+        "migrations/postgres/008_operator_activation_intents.sql"
+    ),
 ];
 
 pub(crate) fn schema_plan(schema: impl Into<std::sync::Arc<str>>) -> Result<SchemaPlan, PlanError> {
@@ -52,6 +57,11 @@ pub(crate) fn operator_schema_plan(
     schema: impl Into<std::sync::Arc<str>>,
 ) -> Result<SchemaPlan, PlanError> {
     SchemaPlan::new(schema, MIGRATIONS)
+}
+fn previous_operator_schema_plan(
+    schema: impl Into<std::sync::Arc<str>>,
+) -> Result<SchemaPlan, PlanError> {
+    SchemaPlan::new(schema, &MIGRATIONS[..7])
 }
 /// Read-only compatibility wrapper preserving existing callers.
 pub(crate) async fn prepare(
@@ -72,18 +82,29 @@ pub(crate) async fn prepare_features(
     match OwnedPostgres::prepare(database_url, operator_schema_plan(schema)?).await {
         Ok(pg) => Ok(pg),
         Err(PostgresKitError::UpgradeRequired {
-            current: 5 | 6,
-            expected: 7,
+            current: 5 | 6 | 7,
+            expected: 8,
             ..
         }) if !operator_required => {
-            match OwnedPostgres::prepare(database_url, managed_schema_plan(schema)?).await {
+            match OwnedPostgres::prepare(database_url, previous_operator_schema_plan(schema)?).await
+            {
                 Ok(pg) => Ok(pg),
                 Err(PostgresKitError::UpgradeRequired {
-                    current: 5,
-                    expected: 6,
+                    current: 5 | 6,
+                    expected: 7,
                     ..
-                }) if !managed_required => {
-                    OwnedPostgres::prepare(database_url, schema_plan(schema)?).await
+                }) => {
+                    match OwnedPostgres::prepare(database_url, managed_schema_plan(schema)?).await {
+                        Ok(pg) => Ok(pg),
+                        Err(PostgresKitError::UpgradeRequired {
+                            current: 5,
+                            expected: 6,
+                            ..
+                        }) if !managed_required => {
+                            OwnedPostgres::prepare(database_url, schema_plan(schema)?).await
+                        }
+                        Err(e) => Err(e),
+                    }
                 }
                 Err(e) => Err(e),
             }

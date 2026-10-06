@@ -167,6 +167,8 @@ struct Input {
     #[serde(default)]
     binding_id: String,
     #[serde(default)]
+    revision: String,
+    #[serde(default)]
     session_id: String,
     #[serde(default)]
     permission: String,
@@ -264,6 +266,7 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
                     assurance: "password".into(),
                     audience: [
                         "bootstrap_binding",
+                        "resume_binding",
                         "read_binding",
                         "exchange_session",
                         "recover_revocation",
@@ -350,7 +353,7 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
             )
             .await,
         )?,
-        "bootstrap" | "exchange" | "read" | "revoke" | "recover" => {
+        "bootstrap" | "resume" | "exchange" | "read" | "revoke" | "recover" => {
             // Authentication and sealed context are real generated calls, never a fixture assertion forgery.
             let actor_caller = if input.operation == "revoke" && caller == OPERATOR_BROWSER {
                 OPERATOR_BROWSER
@@ -368,6 +371,18 @@ pub async fn invoke(input: String, scope: JsValue) -> Result<String, JsValue> {
                         workflow::BOOTSTRAP_BINDING_OPERATION,
                         context,
                         workflow::EmptyRequest {},
+                    )
+                    .await,
+                )?,
+                "resume" => value(
+                    app.invoke_with_context::<workflow::OperatorSessionResumeBinding>(
+                        caller,
+                        workflow::RESUME_BINDING_OPERATION,
+                        context,
+                        workflow::ResumeBindingRequest {
+                            binding_id: input.binding_id,
+                            revision: input.revision,
+                        },
                     )
                     .await,
                 )?,

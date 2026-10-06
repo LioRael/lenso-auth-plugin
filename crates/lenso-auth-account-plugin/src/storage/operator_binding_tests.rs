@@ -6,14 +6,15 @@ static SCHEMA_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn fixture_url() -> String {
     let url = std::env::var("LENSO_POSTGRES_TEST_URL").expect("isolated synthetic PG required");
-    let local_fixture = url.starts_with("postgres://renewal_fixture@127.0.0.1:55494/");
+    let local_fixture = url.starts_with("postgres://renewal_fixture@127.0.0.1:55494/")
+        || url.starts_with("postgres://renewal_fixture@127.0.0.1:55504/");
     let ci_fixture = std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true")
         && url == "postgres://postgres@localhost:5432/postgres";
     assert!(local_fixture || ci_fixture, "refuse non-fixture database");
     url
 }
 
-fn config() -> OperatorBindingConfig {
+pub(super) fn config() -> OperatorBindingConfig {
     let now = OffsetDateTime::now_utc();
     OperatorBindingConfig {
         source_issuer: "test.accounts".into(),
@@ -27,7 +28,7 @@ fn config() -> OperatorBindingConfig {
         workflow_callers: vec!["lenso.auth.operator-session/default".into()],
     }
 }
-async fn fixture() -> (AccountStore, String, String) {
+pub(super) async fn fixture() -> (AccountStore, String, String) {
     let url = fixture_url();
     let schema = format!(
         "operator_binding_{}_{}_{}",
@@ -50,7 +51,7 @@ async fn fixture() -> (AccountStore, String, String) {
         .unwrap();
     (store, url, schema)
 }
-async fn cleanup(store: AccountStore, url: String, schema: String) {
+pub(super) async fn cleanup(store: AccountStore, url: String, schema: String) {
     use sqlx::Executor;
     store.close().await;
     let pool = sqlx::PgPool::connect(&url).await.unwrap();
@@ -232,7 +233,7 @@ async fn operator_history_is_explicit_and_legacy_readiness_remains_compatible() 
         pg.pool().close().await;
         assert!(matches!(
             crate::schema::prepare_features(&url, &schema, managed, true).await,
-            Err(lenso_postgres_kit::PostgresKitError::UpgradeRequired { expected: 7, .. })
+            Err(lenso_postgres_kit::PostgresKitError::UpgradeRequired { expected: 8, .. })
         ));
         let pg = crate::schema::prepare_features(&url, &schema, managed, false)
             .await

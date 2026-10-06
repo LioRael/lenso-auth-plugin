@@ -7,7 +7,7 @@ use crate::workers::{D1Binding, statement};
 use serde_json::json;
 #[cfg(feature = "postgres")]
 use sqlx::Row;
-const FIELDS: &str = "source_issuer,deployment,scope_kind,scope_id,binding_id,source_subject,operator_subject,revision,status,audit_event_id,policy_revision,revocation_state,revocation_audit_event_id,revoked_by,revoked_at";
+const FIELDS: &str = "source_issuer,deployment,scope_kind,scope_id,binding_id,source_subject,operator_subject,revision,status,audit_event_id,policy_revision,revocation_state,revocation_audit_event_id,revoked_by,revoked_at,activation_started_at,activation_permissions";
 #[cfg(feature = "postgres")]
 fn pg_row(row: &sqlx::postgres::PgRow) -> Result<Record, AccountError> {
     Ok(Record {
@@ -49,6 +49,12 @@ fn pg_row(row: &sqlx::postgres::PgRow) -> Result<Record, AccountError> {
             .map_err(|_| AccountError::Storage)?,
         policy_revision: row
             .try_get("policy_revision")
+            .map_err(|_| AccountError::Storage)?,
+        activation_started_at: row
+            .try_get("activation_started_at")
+            .map_err(|_| AccountError::Storage)?,
+        activation_permissions: row
+            .try_get("activation_permissions")
             .map_err(|_| AccountError::Storage)?,
     })
 }
@@ -107,6 +113,58 @@ pub(crate) async fn prepare(
         .await?
         .ok_or(AccountError::Storage)
 }
+#[cfg(feature = "workers")]
+const ACTIVATION_INTENT_D1: &str = "UPDATE auth_operator_bindings SET activation_started_at=?1,activation_permissions=?2 WHERE binding_id=?3 AND revision=?4 AND status='pending' AND source_issuer=?5 AND deployment=?6 AND scope_kind=?7 AND scope_id=?8 AND activation_started_at='' AND activation_permissions=''";
+#[cfg(feature = "postgres")]
+const ACTIVATION_INTENT_PG: &str = "UPDATE auth_operator_bindings SET activation_started_at=$1,activation_permissions=$2 WHERE binding_id=$3 AND revision=$4 AND status='pending' AND source_issuer=$5 AND deployment=$6 AND scope_kind=$7 AND scope_id=$8 AND activation_started_at='' AND activation_permissions=''";
+
+pub(crate) async fn prepare_activation_intent(
+    store: &AccountStore,
+    cfg: &OperatorBindingConfig,
+    id: &str,
+    revision: i64,
+    occurred_at: &str,
+    permissions: &str,
+) -> Result<Option<Record>, AccountError> {
+    match store {
+        #[cfg(feature = "postgres")]
+        AccountStore::Postgres(pg) => {
+            sqlx::query(ACTIVATION_INTENT_PG)
+                .bind(occurred_at)
+                .bind(permissions)
+                .bind(id)
+                .bind(revision)
+                .bind(&cfg.source_issuer)
+                .bind(&cfg.deployment)
+                .bind(&cfg.scope_kind)
+                .bind(&cfg.scope_id)
+                .execute(pg.pool())
+                .await
+                .map_err(|_| AccountError::Storage)?;
+        }
+        #[cfg(feature = "workers")]
+        AccountStore::D1 { binding, .. } => {
+            binding
+                .run(vec![statement(
+                    ACTIVATION_INTENT_D1,
+                    vec![
+                        json!(occurred_at),
+                        json!(permissions),
+                        json!(id),
+                        json!(revision),
+                        json!(cfg.source_issuer),
+                        json!(cfg.deployment),
+                        json!(cfg.scope_kind),
+                        json!(cfg.scope_id),
+                    ],
+                )])
+                .await
+                .map_err(|()| AccountError::Storage)?;
+        }
+    }
+    read(store, cfg, "binding_id", id).await
+}
+
 pub(crate) async fn activate(
     store: &AccountStore,
     cfg: &OperatorBindingConfig,
@@ -170,3 +228,7 @@ pub(crate) async fn complete_revocation(
 #[cfg(all(feature = "postgres", test))]
 #[path = "operator_binding_tests.rs"]
 mod tests;
+
+#[cfg(all(feature = "postgres", test))]
+#[path = "activation_intent_tests.rs"]
+mod activation_intent_tests;

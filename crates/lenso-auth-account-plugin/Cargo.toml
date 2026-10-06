@@ -41,7 +41,7 @@ lenso-capability-auth-delegation = { git = "https://github.com/LioRael/lenso-aut
 lenso-capability-auth = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.2.0" }
 lenso-capability-credential-state = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.1.0" }
 lenso-capability-credential-issuer = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
-lenso-capability-managed-session = { path = "../lenso-capability-managed-session", version = "0.1.0" }
+lenso-capability-managed-session = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "cbaa561c82d675de31b92ae590af4ea1fbefc2a8", version = "0.1.0" }
 lenso-capability-identity-directory = { git = "https://github.com/LioRael/lenso-auth-plugin", rev = "699bd9621bc2e7f8581f6c0ff0bcbfcb6e3c2167", version = "0.3.0" }
 lenso-capability-secrets.workspace = true
 lenso-kernel.workspace = true
