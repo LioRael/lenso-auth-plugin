@@ -199,6 +199,7 @@ jobs:
           fi
           while IFS= read -r package; do
             cargo publish "${manifest_args[@]}" --locked --dry-run -p "$package"
+            cargo package "${manifest_args[@]}" --locked -p "$package"
           done < <(jq -r '.[].package_name' <<<"$RELEASE_SET")
 
   scoped_publish:
@@ -244,8 +245,9 @@ jobs:
             package_dir=console/target/package
           fi
           while IFS=$'\t' read -r package version; do
-            cargo publish "${manifest_args[@]}" --locked -p "$package"
+            cargo package "${manifest_args[@]}" --locked -p "$package"
             checksum=$(sha256sum "$package_dir/$package-$version.crate" | cut -d ' ' -f 1)
+            cargo publish "${manifest_args[@]}" --locked -p "$package"
             curl --user-agent 'LensoAuthConsoleRelease/1.0 (https://github.com/LioRael/lenso-auth-plugin)' --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 \
               "https://crates.io/api/v1/crates/$package/$version" \
               | jq -e --arg version "$version" --arg checksum "$checksum" '.version.num == $version and .version.yanked == false and .version.checksum == $checksum'

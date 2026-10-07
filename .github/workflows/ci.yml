@@ -106,3 +106,15 @@ jobs:
           cargo publish --locked --dry-run -p lenso-auth-sdk
           cargo publish --locked --dry-run -p lenso-capability-account-admin
           cargo publish --locked --dry-run -p lenso-capability-credential-state
+      - name: Retain verified Auth Console upstream archives
+        if: github.ref_name == 'candidate/auth-console-upstream'
+        run: cargo package --locked -p lenso-auth-sdk -p lenso-capability-account-admin -p lenso-capability-credential-state
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: github.ref_name == 'candidate/auth-console-upstream'
+        with:
+          name: auth-console-upstream-${{ github.sha }}
+          path: |
+            target/package/lenso-auth-sdk-0.2.4.crate
+            target/package/lenso-capability-account-admin-0.1.0.crate
+            target/package/lenso-capability-credential-state-0.1.0.crate
+          if-no-files-found: error
