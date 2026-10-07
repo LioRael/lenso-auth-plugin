@@ -100,17 +100,24 @@ jobs:
         run: python3 workers/check-packages.py
       - name: Package changed public cohort
         run: cargo package --locked -p lenso-capability-credential-state -p lenso-capability-api-token-admin -p lenso-capability-human-api-token -p lenso-auth-sdk
-      - name: Verify first Auth Console upstream archives
-        if: github.ref_name == 'candidate/auth-console-upstream'
+
+  upstream_packages:
+    name: Verify Auth Console upstream packages
+    if: github.ref_name == 'candidate/auth-console-upstream'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88
+        with:
+          toolchain: 1.94.0
+      - name: Verify exact upstream packages without upload
         run: |
           cargo publish --locked --dry-run -p lenso-auth-sdk
           cargo publish --locked --dry-run -p lenso-capability-account-admin
           cargo publish --locked --dry-run -p lenso-capability-credential-state
-      - name: Retain verified Auth Console upstream archives
-        if: github.ref_name == 'candidate/auth-console-upstream'
+      - name: Retain verified upstream archives
         run: cargo package --locked -p lenso-auth-sdk -p lenso-capability-account-admin -p lenso-capability-credential-state
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: github.ref_name == 'candidate/auth-console-upstream'
         with:
           name: auth-console-upstream-${{ github.sha }}
           path: |
