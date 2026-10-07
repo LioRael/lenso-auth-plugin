@@ -100,3 +100,9 @@ jobs:
         run: python3 workers/check-packages.py
       - name: Package changed public cohort
         run: cargo package --locked -p lenso-capability-credential-state -p lenso-capability-api-token-admin -p lenso-capability-human-api-token -p lenso-auth-sdk
+      - name: Verify first Auth Console upstream archives
+        if: github.ref_name == 'candidate/auth-console-upstream'
+        run: |
+          cargo publish --locked --dry-run -p lenso-auth-sdk
+          cargo publish --locked --dry-run -p lenso-capability-account-admin
+          cargo publish --locked --dry-run -p lenso-capability-credential-state

@@ -63,6 +63,18 @@ git cat-file -e "$main_sha^{commit}" ||
 
 metadata="$(cargo metadata --locked --no-deps --format-version 1)" ||
   fail "cargo metadata failed for source_sha"
+release_scope="${RELEASE_SCOPE:-workspace}"
+case "$release_scope" in
+  workspace) ;;
+  auth-console-upstream)
+    approved='[{"package_name":"lenso-auth-sdk","version":"0.2.4"},{"package_name":"lenso-capability-account-admin","version":"0.1.0"},{"package_name":"lenso-capability-credential-state","version":"0.1.0"}]'
+    [[ "$release_set" == "$(release_set_canonical "$approved")" ]] || fail "Auth Console upstream scope requires exactly its three approved package versions"
+    ;;
+  account-console)
+    [[ "$release_set" == '[{"package_name":"lenso-auth-account-console-plugin","version":"0.1.0"}]' ]] || fail "Account Console scope requires exactly adapter 0.1.0"
+    ;;
+  *) fail "unsupported release scope: $release_scope" ;;
+esac
 registry_release_set='[]'
 while IFS=$'\t' read -r package expected_version; do
   package_record="$(
@@ -83,6 +95,9 @@ done < <(jq -r '.[] | [.package_name, .version] | @tsv' <<<"$release_set")
 while IFS=$'\t' read -r package version manifest; do
   grep -Eq '^[[:space:]]*publish[[:space:]]*=[[:space:]]*true[[:space:]]*$' "$manifest" ||
     continue
+  if [[ "$release_scope" != workspace ]]; then
+    jq -e --arg package "$package" 'any(.package_name == $package)' <<<"$release_set" >/dev/null || continue
+  fi
   registry_status="$(
     curl --silent --show-error --location --retry 2 \
       --user-agent 'Lenso-release-gate/1.0 (https://github.com/LioRael/lenso-auth-plugin)' \
@@ -116,6 +131,9 @@ while IFS=$'\t' read -r package version manifest; do
   esac
 done < <(jq -r '.packages[] | [.name, .version, .manifest_path] | @tsv' <<<"$metadata")
 registry_release_set="$(jq -c 'sort_by(.package_name)' <<<"$registry_release_set")"
+if [[ "$release_scope" != workspace ]]; then
+  registry_release_set="$(jq -c --argjson selected "$release_set" '[.[] | select(. as $item | $selected | any(. == $item))]' <<<"$registry_release_set")"
+fi
 [[ "$registry_release_set" == "$release_set" ]] ||
   fail "release_set does not match the read-only crates.io plan: expected ${release_set}, registry plan ${registry_release_set}"
 
