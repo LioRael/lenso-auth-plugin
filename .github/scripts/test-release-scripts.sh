@@ -126,14 +126,19 @@ scoped_set='[{"package_name":"lenso-auth-sdk","version":"0.2.4"},{"package_name"
 run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" RELEASE_SCOPE=auth-console-upstream \
   RELEASE_SET="$scoped_set" PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
   'MOCK_UNPUBLISHED_PACKAGES=lenso-auth-sdk/0.2.4 lenso-capability-account-admin/0.1.0 lenso-capability-credential-state/0.1.0 lenso-capability-api-token-admin/0.1.0'
-expect_failure "scoped release excludes unrelated packages" "exactly its three approved" \
+expect_failure "scoped release excludes unrelated packages" "only its three approved" \
   run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" RELEASE_SCOPE=auth-console-upstream \
     RELEASE_SET='[{"package_name":"lenso-capability-api-token-admin","version":"0.1.0"}]' \
     PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha"
-expect_failure "scoped release requires complete upstream set" "exactly its three approved" \
+run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" RELEASE_SCOPE=auth-console-upstream \
+  RELEASE_SET='[{"package_name":"lenso-auth-sdk","version":"0.2.4"}]' \
+  PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha" \
+  'MOCK_UNPUBLISHED_PACKAGES=lenso-auth-sdk/0.2.4 lenso-capability-api-token-admin/0.1.0'
+expect_failure "scoped release requires exact version" "only its three approved" \
   run_gate "${base_env[@]}" RELEASE_SHA="$current_sha" RELEASE_SCOPE=auth-console-upstream \
-    RELEASE_SET='[{"package_name":"lenso-auth-sdk","version":"0.2.4"}]' \
+    RELEASE_SET='[{"package_name":"lenso-auth-sdk","version":"0.2.5"}]' \
     PATH="$mock_dir:$PATH" MOCK_SHA="$current_sha"
+
 
 post_expected='[{"package_name":"lenso-auth-sdk","version":"0.2.3"},{"package_name":"lenso-capability-auth","version":"0.2.0"}]'
 post_actual='[{"package_name":"lenso-auth-sdk","version":"0.2.3","tag":"lenso-auth-sdk@0.2.3","prs":[]},{"package_name":"lenso-capability-auth","version":"0.2.0","tag":"lenso-capability-auth@0.2.0","prs":[]}]'

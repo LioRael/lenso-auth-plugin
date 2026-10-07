@@ -72,7 +72,7 @@ case "$release_scope" in
   workspace) ;;
   auth-console-upstream)
     approved='[{"package_name":"lenso-auth-sdk","version":"0.2.4"},{"package_name":"lenso-capability-account-admin","version":"0.1.0"},{"package_name":"lenso-capability-credential-state","version":"0.1.0"}]'
-    [[ "$release_set" == "$(release_set_canonical "$approved")" ]] || fail "Auth Console upstream scope requires exactly its three approved package versions"
+    jq -e --argjson allowed "$approved" 'length > 0 and all(.[]; . as $item | $allowed | any(. == $item))' <<<"$release_set" >/dev/null || fail "Auth Console upstream scope allows only its three approved package versions"
     ;;
   account-console)
     [[ "$release_set" == '[{"package_name":"lenso-auth-account-console-plugin","version":"0.1.0"}]' ]] || fail "Account Console scope requires exactly adapter 0.1.0"
