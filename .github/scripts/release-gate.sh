@@ -61,7 +61,11 @@ git cat-file -e "$main_sha^{commit}" ||
 [[ "$source_sha" == "$main_sha" ]] ||
   fail "source_sha is not the current origin/main; rerun review and release planning"
 
-metadata="$(cargo metadata --locked --no-deps --format-version 1)" ||
+metadata_args=()
+if [[ "${RELEASE_SCOPE:-workspace}" == account-console ]]; then
+  metadata_args=(--manifest-path console/Cargo.toml)
+fi
+metadata="$(cargo metadata "${metadata_args[@]}" --locked --no-deps --format-version 1)" ||
   fail "cargo metadata failed for source_sha"
 release_scope="${RELEASE_SCOPE:-workspace}"
 case "$release_scope" in

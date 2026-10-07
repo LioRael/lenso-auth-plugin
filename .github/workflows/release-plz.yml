@@ -181,6 +181,7 @@ jobs:
     permissions:
       contents: read
     env:
+      RELEASE_SCOPE: ${{ inputs.scope }}
       RELEASE_SET: ${{ inputs.release_set }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -192,8 +193,12 @@ jobs:
           toolchain: 1.94.0
       - name: Verify ordinary packages without upload
         run: |
+          manifest_args=()
+          if [[ "$RELEASE_SCOPE" == account-console ]]; then
+            manifest_args=(--manifest-path console/Cargo.toml)
+          fi
           while IFS= read -r package; do
-            cargo publish --locked --dry-run -p "$package"
+            cargo publish "${manifest_args[@]}" --locked --dry-run -p "$package"
           done < <(jq -r '.[].package_name' <<<"$RELEASE_SET")
 
   scoped_publish:
@@ -232,9 +237,16 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
+          manifest_args=()
+          package_dir=target/package
+          if [[ "$RELEASE_SCOPE" == account-console ]]; then
+            manifest_args=(--manifest-path console/Cargo.toml)
+            package_dir=console/target/package
+          fi
           while IFS=$'\t' read -r package version; do
-            cargo publish --locked -p "$package"
-            curl --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 \
+            cargo publish "${manifest_args[@]}" --locked -p "$package"
+            checksum=$(sha256sum "$package_dir/$package-$version.crate" | cut -d ' ' -f 1)
+            curl --user-agent 'LensoAuthConsoleRelease/1.0 (https://github.com/LioRael/lenso-auth-plugin)' --fail --silent --show-error --retry 6 --retry-all-errors --retry-delay 10 \
               "https://crates.io/api/v1/crates/$package/$version" \
-              | jq -e --arg version "$version" '.version.num == $version and .version.yanked == false'
+              | jq -e --arg version "$version" --arg checksum "$checksum" '.version.num == $version and .version.yanked == false and .version.checksum == $checksum'
           done < <(jq -r '.[] | [.package_name, .version] | @tsv' <<<"$RELEASE_SET")
