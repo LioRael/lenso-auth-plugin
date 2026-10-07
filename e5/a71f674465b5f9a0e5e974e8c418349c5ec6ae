@@ -1,0 +1,16 @@
+.github/scripts/release-gate.sh
+  h_9d56aba080c170 75
+.github/scripts/test-release-scripts.sh
+  h_9d56aba080c170 129,133-137,139,142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5a71f674465b5f9a0e5e974e8c418349c5ec6ae",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
