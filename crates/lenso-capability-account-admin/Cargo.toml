@@ -3,8 +3,9 @@ name = "lenso-capability-account-admin"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
-publish = false
+publish = true
 repository.workspace = true
+description = "Portable account administration Capability owned by Lenso Auth."
 [dependencies]
 schemars = "1.2"
 lenso-plugin-authoring.workspace = true
