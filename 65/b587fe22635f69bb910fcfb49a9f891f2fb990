@@ -1,0 +1,16 @@
+.github/scripts/release-gate.sh
+  h_9d56aba080c170 64-68
+.github/workflows/release-plz.yml
+  h_9d56aba080c170 184,196-199,201,240-245,247-249,251
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65b587fe22635f69bb910fcfb49a9f891f2fb990",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
