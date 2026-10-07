@@ -1,0 +1,24 @@
+crates/lenso-auth-account-plugin/src/host_facilities/state-resource.mjs
+  h_9d56aba080c170 1-60
+crates/lenso-auth-password-plugin/src/host_facilities/state-resource.mjs
+  h_9d56aba080c170 1-60
+docs/auth-resource-adapters.md
+  h_9d56aba080c170 1-40
+workers/generate-bridges.mjs
+  h_9d56aba080c170 6,26
+workers/generate-resource-adapters.mjs
+  h_9d56aba080c170 1-48
+workers/resource-adapter.test.mjs
+  h_9d56aba080c170 1-79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82d439bc6d79b03c4d6f5720fffc56d01c88311b",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

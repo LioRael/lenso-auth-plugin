@@ -1,0 +1,83 @@
+.github/workflows/ci.yml
+  s_41847042a47378::t_fc56de392da575 53-56,71-76
+crates/lenso-auth-account-plugin/src/delegation.rs
+  s_41847042a47378::t_7576504c6283ac 22-26,72,79-87,93,243-247,252,305-309,314,370,392-393,406-407,420-421,442-443,449,466-467
+crates/lenso-auth-account-plugin/src/delegation/scoped_policy_tests.rs
+  s_41847042a47378::t_8aaa648f60d103 1-316
+crates/lenso-auth-account-plugin/src/delegation/scoped_postgres.rs
+  s_41847042a47378::t_279b0a6fbcf462 6,33,53-68,75,111-112,129,158-162,178,180,185,194,201-202,208-237
+crates/lenso-auth-account-plugin/src/lib.rs
+  s_41847042a47378::t_a3d73d140c2b46 52,888-892,908,914-921,987,989-990,1004-1011,1355,1361,1372,1517
+crates/lenso-auth-account-plugin/src/migration.rs
+  s_41847042a47378::t_2b0623779f5abd 38,73,87-117
+crates/lenso-auth-account-plugin/src/operator.rs
+  s_41847042a47378::t_d49ae2a29cdcc6 6,33-56,59
+crates/lenso-auth-account-plugin/src/profile.rs
+  s_41847042a47378::t_7173bd85e0e8b2 30
+crates/lenso-auth-account-plugin/src/schema.rs
+  s_41847042a47378::t_1a5f677efadfc8 37-42,45-63
+crates/lenso-auth-account-plugin/src/storage.rs
+  s_41847042a47378::t_949f6ef73a5694 64,77,106-108,124,149-152,164,181,195,207,219,229-235,237-246,258,270,282,294,311,324,329-338,341,349
+crates/lenso-auth-account-plugin/src/storage/d1.rs
+  s_41847042a47378::t_976947c99b4d30 2-3,101-106,342,344-360,362,365-366,368,370-385,387-390,392-410,417,424-433,435
+crates/lenso-auth-account-plugin/src/storage/postgres.rs
+  s_41847042a47378::t_1b62d40a5d63f1 7,197-209,427,436-443,460-468,472-478,495-520
+crates/lenso-auth-account-plugin/src/storage/postgres_delegation_policy_tests.rs
+  s_41847042a47378::t_b2923143853758 1-289
+crates/lenso-auth-account-plugin/src/storage/postgres_managed/tests.rs
+  s_41847042a47378::t_10e862734bdae6 2,19-22,148-150,158-163,280-281,340-341,358,362-380,387-390,393-395
+crates/lenso-auth-session-renewal-plugin/browser/session-renewal.mjs
+  s_41847042a47378::t_592d1fa16cab28 45-47
+crates/lenso-auth-session-renewal-plugin/browser/session-renewal.test.mjs
+  s_41847042a47378::t_606b8a118c5c8a 106-157
+crates/lenso-auth-session-renewal-plugin/tests/http_composition.rs
+  s_41847042a47378::t_f1aeb2007b05a5 305,312,342,344,381,401,435,437
+docs/managed-sessions.md
+  s_41847042a47378::t_d3332e147b9812 65-68,109-113,124-134
+experiments/managed-session-app/.gitignore
+  s_41847042a47378::t_fc1ed55e75d71c 1-4
+experiments/managed-session-app/Cargo.lock
+  s_41847042a47378::t_cbf6fdb9d7a453 1-2735
+experiments/managed-session-app/Cargo.toml
+  s_41847042a47378::t_4d339ed699e9c2 1-49
+experiments/managed-session-app/clock.mjs
+  s_41847042a47378::t_b34629bddf44d0 1-7
+experiments/managed-session-app/package-lock.json
+  s_41847042a47378::t_8ed684c17a691c 1-1606
+experiments/managed-session-app/package.json
+  s_41847042a47378::t_1f1dec5ed163a3 1-8
+experiments/managed-session-app/proof-worker.mjs
+  s_41847042a47378::t_73fd3478b4923c 1-41
+experiments/managed-session-app/qualify-workers.mjs
+  s_41847042a47378::t_bb7f1573b2c8cb 1-100
+experiments/managed-session-app/src/lib.rs
+  s_41847042a47378::t_bdd98db09bd749 1-315
+experiments/managed-session-app/src/workers.rs
+  s_41847042a47378::t_085eefa9aaca8d 1-328
+experiments/managed-session-d1/Cargo.lock
+  s_41847042a47378::t_69d594870114a4 11-19,32-55,65-100,107-140,153,155-157,159,164-178,202-203,212-241,339-349,429-434
+experiments/managed-session-d1/Cargo.toml
+  s_41847042a47378::t_56f8f84ca31000 15-16
+experiments/managed-session-d1/README.md
+  s_41847042a47378::t_30a163791a27f2 4-5,12,23,29,32,47-57
+experiments/managed-session-d1/src/lib.rs
+  s_41847042a47378::t_a956d34e69b57f 14-15,188-207,292-294,304-316,322-324
+workers/generate-migrations.py
+  s_41847042a47378::t_00c6fc2c51cb33 80-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a5abf5df426eaa78a594e75e90687c820bca312e",
+  "prompts": {},
+  "sessions": {
+    "s_41847042a47378": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1075f-ffb7-7e00-b95d-17d58853a897",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

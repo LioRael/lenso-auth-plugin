@@ -1,0 +1,115 @@
+Cargo.lock
+  s_f4202e28c6b5b1::t_84e2f570eb813b 1150-1151,1156,1173,1317-1318,1327-1328,1498-1524,1742-1771
+Cargo.toml
+  s_f4202e28c6b5b1::t_3d62c3977dc7b1 5-8
+crates/lenso-auth-account-admin-agent-tools-plugin/tests/business_flow.rs
+  s_f4202e28c6b5b1::t_407a3e8f51531b 185-190
+crates/lenso-auth-account-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_e0b803df4e36c8 27,52-54
+crates/lenso-auth-account-plugin/migrations/postgres/005_add_display_profile.sql
+  s_f4202e28c6b5b1::t_df69fd4f4795db 1-3
+crates/lenso-auth-account-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_81b3c9d5cf1124 6
+crates/lenso-auth-account-plugin/src/operator.rs
+  s_f4202e28c6b5b1::t_c68d2006d7c123 38-54,123-124
+crates/lenso-auth-account-plugin/src/profile.rs
+  s_f4202e28c6b5b1::t_3cbc939d1fc9f6 1-93
+crates/lenso-auth-account-plugin/src/schema.rs
+  s_f4202e28c6b5b1::t_c4c6a032a47202 24-28
+crates/lenso-auth-account-plugin/tests/source_profile_cache.rs
+  s_f4202e28c6b5b1::t_57f5c1339293cf 1-131
+crates/lenso-auth-human-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_1b0be9d18b3955 25-28,47
+crates/lenso-auth-human-api-token-plugin/tests/postgres_lifecycle.rs
+  s_f4202e28c6b5b1::t_4e1f8adeefcebe 154-161,164-170,182-186,264-269,397-401,460-465,467-554,1403-1542
+crates/lenso-auth-profile-cache-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_122ec0a74d6ef6 1-20
+crates/lenso-auth-profile-cache-plugin/configuration.schema.json
+  s_f4202e28c6b5b1::t_764e698f9beb3e 1-27
+crates/lenso-auth-profile-cache-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_7a3e9b75d3daa2 1-266
+crates/lenso-auth-profile-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_724bae23b4286e 1-22
+crates/lenso-auth-profile-plugin/configuration.schema.json
+  s_f4202e28c6b5b1::t_4468a5186233df 1-24
+crates/lenso-auth-profile-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_0d60fe2a461dcb 1-189
+crates/lenso-auth-router-plugin/tests/repository_ownership.rs
+  s_f4202e28c6b5b1::t_d8f40bf462085d 18-21
+crates/lenso-auth-sdk/src/delegation.rs
+  s_f4202e28c6b5b1::t_88bb6536453ec2 53-75,80-114
+crates/lenso-capability-account-admin/build.rs
+  s_f4202e28c6b5b1::t_f28e5b79890995 29-31
+crates/lenso-capability-account-admin/capability.json
+  s_f4202e28c6b5b1::t_6a446af3c036eb 3,7-13
+crates/lenso-capability-account-admin/schemas/read-profile-error.schema.json
+  s_f4202e28c6b5b1::t_153b73c2cbc2e0 1-8
+crates/lenso-capability-account-admin/schemas/read-profile-request.schema.json
+  s_f4202e28c6b5b1::t_bd3e7a9e428439 1-12
+crates/lenso-capability-account-admin/schemas/read-profile-response.schema.json
+  s_f4202e28c6b5b1::t_f015141ff6e2d5 1-25
+crates/lenso-capability-account-admin/src/contract.rs
+  s_f4202e28c6b5b1::t_4a9f69f1133cfa 138-160,164,169-173
+crates/lenso-capability-account-admin/src/generated.rs
+  s_f4202e28c6b5b1::t_0269b2c82e6bce 8-9,19,24-25,31,37-38,43,46,159-198,285-307,431-481,549-555,621-649,682,706-712,746-753,786-792,823,855-867,920,959-970,995,1029,1057-1061
+crates/lenso-capability-auth-profile-cache/Cargo.toml
+  s_f4202e28c6b5b1::t_6ce2cdd8539f93 1-25
+crates/lenso-capability-auth-profile-cache/build.rs
+  s_f4202e28c6b5b1::t_3b79b72e17ad51 1-87
+crates/lenso-capability-auth-profile-cache/capability.json
+  s_f4202e28c6b5b1::t_736649895bcc27 1-22
+crates/lenso-capability-auth-profile-cache/schemas/get-error.schema.json
+  s_f4202e28c6b5b1::t_94b170e7f30878 1-7
+crates/lenso-capability-auth-profile-cache/schemas/get-request.schema.json
+  s_f4202e28c6b5b1::t_de46bbe541b2b3 1-15
+crates/lenso-capability-auth-profile-cache/schemas/get-response.schema.json
+  s_f4202e28c6b5b1::t_dae9aec3329d21 1-22
+crates/lenso-capability-auth-profile-cache/schemas/put-error.schema.json
+  s_f4202e28c6b5b1::t_43afa6b513c68b 1-7
+crates/lenso-capability-auth-profile-cache/schemas/put-request.schema.json
+  s_f4202e28c6b5b1::t_154d0faa38e4cc 1-24
+crates/lenso-capability-auth-profile-cache/schemas/put-response.schema.json
+  s_f4202e28c6b5b1::t_71afc2c8296a23 1-12
+crates/lenso-capability-auth-profile-cache/src/contract.rs
+  s_f4202e28c6b5b1::t_98d5c76bbf121e 1-63
+crates/lenso-capability-auth-profile-cache/src/generated.rs
+  s_f4202e28c6b5b1::t_db416c197b1f1a 1-609
+crates/lenso-capability-auth-profile-cache/src/lib.rs
+  s_f4202e28c6b5b1::t_f8d23e2686fae8 1-3
+crates/lenso-capability-auth-profile/Cargo.toml
+  s_f4202e28c6b5b1::t_654314bd5a6fc7 1-25
+crates/lenso-capability-auth-profile/build.rs
+  s_f4202e28c6b5b1::t_d27f3026174440 1-87
+crates/lenso-capability-auth-profile/capability.json
+  s_f4202e28c6b5b1::t_5b21ac3f9d3247 1-15
+crates/lenso-capability-auth-profile/schemas/read-error.schema.json
+  s_f4202e28c6b5b1::t_66f84733f97ea2 1-8
+crates/lenso-capability-auth-profile/schemas/read-request.schema.json
+  s_f4202e28c6b5b1::t_a6a337cb934b5c 1-12
+crates/lenso-capability-auth-profile/schemas/read-response.schema.json
+  s_f4202e28c6b5b1::t_679c1160d8ac97 1-25
+crates/lenso-capability-auth-profile/src/contract.rs
+  s_f4202e28c6b5b1::t_051e44f4f5c27d 1-38
+crates/lenso-capability-auth-profile/src/generated.rs
+  s_f4202e28c6b5b1::t_965aee0617fe33 1-415
+crates/lenso-capability-auth-profile/src/lib.rs
+  s_f4202e28c6b5b1::t_ce415159fa659a 1-3
+docs/management-realm-admission.md
+  s_f4202e28c6b5b1::t_8064a53d6a9b2b 111-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "64f7e41568ab7565d75a8c27e26ef198ac3e752e",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

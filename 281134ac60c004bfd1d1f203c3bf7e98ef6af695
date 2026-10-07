@@ -1,0 +1,40 @@
+.github/workflows/ci.yml
+  h_9d56aba080c170 68-70
+crates/lenso-auth-account-plugin/Cargo.toml
+  h_9d56aba080c170 14-18
+crates/lenso-auth-account-plugin/configuration.schema.json
+  h_9d56aba080c170 137-140
+crates/lenso-auth-account-plugin/src/host_facilities.rs
+  h_9d56aba080c170 1-251
+crates/lenso-auth-account-plugin/src/host_facilities/state.mjs
+  h_9d56aba080c170 1-47
+crates/lenso-auth-account-plugin/src/lib.rs
+  h_9d56aba080c170 2-3,75-76,109,175,181-216,258-264,276-279,361-362,874,902-925,928-929,932,1116-1119,1407-1483
+crates/lenso-auth-account-plugin/tests/source-facility.test.mjs
+  h_9d56aba080c170 1-46
+crates/lenso-auth-account-plugin/tests/source_configuration.rs
+  h_9d56aba080c170 49-51
+crates/lenso-auth-password-plugin/Cargo.toml
+  h_9d56aba080c170 14-18
+crates/lenso-auth-password-plugin/src/host_facilities.rs
+  h_9d56aba080c170 1-251
+crates/lenso-auth-password-plugin/src/host_facilities/state.mjs
+  h_9d56aba080c170 1-47
+crates/lenso-auth-password-plugin/src/lib.rs
+  h_9d56aba080c170 2-3,73-75,95,104-115,129-136,322-323,532-568,571-572,575-582,585-586,589,1029-1032,1039-1098
+crates/lenso-auth-password-plugin/tests/source-facility.test.mjs
+  h_9d56aba080c170 1-46
+docs/storage-reference.md
+  h_9d56aba080c170 1-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "281134ac60c004bfd1d1f203c3bf7e98ef6af695",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

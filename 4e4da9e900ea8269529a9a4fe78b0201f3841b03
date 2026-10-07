@@ -1,0 +1,14 @@
+workers/check-packages.py
+  h_9d56aba080c170 78-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e4da9e900ea8269529a9a4fe78b0201f3841b03",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

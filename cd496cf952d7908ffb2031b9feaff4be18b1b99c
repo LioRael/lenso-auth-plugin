@@ -1,0 +1,18 @@
+crates/lenso-auth-account-plugin/src/activation_response_tests.rs
+  h_9d56aba080c170 47,79,89,102,115
+crates/lenso-auth-account-plugin/src/operator_binding.rs
+  h_9d56aba080c170 82-87,327,355,373,703
+crates/lenso-auth-account-plugin/src/schema.rs
+  h_9d56aba080c170 85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cd496cf952d7908ffb2031b9feaff4be18b1b99c",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

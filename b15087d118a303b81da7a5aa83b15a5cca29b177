@@ -1,0 +1,36 @@
+docs/operator-account-binding.md
+  h_9d56aba080c170 29,33-37,40-59
+experiments/operator-binding-workers-app/.gitignore
+  h_9d56aba080c170 2-5
+experiments/operator-binding-workers-app/Cargo.lock
+  h_9d56aba080c170 1142,1167
+experiments/operator-binding-workers-app/Cargo.toml
+  h_9d56aba080c170 7-8,10-11
+experiments/operator-binding-workers-app/README.md
+  h_9d56aba080c170 1-8,11-58,61-63,68-83
+experiments/operator-binding-workers-app/clock.mjs
+  h_9d56aba080c170 1-7
+experiments/operator-binding-workers-app/package-lock.json
+  h_9d56aba080c170 1-1606
+experiments/operator-binding-workers-app/package.json
+  h_9d56aba080c170 1-13
+experiments/operator-binding-workers-app/proof-worker.mjs
+  h_9d56aba080c170 1-32
+experiments/operator-binding-workers-app/qualify-workers.mjs
+  h_9d56aba080c170 1-157
+experiments/operator-binding-workers-app/src/lib.rs
+  h_9d56aba080c170 2-6,51-53,74-76,110,113-117,196-222,224-226,228-229,231-232,235,237-239,241,243-244,247-275,277,279-313,316-317,320-334,337-352,437-438,459-461
+experiments/operator-binding-workers-app/src/workers.rs
+  h_9d56aba080c170 1-454
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b15087d118a303b81da7a5aa83b15a5cca29b177",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

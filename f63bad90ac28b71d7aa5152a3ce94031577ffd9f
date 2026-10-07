@@ -1,0 +1,35 @@
+experiments/workers-g4/README.md
+  s_3724267b9ee00e::t_fa1525ca41b509 30,32,50,62-70
+experiments/workers-g4/egress-scope.mjs
+  s_3724267b9ee00e::t_8772562bfd82cb 1-73
+experiments/workers-g4/egress-scope.test.mjs
+  s_3724267b9ee00e::t_30efb42e773d9c 1-50
+experiments/workers-g4/evidence/egress.json
+  s_3724267b9ee00e::t_adc17cf4e2ca35 1-11
+experiments/workers-g4/evidence/provenance.json
+  s_3724267b9ee00e::t_c34e07c6c68bd8 4,8-9,13-14,24-25,35,38,41-61
+experiments/workers-g4/evidence/qualification.md
+  s_3724267b9ee00e::t_aa27cc152d9cba 132-160
+experiments/workers-g4/idp-fixture.mjs
+  s_3724267b9ee00e::t_4a92229ab9e05b 19
+experiments/workers-g4/qualify-egress.py
+  s_3724267b9ee00e::t_9acbf25e100a3a 1-41
+experiments/workers-g4/worker.mjs
+  s_3724267b9ee00e::t_72e890da9e4fd4 9,20-30,32,43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f63bad90ac28b71d7aa5152a3ce94031577ffd9f",
+  "prompts": {},
+  "sessions": {
+    "s_3724267b9ee00e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a09863-bdc5-7501-9f17-8276e89fcd6d",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

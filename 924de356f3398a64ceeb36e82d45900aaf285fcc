@@ -1,0 +1,45 @@
+Cargo.toml
+  s_f4202e28c6b5b1::t_030876be32d567 53
+crates/lenso-auth-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_66e9da7649c159 32-34
+crates/lenso-auth-api-token-plugin/src/operator.rs
+  s_f4202e28c6b5b1::t_d41e3d258831bc 149-174,291-303
+crates/lenso-auth-api-token-plugin/src/storage.rs
+  s_f4202e28c6b5b1::t_3fbc84935adb94 124-142
+crates/lenso-auth-api-token-plugin/src/storage/d1.rs
+  s_f4202e28c6b5b1::t_c14a4b9ea7014c 126-156
+crates/lenso-auth-api-token-plugin/src/storage/postgres.rs
+  s_f4202e28c6b5b1::t_20ee0bfc67a1fa 114-144
+crates/lenso-auth-api-token-plugin/tests/postgres_auth.rs
+  s_f4202e28c6b5b1::t_642d6da66b1008 185-220
+docs/management-realm-admission.md
+  s_f4202e28c6b5b1::t_90fd475382c9b4 85-100
+experiments/workers-g4/Cargo.lock
+  s_f4202e28c6b5b1::t_c9f7e04f764338 833-835,847-849,890,901,1177-1191,1224-1226,1231,1234,1242-1243,1251,1254,1264-1265,1276-1277,1394-1396,1431,1433,1454-1463,1467-1468,1491-1492,1524-1526,1540-1542,1555-1556,1560-1562,1576-1578,1601-1602,1635
+experiments/workers-g4/Cargo.toml
+  s_f4202e28c6b5b1::t_3f2435b3c773a4 6-8
+experiments/workers-g4/credential-state-proof-worker.mjs
+  s_f4202e28c6b5b1::t_942a3f03110802 1-92
+experiments/workers-g4/host/Cargo.toml
+  s_f4202e28c6b5b1::t_5ba92e79445a81 41,44,58-59
+experiments/workers-g4/host/src/methods.rs
+  s_f4202e28c6b5b1::t_0967a94aac809e 3,87,147-169,288-291,321-322,333-366
+experiments/workers-g4/qualify-credential-state-d1-workerd.mjs
+  s_f4202e28c6b5b1::t_15fb2ff4f17002 1-93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "924de356f3398a64ceeb36e82d45900aaf285fcc",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

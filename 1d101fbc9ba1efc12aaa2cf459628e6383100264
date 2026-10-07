@@ -1,0 +1,33 @@
+Cargo.lock
+  s_f4202e28c6b5b1::t_b76321276927f0 1048-1049,1061-1062,1078-1079,1103,1223,1595,1608,1621,1637,1656,1671,1686,1701,1733,1748,1763,1778,1793,1808,1823,1834-1835,1838,1840,1850-1851,1857,1859,1872,1886,1901,1916,1931,1946,1961,1990,2001-2002,2011-2012,2034-2035,2047,2065-2073,2076-2077,2109-2110,2124-2125,2138,2153-2154,2165-2166,2180-2181
+Cargo.toml
+  s_f4202e28c6b5b1::t_495e36a711d33a 57,60-61,63-64,66-67,72-73,96-114
+crates/lenso-auth-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_e014d59a8969e3 3
+crates/lenso-auth-human-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_09b4b85eecfd32 18,37,39-41
+crates/lenso-capability-auth/Cargo.toml
+  s_f4202e28c6b5b1::t_62c00beee7a364 14,17,22-23
+crates/lenso-capability-credential-issuer/Cargo.toml
+  s_f4202e28c6b5b1::t_15039c8869ae86 14,17,22-23
+crates/lenso-capability-identity-directory/Cargo.toml
+  s_f4202e28c6b5b1::t_c859c2c79243b2 14,17,22-23
+crates/lenso-capability-password-auth/Cargo.toml
+  s_f4202e28c6b5b1::t_9fec472efe00a5 14,17,22-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1d101fbc9ba1efc12aaa2cf459628e6383100264",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

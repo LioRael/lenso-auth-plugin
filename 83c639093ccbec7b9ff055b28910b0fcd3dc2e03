@@ -1,0 +1,18 @@
+.github/workflows/ci.yml
+  h_9d56aba080c170 57-60,73-74,83-92
+experiments/managed-session-app/Cargo.lock
+  h_9d56aba080c170 835,1067-1081
+experiments/managed-session-app/src/lib.rs
+  h_9d56aba080c170 133-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "83c639093ccbec7b9ff055b28910b0fcd3dc2e03",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+Cargo.lock
+  s_f4202e28c6b5b1::t_caa3eba9a80814 1063,1080,1597,1610,1623
+crates/lenso-auth-human-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_1e8f2981ea5220 18,39-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7be032c349ec095b87bc953321fe6dd9727c63e6",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

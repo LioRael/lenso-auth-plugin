@@ -1,0 +1,23 @@
+experiments/workers-g4/qualify-credential-state-d1-workerd.mjs
+  s_f4202e28c6b5b1::t_cf40eb12a9f84f 31
+experiments/workers-g4/qualify-fused-session-workerd.mjs
+  s_f4202e28c6b5b1::t_667d236413f338 109
+experiments/workers-g4/qualify-oauth-d1-workerd.mjs
+  s_f4202e28c6b5b1::t_5a17a978453403 88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "88ac65a1dd425ae26c44df3dc3ebb96544306e86",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+docs/operator-account-binding.md
+  h_9d56aba080c170 11,33
+experiments/operator-binding-workers-app/.gitignore
+  h_9d56aba080c170 1
+experiments/operator-binding-workers-app/Cargo.lock
+  h_9d56aba080c170 1-1997
+experiments/operator-binding-workers-app/Cargo.toml
+  h_9d56aba080c170 1-35
+experiments/operator-binding-workers-app/README.md
+  h_9d56aba080c170 1-57
+experiments/operator-binding-workers-app/src/lib.rs
+  h_9d56aba080c170 1-489
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e544df16b3781ed05e3c15fd8b1b383696c80d87",
+  "prompts": {},
+  "humans": {
+    "h_9d56aba080c170": {
+      "author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

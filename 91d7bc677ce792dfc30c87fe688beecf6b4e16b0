@@ -1,0 +1,35 @@
+.github/workflows/ci.yml
+  s_f4202e28c6b5b1::t_850a71ae946ed5 67-68
+Cargo.lock
+  s_f4202e28c6b5b1::t_0174390af1c41a 1049,1062,1079,1103,1595,1608,1621,2005,2015,2038,2050,2071,2104,2119,2132,2161
+Cargo.toml
+  s_f4202e28c6b5b1::t_52b10d0aaf712f 94-106
+crates/lenso-auth-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_a4e380c61b79a8 14-18
+crates/lenso-auth-api-token-plugin/src/host_facilities.rs
+  s_f4202e28c6b5b1::t_5f7c417a1ddde9 1-33
+crates/lenso-auth-api-token-plugin/src/host_facilities/state.mjs
+  s_f4202e28c6b5b1::t_d1a0d2c796e54e 1-13
+crates/lenso-auth-api-token-plugin/src/lib.rs
+  s_f4202e28c6b5b1::t_0f806290749e2e 3,298-299,609,611
+crates/lenso-auth-api-token-plugin/tests/source-facility.test.mjs
+  s_f4202e28c6b5b1::t_c0bccd74e9160f 1-18
+crates/lenso-auth-human-api-token-plugin/Cargo.toml
+  s_f4202e28c6b5b1::t_4e316410831798 18,39-41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "91d7bc677ce792dfc30c87fe688beecf6b4e16b0",
+  "prompts": {},
+  "sessions": {
+    "s_f4202e28c6b5b1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0ee9e-623b-7d12-a648-d8b462390eec",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

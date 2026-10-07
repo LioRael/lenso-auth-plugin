@@ -1,0 +1,65 @@
+crates/lenso-auth-account-plugin/configuration.schema.json
+  s_41847042a47378::t_61aa0316e429d8 141-208
+crates/lenso-auth-account-plugin/src/managed.rs
+  s_41847042a47378::t_c698847179de64 1-289
+crates/lenso-auth-session-renewal-plugin/README.md
+  s_41847042a47378::t_ffafce9f1f572f 1-89
+crates/lenso-auth-session-renewal-plugin/browser/session-renewal.mjs
+  s_41847042a47378::t_bfd7927025235b 1-138
+crates/lenso-auth-session-renewal-plugin/browser/session-renewal.test.mjs
+  s_41847042a47378::t_e326bb0fd1b8a2 1-105
+crates/lenso-auth-session-renewal-plugin/src/lib.rs
+  s_41847042a47378::t_54e7f084a4785d 1-371
+crates/lenso-auth-session-renewal-plugin/tests/http_composition.rs
+  s_41847042a47378::t_2a3b0fabd8db0f 1-441
+crates/lenso-capability-managed-session/README.md
+  s_41847042a47378::t_3133dba75a65b9 1-35
+crates/lenso-capability-managed-session/build.rs
+  s_41847042a47378::t_802d830a9f9623 1-84
+crates/lenso-capability-managed-session/capability.json
+  s_41847042a47378::t_41e398bdc35050 1-29
+crates/lenso-capability-managed-session/schemas/issue-managed-error.schema.json
+  s_41847042a47378::t_c32a1216f58922 1-10
+crates/lenso-capability-managed-session/schemas/issue-managed-request.schema.json
+  s_41847042a47378::t_a47ec9d8f60322 1-28
+crates/lenso-capability-managed-session/schemas/issue-managed-response.schema.json
+  s_41847042a47378::t_939adc142ec6ba 1-28
+crates/lenso-capability-managed-session/schemas/read-managed-error.schema.json
+  s_41847042a47378::t_e012ba773e3f07 1-12
+crates/lenso-capability-managed-session/schemas/read-managed-request.schema.json
+  s_41847042a47378::t_02e3740ff2ab8d 1-13
+crates/lenso-capability-managed-session/schemas/read-managed-response.schema.json
+  s_41847042a47378::t_7880360d7603a3 1-21
+crates/lenso-capability-managed-session/schemas/renew-error.schema.json
+  s_41847042a47378::t_80c1d2381b106a 1-13
+crates/lenso-capability-managed-session/schemas/renew-request.schema.json
+  s_41847042a47378::t_78c308983b6bda 1-13
+crates/lenso-capability-managed-session/schemas/renew-response.schema.json
+  s_41847042a47378::t_31d4bf24b15f79 1-28
+crates/lenso-capability-managed-session/src/contract.rs
+  s_41847042a47378::t_d603b8d4c2722a 1-113
+crates/lenso-capability-managed-session/src/generated.rs
+  s_41847042a47378::t_c48e71e42a3165 1-863
+crates/lenso-capability-managed-session/tests/contract.rs
+  s_41847042a47378::t_ca3b3718270891 1-68
+docs/managed-sessions.md
+  s_41847042a47378::t_46fb11b0162bbb 1-120
+experiments/managed-session-d1/qualify.mjs
+  s_41847042a47378::t_97ac27bb82a3b3 1-288
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7897569f19d6fe4677d9cd05bc0ecebdb581faa",
+  "prompts": {},
+  "sessions": {
+    "s_41847042a47378": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1075f-ffb7-7e00-b95d-17d58853a897",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}

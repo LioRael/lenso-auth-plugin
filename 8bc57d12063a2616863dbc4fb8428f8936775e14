@@ -1,0 +1,29 @@
+crates/lenso-auth-account-plugin/Cargo.toml
+  s_973ebcd4426bd6::t_2341d2edf680c6 8
+crates/lenso-auth-api-token-plugin/Cargo.toml
+  s_973ebcd4426bd6::t_dc920cec5f79da 8
+crates/lenso-auth-password-plugin/Cargo.toml
+  s_973ebcd4426bd6::t_8705b2ba26c6bd 8
+crates/lenso-auth-sdk/Cargo.toml
+  s_973ebcd4426bd6::t_e6796b1b4d6e20 8
+crates/lenso-capability-auth/Cargo.toml
+  s_973ebcd4426bd6::t_37c84fa90cd21f 8
+docs/release-process.md
+  s_973ebcd4426bd6::t_d8ce58b2b45cd1 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8bc57d12063a2616863dbc4fb8428f8936775e14",
+  "prompts": {},
+  "sessions": {
+    "s_973ebcd4426bd6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0fa09-26d3-7e61-985f-e1545172753d",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "LioRael <leo@lenso.dev>"
+    }
+  }
+}
