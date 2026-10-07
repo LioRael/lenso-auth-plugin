@@ -201,6 +201,13 @@ jobs:
             cargo publish "${manifest_args[@]}" --locked --dry-run -p "$package"
             cargo package "${manifest_args[@]}" --locked -p "$package"
           done < <(jq -r '.[].package_name' <<<"$RELEASE_SET")
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: auth-cargo-stage-${{ inputs.source_sha }}-${{ inputs.scope }}
+          path: |
+            target/package/*.crate
+            console/target/package/*.crate
+          if-no-files-found: error
 
   scoped_publish:
     name: Publish only exact approved Cargo stage
